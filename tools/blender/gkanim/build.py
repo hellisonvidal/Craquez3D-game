@@ -5,7 +5,7 @@ import posekit, poses
 OUT=os.environ.get('OUTDIR','/home/user/work/gkanim')
 os.makedirs(OUT, exist_ok=True)
 for o in list(bpy.data.objects): bpy.data.objects.remove(o)
-bpy.ops.import_scene.fbx(filepath='/home/user/work/out2/Goleiro.fbx')
+bpy.ops.import_scene.fbx(filepath=os.environ.get('GK','/home/user/Craquez3D-game/Assets/Craquez/Models/Goleiro.fbx'))
 arm=[o for o in bpy.data.objects if o.type=='ARMATURE'][0]
 for o in list(bpy.data.objects):
     if o.type!='ARMATURE': bpy.data.objects.remove(o)

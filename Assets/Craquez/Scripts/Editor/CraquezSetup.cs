@@ -509,6 +509,18 @@ namespace Craquez.EditorTools
                 b = RendererBounds(model);
                 model.transform.localPosition -= new Vector3(b.center.x, b.min.y, b.center.z);
             }
+            // a caixa da malha pode sobrar abaixo dos pés (personagem "voando"): apoia pela altura real dos dedos
+            if (anim.avatar != null && anim.avatar.isHuman)
+            {
+                var lt = anim.GetBoneTransform(HumanBodyBones.LeftToes);
+                var rt = anim.GetBoneTransform(HumanBodyBones.RightToes);
+                if (lt != null && rt != null)
+                {
+                    float sole = Mathf.Min(lt.position.y, rt.position.y) - 0.031f * height;
+                    model.transform.localPosition -= new Vector3(0f, sole - root.transform.position.y, 0f);
+                    Debug.Log("[Craquez 3D] " + name + ": pés apoiados (ajuste " + sole.ToString("0.000") + " m)");
+                }
+            }
             model.AddComponent<IKRelay>();
             root.AddComponent(controller);
             root.AddComponent<FootGrounder>().height = height;
