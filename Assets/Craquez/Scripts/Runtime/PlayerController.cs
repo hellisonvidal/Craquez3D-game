@@ -371,6 +371,34 @@ namespace Craquez
             }
 
             float spd = velocity.magnitude;
+
+            // assistência de condução: logo depois do toque, a bola acompanha a direção pedida e não "foge"
+            Vector3 wAssist = wishWorld;
+            if (now - lastTouchAt < 1.1f && d < 3.2f && wAssist.sqrMagnitude > 0.03f && flatBv.sqrMagnitude > 0.25f)
+            {
+                Vector3 wdir = wAssist.normalized;
+                Vector3 fb = flatBv;
+                float bs = fb.magnitude;
+                if (Vector3.Dot(to.normalized, wdir) > -0.2f)
+                {
+                    float maxTurn = 260f * Mathf.Lerp(0.6f, 1f, Grip()) * dt;
+                    Vector3 nd = Vector3.RotateTowards(fb / bs, wdir, maxTurn * Mathf.Deg2Rad, 0f);
+                    fb = nd * bs;
+                }
+                // não deixa a bola abrir demais à frente
+                float maxLead = sprintHeld ? 3.0f : 1.7f;
+                float ahead = Vector3.Dot(to, fb.normalized);
+                if (ahead > maxLead)
+                {
+                    float pspd = Mathf.Max(spd, 1f);
+                    float target = Mathf.Max(pspd * 0.85f, 0.5f);
+                    if (bs > target) fb = fb.normalized * Mathf.MoveTowards(bs, target, 14f * dt);
+                }
+                flatBv = fb;
+                Compat.SetVelocity(ball.Body, new Vector3(fb.x, bv.y, fb.z));
+                rel = flatBv - velocity;
+            }
+
             float reach = 0.85f + 0.05f * spd;
             Vector3 dirTo = d > 1e-3f ? to / d : transform.forward;
             bool inFront = Vector3.Dot(dirTo, transform.forward) > -0.25f || d < 0.45f;

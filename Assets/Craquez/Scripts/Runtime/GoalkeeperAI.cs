@@ -40,7 +40,8 @@ namespace Craquez
         float stateTime;
         bool resolved;
         float ikWeight;
-        float readyWeight;   // postura de espera: mãos à frente na altura da cintura, cotovelos abertos
+        float readyWeight;   // reforço da postura de espera (a animação GK_Pronto já tem as mãos à frente)
+        float recoverTime = 0.6f;
         Vector3 ikTarget;
         Vector3 diveFrom, diveTo;
         float diveStart, diveDuration, diveHeight;
@@ -153,8 +154,9 @@ namespace Craquez
 
             if (absLat < 0.6f && hit.y < 2.0f)
             {
-                // defesa no corpo / parada (IK leva as mãos)
+                // defesa no corpo / encaixe (IK leva as mãos)
                 diving = false;
+                PlayBlock();
             }
             else if (absLat < 1.3f && hit.y >= 2.0f)
             {
@@ -166,6 +168,11 @@ namespace Craquez
                 float travel = Mathf.Min(wanted, maxDiveSpeed * Mathf.Max(t, 0.05f));
                 StartDive(Mathf.Sign(lateral), travel, Mathf.Clamp(t, 0.22f, 0.65f), Mathf.Clamp(hit.y - 0.7f, 0f, 1.0f) * 0.75f);
             }
+        }
+
+        void PlayBlock()
+        {
+            if (anim != null) { anim.SetBool(MirrorHash, false); anim.CrossFadeInFixedTime("GK_Defesa", 0.08f); }
         }
 
         void BeginDefend()
@@ -189,7 +196,7 @@ namespace Craquez
             {
                 // a animação base mergulha para a DIREITA do goleiro; espelha para a esquerda
                 anim.SetBool(MirrorHash, side < 0f);
-                anim.CrossFadeInFixedTime("GK_Mergulho", 0.06f, 0, 0.45f);
+                anim.CrossFadeInFixedTime("GK_Mergulho", 0.06f, 0, 0.02f);
             }
         }
 
@@ -203,7 +210,7 @@ namespace Craquez
             diveDuration = duration;
             diveHeight = height;
             diveStart = Time.time;
-            if (anim != null) anim.CrossFadeInFixedTime("GK_Salto", 0.08f, 0, 0.25f);
+            if (anim != null) { anim.SetBool(MirrorHash, lateralOffset < 0f); anim.CrossFadeInFixedTime("GK_Salto", 0.08f, 0, 0.1f); }
         }
 
         // ------------------------------------------------------------ controle humano
@@ -242,12 +249,12 @@ namespace Craquez
             if (diveDown)
             {
                 float lat = Vector3.Dot(stick, transform.right);
-                if (Mathf.Abs(lat) < 0.25f) { BeginDefend(); diving = false; ikTarget = ball != null ? ball.transform.position : transform.position + Vector3.up; }
+                if (Mathf.Abs(lat) < 0.25f) { BeginDefend(); diving = false; PlayBlock(); ikTarget = ball != null ? ball.transform.position : transform.position + Vector3.up; }
                 else StartDive(Mathf.Sign(lat), Mathf.Lerp(0.6f, maxDiveTravel, Mathf.Abs(lat)), 0.42f, Mathf.Clamp(predictedY - 0.7f, 0f, 1f) * 0.75f);
                 return;
             }
             if (jumpDown) { StartJump(Vector3.Dot(stick, transform.right) * 0.6f, 0.4f, 0.5f); return; }
-            if (blockDown) { BeginDefend(); diving = false; ikTarget = ball != null ? ball.transform.position : transform.position + Vector3.up; return; }
+            if (blockDown) { BeginDefend(); diving = false; PlayBlock(); ikTarget = ball != null ? ball.transform.position : transform.position + Vector3.up; return; }
 
             float max = InputBridge.Sprint ? 6.2f : maxShuffleSpeed;
             velocity = Vector3.MoveTowards(velocity, stick * max, 16f * dt);
@@ -284,19 +291,23 @@ namespace Craquez
                 case Estado.Recuperando:
                     velocity = Vector3.zero;
                     ikWeight = Mathf.MoveTowards(ikWeight, 0f, dt * 3f);
-                    if (stateTime > 0.7f) { State = Estado.Posicionando; stateTime = 0f; }
+                    if (stateTime > recoverTime)
+                    {
+                        State = Estado.Posicionando; stateTime = 0f;
+                        if (anim != null) anim.SetBool(MirrorHash, false);
+                    }
                     break;
                 case Estado.ComBola:
                     velocity = Vector3.zero;
                     ikWeight = Mathf.MoveTowards(ikWeight, 0.8f, dt * 3f);
-                    if (diving && stateTime > 1.0f) { diving = false; if (anim != null) anim.CrossFadeInFixedTime("Locomocao", 0.4f); }
+                    if (diving && stateTime > 1.0f) { diving = false; if (anim != null) anim.CrossFadeInFixedTime("GK_Levantar", 0.3f); }
                     if (ball != null && ball.IsHeld) ikTarget = ball.transform.position;
                     break;
             }
             if (anim != null) anim.SetFloat(LateralHash, Vector3.Dot(velocity, transform.right), 0.1f, dt);
             // a animação de espera deixa os braços caídos e os cotovelos para trás: corrigimos com IK
             bool ready = State == Estado.Posicionando && !diving;
-            readyWeight = Mathf.MoveTowards(readyWeight, ready ? 0.85f : 0f, dt * (ready ? 2.5f : 6f));
+            readyWeight = Mathf.MoveTowards(readyWeight, ready ? 0.3f : 0f, dt * (ready ? 2.5f : 6f));
         }
 
         void UpdatePositioning(float dt)
@@ -377,14 +388,25 @@ namespace Craquez
                 p.y = diveHeight * Mathf.Sin(Mathf.PI * Mathf.Clamp01(k * 0.85f));
                 transform.position = p;
             }
-            float total = diving ? 1.25f : 0.9f;
+            bool wasDive = diving && anim != null && (anim.GetCurrentAnimatorStateInfo(0).IsName("GK_Mergulho") || anim.GetNextAnimatorStateInfo(0).IsName("GK_Mergulho"));
+            float total = diving ? 1.15f : 0.9f;
             if (stateTime > total)
             {
                 State = Estado.Recuperando;
                 stateTime = 0f;
                 Vector3 p = transform.position; p.y = 0f; transform.position = p;
                 diving = false;
-                if (anim != null) { anim.SetBool(MirrorHash, false); anim.CrossFadeInFixedTime("Locomocao", 0.35f); }
+                if (wasDive)
+                {
+                    // deitado no chão: levanta (a transição de animação já cuida do resto)
+                    recoverTime = 1.05f;
+                    if (anim != null) anim.CrossFadeInFixedTime("GK_Levantar", 0.2f);
+                }
+                else
+                {
+                    recoverTime = 0.5f;
+                    if (anim != null) { anim.SetBool(MirrorHash, false); anim.CrossFadeInFixedTime("Locomocao", 0.3f); }
+                }
             }
         }
 

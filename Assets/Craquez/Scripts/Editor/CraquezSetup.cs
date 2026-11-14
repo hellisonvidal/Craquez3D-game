@@ -280,11 +280,11 @@ namespace Craquez.EditorTools
             Keywords(rede, true);
             d["Rede"] = rede;
 
-            var poca = Lit("Poca", null, T("Poca_Normal"), null, new Color(0.3f, 0.34f, 0.38f, 0.6f), 0.95f, 0f, 0.35f);
+            var poca = Lit("Poca", null, T("Poca_Normal"), null, new Color(0.16f, 0.2f, 0.24f, 0.55f), 0.97f, 0f, 0.35f);
             MakeTransparent(poca, true);
             d["Poca"] = poca;
 
-            var encharcado = Lit("GramadoEncharcado", null, T("Poca_Normal"), null, new Color(0.16f, 0.24f, 0.13f, 0.22f), 0.9f, 0f, 0.15f);
+            var encharcado = Lit("GramadoEncharcado", null, T("Poca_Normal"), null, new Color(0.12f, 0.2f, 0.1f, 0.18f), 0.85f, 0f, 0.15f);
             MakeTransparent(encharcado, true);
             d["Encharcado"] = encharcado;
 
@@ -394,10 +394,11 @@ namespace Craquez.EditorTools
             ac.AddParameter("Mirror", AnimatorControllerParameterType.Bool);
             var sm = ac.layers[0].stateMachine;
 
-            var idle = Clip("Goleiro", "GK_Idle");
-            var left = Clip("Goleiro", "GK_LateralEsq");
-            var right = Clip("Goleiro", "GK_LateralDir");
-            float sl = NativeSpeed(left, 2.8f), sr = NativeSpeed(right, 2.8f);
+            // animações próprias do goleiro (geradas em tools/gkanim a partir do esqueleto dele)
+            var idle = Clip("Goleiro", "GK_Pronto");
+            var left = Clip("Goleiro", "GK_DeslocarEsq");
+            var right = Clip("Goleiro", "GK_DeslocarDir");
+            float sl = NativeSpeed(left, 2.6f), sr = NativeSpeed(right, 2.6f);
 
             BlendTree bt;
             var loco = ac.CreateBlendTreeInController("Locomocao", out bt, 0);
@@ -409,24 +410,36 @@ namespace Craquez.EditorTools
             bt.AddChild(right, sr);
             sm.defaultState = loco;
 
+            // mergulho: a animação base vai para a DIREITA do goleiro; o parâmetro Mirror leva para a esquerda
             var dive = sm.AddState("GK_Mergulho");
             dive.motion = Clip("Goleiro", "GK_Mergulho");
-            dive.speed = 1.4f;
+            dive.speed = 1.15f;
             dive.mirrorParameterActive = true;
             dive.mirrorParameter = "Mirror";
 
             var jump = sm.AddState("GK_Salto");
             jump.motion = Clip("Goleiro", "GK_Salto");
-            jump.speed = 1.2f;
+            jump.speed = 1.1f;
             jump.mirrorParameterActive = true;
             jump.mirrorParameter = "Mirror";
 
+            var block = sm.AddState("GK_Defesa");
+            block.motion = Clip("Goleiro", "GK_Defesa");
+            block.speed = 1.2f;
+
             var fallen = sm.AddState("GK_Caido");
             fallen.motion = Clip("Goleiro", "GK_Caido");
+            fallen.mirrorParameterActive = true;
+            fallen.mirrorParameter = "Mirror";
             var getUp = sm.AddState("GK_Levantar");
             getUp.motion = Clip("Goleiro", "GK_Levantar");
-            var t = getUp.AddTransition(loco); t.hasExitTime = true; t.exitTime = 0.9f; t.duration = 0.25f;
+            getUp.speed = 1.2f;
+            getUp.mirrorParameterActive = true;
+            getUp.mirrorParameter = "Mirror";
+            var t = getUp.AddTransition(loco); t.hasExitTime = true; t.exitTime = 0.92f; t.duration = 0.2f;
             var t2 = jump.AddTransition(loco); t2.hasExitTime = true; t2.exitTime = 0.95f; t2.duration = 0.25f;
+            var t3 = block.AddTransition(loco); t3.hasExitTime = true; t3.exitTime = 0.95f; t3.duration = 0.3f;
+            var t4 = dive.AddTransition(getUp); t4.hasExitTime = true; t4.exitTime = 0.97f; t4.duration = 0.2f;
 
             EnableIK(ac);
             EditorUtility.SetDirty(ac);

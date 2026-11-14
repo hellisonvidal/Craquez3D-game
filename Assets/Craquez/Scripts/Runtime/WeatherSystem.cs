@@ -205,7 +205,7 @@ namespace Craquez
             if (p.rainRate > 0f) { if (!groundSplash.isPlaying) groundSplash.Play(); } else groundSplash.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
             // refletores: o URP usa queda física (1/d²); a ~70 m do campo precisamos de intensidade alta
-            foreach (var l in floods) { l.enabled = p.floodlights > 0f; l.intensity = p.floodlights * 2600f; }
+            foreach (var l in floods) { l.enabled = p.floodlights > 0f; l.intensity = p.floodlights * 1800f; }
 
             for (int i = 0; i < grassMaterials.Count; i++)
             {
@@ -213,7 +213,7 @@ namespace Craquez
                 Color b = i < grassBaseColors.Count ? grassBaseColors[i] : Color.white;
                 float k = Mathf.Lerp(1f, 0.85f, p.wetness);
                 m.SetColor("_BaseColor", new Color(b.r * k, b.g * k, b.b * k, 1f));
-                m.SetFloat("_Smoothness", Mathf.Lerp(0.12f, 0.58f, p.wetness));
+                m.SetFloat("_Smoothness", Mathf.Lerp(0.12f, 0.36f, p.wetness)); // brilho molhado sem "estourar" nos refletores
             }
             foreach (var m in characterMaterials)
                 m.SetFloat("_Smoothness", Mathf.Lerp(0.55f, 0.85f, p.wetness));

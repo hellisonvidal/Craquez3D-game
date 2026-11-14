@@ -13,11 +13,11 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 6;
+        public const int Version = 7;
 
         static readonly string[] LoopClips =
         {
-            "Idle", "Andar", "Trote", "Correr", "GK_Idle", "GK_LateralEsq", "GK_LateralDir", "GK_Caido"
+            "Idle", "Andar", "Trote", "Correr", "GK_Pronto", "GK_DeslocarEsq", "GK_DeslocarDir", "GK_Caido"
         };
 
         public override uint GetVersion() { return Version; }

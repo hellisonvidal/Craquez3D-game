@@ -133,10 +133,11 @@ namespace Craquez
                         Vector3 toGoal = goal - pp; toGoal.y = 0f;
                         Vector3 dir = toGoal.sqrMagnitude > 1f ? toGoal.normalized : Vector3.right;
                         Vector3 side = Vector3.Cross(Vector3.up, dir);
-                        float dist = Mathf.Lerp(6.5f, 9f, Mathf.Clamp01(toGoal.magnitude / 35f));
-                        pos = pp - dir * dist + Vector3.up * 3.1f + side * Mathf.Clamp((bp - pp).z * 0.15f, -1.5f, 1.5f);
-                        look = Vector3.Lerp(pp + Vector3.up * 1.2f + dir * 5f, goal, 0.25f);
-                        fov = 52f;
+                        // mais perto e mais baixa: o jogador grande na tela, o gol visível ao fundo
+                        float dist = Mathf.Lerp(5.0f, 6.4f, Mathf.Clamp01(toGoal.magnitude / 35f));
+                        pos = pp - dir * dist + Vector3.up * 2.35f + side * Mathf.Clamp((bp - pp).z * 0.15f, -1.2f, 1.2f);
+                        look = Vector3.Lerp(pp + Vector3.up * 1.0f + dir * 4.5f, goal, 0.12f);
+                        fov = 54f;
                         break;
                     }
             }

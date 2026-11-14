@@ -2,6 +2,24 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.3.0] — 2026-11-14
+
+### Corrigido
+- Pés "tortos para trás" e corpo desalinhado: a pose de repouso do jogador e do goleiro tinha pernas inclinadas para trás
+  (até 11°), coluna e braços fora da T-pose; a Unity repassava esse erro a todas as animações. Os dois esqueletos foram
+  endireitados para a T-pose canônica do Mixamo (pernas retas, pés para frente, coluna e braços alinhados).
+
+### Goleiro
+- Animações novas de verdade: postura de espera (agachado, mãos à frente), deslocamento lateral em base,
+  mergulho com o corpo estendido e braços acima da cabeça, queda e levantar do lado certo, salto com as mãos no alto
+  e defesa no peito (encaixe). Antes ele usava animações genéricas sem defesa.
+
+### Jogabilidade e visual
+- Condução: depois do toque a bola acompanha a direção pedida e não abre demais à frente (controle bem mais firme).
+- Câmera padrão mais próxima e mais baixa — jogador maior na tela, gol visível ao fundo.
+- Brilho do gramado molhado sem "estourar" sob os refletores; poças e áreas encharcadas mais naturais.
+- Botão **SAIR DO JOGO** no menu principal e na pausa.
+
 ## [0.2.0] — 2026-11-14
 
 ### Novo visual

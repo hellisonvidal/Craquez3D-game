@@ -245,8 +245,7 @@ namespace Craquez
                 case Tela.Principal:
                     items.Add(new Item { label = "ARENA DE TREINO", desc = "Finalização contra o goleiro • escolha o clima e quem você controla", activate = () => Go(Tela.Arena) });
                     items.Add(new Item { label = "CONFIGURAÇÕES", desc = "Controles, câmera, gráficos, som e atualizações", activate = () => { configBack = Tela.Principal; Go(Tela.Config); } });
-                    if (!Application.isMobilePlatform && !Application.isEditor)
-                        items.Add(new Item { label = "SAIR", desc = "Fechar o jogo", activate = Application.Quit });
+                    items.Add(new Item { label = "SAIR DO JOGO", desc = "Fechar o Craquez 3D", activate = Application.Quit });
                     break;
 
                 case Tela.Pausa:
@@ -255,6 +254,7 @@ namespace Craquez
                     items.Add(new Item { label = "CÂMERA", tipo = Tipo.Lista, value = () => CameraRig.Nome(cameraRig.mode), change = d => cameraRig.Cycle() });
                     items.Add(new Item { label = "CONFIGURAÇÕES", activate = () => { configBack = Tela.Pausa; Go(Tela.Config); } });
                     items.Add(new Item { label = "SAIR PARA O MENU", activate = () => { session.SetPaused(false); session.Preview(); Go(Tela.Principal); } });
+                    items.Add(new Item { label = "SAIR DO JOGO", activate = Application.Quit });
                     break;
 
                 case Tela.Config:
@@ -434,7 +434,7 @@ namespace Craquez
                 float t = UiKit.EaseOut((telaTime - 0.1f - i * 0.08f) / 0.35f);
                 Rect r = new Rect(70 * S - (1f - t) * 80 * S, y0 + i * (ch + gap), cw, ch);
                 bool selected = i == sel && !usingPointer;
-                DrawCard(r, it.label, it.desc, selected, i == 0 ? UiKit.Red : UiKit.Blue, t);
+                DrawCard(r, it.label, it.desc, selected, i == 0 ? UiKit.Red : (it.activate == Application.Quit ? new Color(0.45f, 0.5f, 0.6f) : UiKit.Blue), t);
                 if (ui.Hit(r)) { sel = i; Activate(it); }
             }
         }
