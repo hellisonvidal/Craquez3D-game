@@ -1,0 +1,36 @@
+# Diagnóstico das animações: aplica cada clipe nos personagens com o retarget Humanoid da própria Unity
+# e salva as posições das articulações (artefato "Diagnostico"). Rodar em Actions -> Run workflow.
+name: "Diagnóstico de animação"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  poses:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache da pasta Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-Diag-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-Diag-
+      - name: Unity (diagnóstico)
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: StandaloneLinux64
+          buildMethod: Craquez.EditorTools.CraquezDiag.Run
+          versioning: None
+      - name: Guardar resultado
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Diagnostico
+          path: Diagnostico
+          if-no-files-found: warn
