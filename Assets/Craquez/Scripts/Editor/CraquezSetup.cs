@@ -59,6 +59,9 @@ namespace Craquez.EditorTools
                 Progress(interactive, "Criando materiais...", 0.3f);
                 var mats = CreateMaterials();
 
+                Progress(interactive, "Ligando animações aos avatares...", 0.4f);
+                LinkClipAvatars();
+
                 Progress(interactive, "Criando animações...", 0.45f);
                 var playerCtrl = CreatePlayerController();
                 var keeperCtrl = CreateKeeperController();
@@ -106,6 +109,37 @@ namespace Craquez.EditorTools
             string parent = Path.GetDirectoryName(path).Replace('\\', '/');
             Folder(parent);
             AssetDatabase.CreateFolder(parent, Path.GetFileName(path));
+        }
+
+        /// <summary>
+        /// Animações feitas sobre o MESMO esqueleto do personagem (nativas do Meshy transferidas e as do goleiro)
+        /// usam o avatar do próprio personagem como origem: o retarget vira identidade, sem torções nos pés.
+        /// </summary>
+        static void LinkClipAvatars()
+        {
+            var sets = new[]
+            {
+                new { model = "Jogador", folder = "Jogador", clips = new[] { "Correr", "Andar", "Disparada" } },
+                new { model = "Goleiro", folder = "Goleiro", clips = new[] { "GK_Pronto", "GK_DeslocarDir", "GK_DeslocarEsq", "GK_Mergulho", "GK_Caido", "GK_Levantar", "GK_Salto", "GK_Defesa" } },
+            };
+            foreach (var set in sets)
+            {
+                Avatar avatar = null;
+                foreach (var o in AssetDatabase.LoadAllAssetsAtPath(Root + "/Models/" + set.model + ".fbx"))
+                    if (o is Avatar a && a.isHuman) { avatar = a; break; }
+                if (avatar == null) { Debug.LogWarning("[Craquez 3D] Avatar de " + set.model + " não encontrado"); continue; }
+                foreach (var c in set.clips)
+                {
+                    string path = Root + "/Animations/" + set.folder + "/" + c + ".fbx";
+                    var mi = AssetImporter.GetAtPath(path) as ModelImporter;
+                    if (mi == null) continue;
+                    if (mi.avatarSetup == ModelImporterAvatarSetup.CopyFromOther && mi.sourceAvatar == avatar) continue;
+                    mi.animationType = ModelImporterAnimationType.Human;
+                    mi.avatarSetup = ModelImporterAvatarSetup.CopyFromOther;
+                    mi.sourceAvatar = avatar;
+                    mi.SaveAndReimport();
+                }
+            }
         }
 
         static void ReimportAll()

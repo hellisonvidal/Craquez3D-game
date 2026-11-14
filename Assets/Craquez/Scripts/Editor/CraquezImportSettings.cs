@@ -57,7 +57,9 @@ namespace Craquez.EditorTools
             else if (assetPath.Contains("/Animations/"))
             {
                 mi.animationType = ModelImporterAnimationType.Human;
-                mi.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
+                // clipes ligados ao avatar do personagem (CraquezSetup.LinkClipAvatars) mantêm a ligação
+                if (!(mi.avatarSetup == ModelImporterAvatarSetup.CopyFromOther && mi.sourceAvatar != null))
+                    mi.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
                 mi.importAnimation = true;
                 mi.optimizeGameObjects = false;
                 mi.animationCompression = ModelImporterAnimationCompression.Optimal;
