@@ -505,6 +505,7 @@ namespace Craquez.EditorTools
             }
             model.AddComponent<IKRelay>();
             root.AddComponent(controller);
+            root.AddComponent<FootGrounder>().height = height;
 
             string path = Gen + "/Prefabs/" + name + ".prefab";
             var prefab = PrefabUtility.SaveAsPrefabAsset(root, path);

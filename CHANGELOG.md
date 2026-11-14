@@ -2,6 +2,13 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.3.1] — 2026-11-14
+
+### Corrigido
+- Jogador e goleiro "voando" acima do gramado: as animações passam a calcular a altura do corpo pelos pés, e um
+  aterramento novo (FootGrounder) mede a altura real dos tornozelos e dedos depois de cada quadro de animação
+  e encaixa o personagem no chão. No goleiro ele fica desligado durante mergulho, salto e ao levantar.
+
 ## [0.3.0] — 2026-11-14
 
 ### Corrigido

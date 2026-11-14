@@ -13,7 +13,7 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 7;
+        public const int Version = 8;
 
         static readonly string[] LoopClips =
         {
@@ -85,7 +85,7 @@ namespace Craquez.EditorTools
                 c.keepOriginalPositionY = true;
                 c.lockRootPositionXZ = false;
                 c.keepOriginalPositionXZ = false;
-                c.heightFromFeet = false;
+                c.heightFromFeet = true; // altura do corpo calculada a partir dos pés: nada de "flutuar"
                 clips[i] = c;
             }
             mi.clipAnimations = clips;

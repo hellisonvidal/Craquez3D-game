@@ -42,6 +42,7 @@ namespace Craquez
         float ikWeight;
         float readyWeight;   // reforço da postura de espera (a animação GK_Pronto já tem as mãos à frente)
         float recoverTime = 0.6f;
+        FootGrounder grounder;
         Vector3 ikTarget;
         Vector3 diveFrom, diveTo;
         float diveStart, diveDuration, diveHeight;
@@ -307,6 +308,8 @@ namespace Craquez
             if (anim != null) anim.SetFloat(LateralHash, Vector3.Dot(velocity, transform.right), 0.1f, dt);
             // a animação de espera deixa os braços caídos e os cotovelos para trás: corrigimos com IK
             bool ready = State == Estado.Posicionando && !diving;
+            if (grounder == null) grounder = GetComponent<FootGrounder>();
+            if (grounder != null) grounder.grounding = ready || (State == Estado.Defendendo && !diving);
             readyWeight = Mathf.MoveTowards(readyWeight, ready ? 0.3f : 0f, dt * (ready ? 2.5f : 6f));
         }
 

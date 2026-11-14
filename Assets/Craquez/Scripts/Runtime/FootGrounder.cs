@@ -1,0 +1,66 @@
+using UnityEngine;
+
+namespace Craquez
+{
+    /// <summary>
+    /// Mantém os pés do personagem apoiados no gramado: depois da animação (LateUpdate), mede a altura
+    /// dos tornozelos e dos dedos em relação à pose de repouso e corrige a altura do modelo, suavemente.
+    /// Assim o jogador não "flutua" nem afunda, seja qual for a escala do rig ou a altura do clipe.
+    /// Pode ser desligado (ex.: goleiro mergulhando ou saltando).
+    /// </summary>
+    [DefaultExecutionOrder(1000)]
+    public class FootGrounder : MonoBehaviour
+    {
+        public bool grounding = true;
+        [Tooltip("Altura do personagem (m), igual à usada no prefab.")]
+        public float height = 1.8f;
+        // medidas dos modelos (tools/blender): tornozelo e dedos acima da sola, em fração da altura
+        const float AnkleRatio = 0.088f, ToeRatio = 0.031f;
+        [Tooltip("Rapidez da correção (1/s).")]
+        public float speed = 14f;
+
+        Animator anim;
+        Transform model;
+        Transform lFoot, rFoot, lToe, rToe;
+        float lFootRest, rFootRest, lToeRest, rToeRest;
+        Vector3 baseLocal;
+        float offset;
+        bool ready;
+
+        void Start()
+        {
+            anim = GetComponentInChildren<Animator>();
+            if (anim == null || !anim.isHuman) { enabled = false; return; }
+            model = anim.transform;
+            baseLocal = model.localPosition;
+            lFoot = anim.GetBoneTransform(HumanBodyBones.LeftFoot);
+            rFoot = anim.GetBoneTransform(HumanBodyBones.RightFoot);
+            lToe = anim.GetBoneTransform(HumanBodyBones.LeftToes);
+            rToe = anim.GetBoneTransform(HumanBodyBones.RightToes);
+            if (lFoot == null || rFoot == null) { enabled = false; return; }
+            // altura real das articulações acima da sola (medida nos modelos, independente da montagem do prefab)
+            lFootRest = rFootRest = AnkleRatio * height;
+            lToeRest = rToeRest = lToe != null ? ToeRatio * height : AnkleRatio * height;
+            ready = true;
+        }
+
+        void LateUpdate()
+        {
+            if (!ready) return;
+            float target = offset; // desligado (mergulho/salto): mantém a correção atual
+            if (grounding)
+            {
+                float y0 = transform.position.y;
+                // quanto o ponto de apoio mais baixo está acima (ou abaixo) do chão, já descontada a correção atual
+                float c = Mathf.Min(
+                    Mathf.Min(lFoot.position.y - y0 - lFootRest, rFoot.position.y - y0 - rFootRest),
+                    Mathf.Min((lToe != null ? lToe.position.y : lFoot.position.y) - y0 - lToeRest,
+                              (rToe != null ? rToe.position.y : rFoot.position.y) - y0 - rToeRest));
+                target = offset - c;
+                target = Mathf.Clamp(target, -0.6f, 0.6f);
+            }
+            offset = Mathf.Lerp(offset, target, 1f - Mathf.Exp(-speed * Time.deltaTime));
+            model.localPosition = baseLocal + Vector3.up * offset / Mathf.Max(1e-4f, transform.lossyScale.y);
+        }
+    }
+}
