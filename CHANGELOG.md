@@ -2,6 +2,27 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.4.0] — 2026-11-14
+
+### Corrigido
+- Perna/pé do jogador torcidos: o diagnóstico rodando a própria Unity mostrou o "músculo" de torção do pé esquerdo
+  em −3,4 (o normal é ±1). Agora a corrida, a caminhada e a arrancada são as animações **nativas do Meshy** do próprio
+  jogador, transferidas exatamente para o esqueleto corrigido e ligadas ao avatar dele (retarget identidade):
+  pés para frente, sem torção. O mesmo vale para as animações do goleiro.
+- Goleiro que não defendia: o contato só era checado em instantes soltos (a cada 10 ms) contra o osso do pulso —
+  chute a 25 m/s "atravessava" a mão. Agora o teste é contínuo ao longo da trajetória, com a palma da mão e uma
+  margem de ponta de dedo ao cruzar a linha dele.
+- Mergulho com braços acima da cabeça dentro dos limites do Humanoid, sincronizado com a chegada da bola,
+  com alcance real medido (antes os braços "dobravam" no voo) e deslocamento maior.
+- Pés no chão já na montagem do personagem (a caixa da malha sobrava ~10 cm abaixo dos pés).
+
+### Contato com a bola
+- O toque de condução acontece quando um pé de fato chega à bola (passada), e no chute a bola encontra o pé que chuta.
+
+### Ferramentas
+- Diagnóstico de animação no GitHub Actions (Actions → "Diagnóstico de animação"): a Unity aplica cada clipe nos
+  personagens e registra a posição das articulações e os músculos dos pés.
+
 ## [0.3.1] — 2026-11-14
 
 ### Corrigido

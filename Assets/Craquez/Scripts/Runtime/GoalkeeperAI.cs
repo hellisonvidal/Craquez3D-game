@@ -18,7 +18,7 @@ namespace Craquez
 
         public BallPhysics ball;
         public float maxShuffleSpeed = 4.2f;
-        public float maxDiveTravel = 2.3f;      // deslocamento do corpo no mergulho (m)
+        public float maxDiveTravel = 2.6f;      // deslocamento do corpo no mergulho (m)
         public float maxDiveSpeed = 6.8f;       // m/s
         public float handReach = 0.24f;         // raio da palma (a bola tem 0,11 m de raio)
 
@@ -166,8 +166,8 @@ namespace Craquez
             }
             else
             {
-                // no voo as mãos ficam ~1,1 m além do centro do corpo (braços acima da cabeça)
-                float wanted = Mathf.Clamp(absLat - 1.05f, 0.2f, maxDiveTravel);
+                // no voo as mãos ficam ~0,8 m além do centro do corpo (medido no diagnóstico Unity); o IK estica o resto
+                float wanted = Mathf.Clamp(absLat - 0.85f, 0.2f, maxDiveTravel);
                 float travel = Mathf.Min(wanted, maxDiveSpeed * Mathf.Max(t, 0.05f));
                 StartDive(Mathf.Sign(lateral), travel, Mathf.Clamp(t, 0.22f, 0.65f), Mathf.Clamp(hit.y - 0.55f, 0f, 1.3f) * 0.85f);
             }
