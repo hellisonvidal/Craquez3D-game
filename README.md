@@ -1,7 +1,7 @@
 # Craquez 3D
 
 Jogo de futebol realista (estilo FIFA / eFootball / UFL) para **Android**, com versão **Windows** planejada.
-Esta versão (**v0.1.1**) é a **Arena de Treino de finalização**: um atacante e um goleiro, para validar física, animações e clima.
+Esta versão (**v0.1.2**) é a **Arena de Treino de finalização**: um atacante e um goleiro, para validar física, animações e clima.
 
 > Jogo totalmente programado por Inteligência Artificial.
 
@@ -24,7 +24,7 @@ A Unity com URP entrega iluminação PBR, sombras, pós-processamento e boa perf
 
 > Se a Unity perguntar sobre o *novo Input System*, aceite e reinicie (o jogo funciona com os dois sistemas).
 
-## O que tem na v0.1.0
+## O que tem no jogo
 
 **Abertura e menus**
 - Aviso "jogo totalmente programado por IA" → vídeo de abertura → **"Toque na tela para iniciar"**.
@@ -78,10 +78,31 @@ O jogo consulta a **última Release publicada** deste repositório no GitHub. Se
 a atualização é **obrigatória**: o jogo fica bloqueado na tela de atualização (sem opção de pular), baixa o APK com barra de progresso
 e abre o instalador. O Android sempre exibe a confirmação final do sistema — é uma proteção do próprio Android que nenhum app comum consegue pular.
 
-Para publicar uma atualização:
-1. Aumente a versão no arquivo **`VERSION`** (ex.: `0.2.0`). Ela vira automaticamente `bundleVersion` e `versionCode` no build.
-2. Gere o APK assinado **sempre com a mesma keystore** (Player Settings → Publishing Settings). Com outra assinatura o Android recusa a atualização.
-3. Crie uma Release com a tag `v0.2.0` e anexe o `.apk`. Rascunhos (drafts) e pré-lançamentos são ignorados.
+## Build automático no GitHub (sem abrir a Unity)
+
+O workflow `.github/workflows/android-release.yml` gera o APK na nuvem (GitHub Actions + [GameCI](https://game-ci.com))
+e publica a Release que o atualizador do app baixa.
+
+**Publicar uma versão nova:** aumente o arquivo **`VERSION`** (ex.: `0.1.3`), descreva a versão no `CHANGELOG.md` e faça push/merge na **main**.
+O GitHub gera o APK assinado, cria a tag `v0.1.3`, publica a Release com o APK e as notas do CHANGELOG — e os celulares com o jogo recebem a atualização.
+Também dá para rodar manualmente: **Actions → "Android: build e Release" → Run workflow** (qualquer branch; desmarque *Publicar* para só baixar o APK como artefato).
+
+**Configuração (uma vez só)** — em **Settings → Secrets and variables → Actions → New repository secret**:
+
+| Segredo | O que é |
+|---|---|
+| `UNITY_EMAIL` / `UNITY_PASSWORD` | login da sua conta Unity (a licença Personal gratuita serve) |
+| `UNITY_LICENSE` | conteúdo do arquivo de licença `Unity_lic.ulf` (aparece depois de ativar a licença Personal no Unity Hub uma vez: Windows `C:\ProgramData\Unity\Unity_lic.ulf`, macOS `/Library/Application Support/Unity/Unity_lic.ulf`, Linux `~/.local/share/unity3d/Unity/Unity_lic.ulf`) |
+| `ANDROID_KEYSTORE_BASE64` | a keystore do app em base64 |
+| `ANDROID_KEYSTORE_PASS` / `ANDROID_KEYALIAS_NAME` / `ANDROID_KEYALIAS_PASS` | senha e alias da keystore |
+
+> A keystore é a "assinatura" do app. Todas as versões precisam da **mesma** — com outra, o Android recusa a atualização.
+> Guarde uma cópia dela fora do GitHub.
+
+A primeira execução leva ~30–60 min (importa todos os assets); as seguintes usam cache e são mais rápidas.
+O build roda o mesmo setup do menu **Craquez 3D → Configurar Projeto** (`Craquez.EditorTools.CraquezCI.BuildAndroid`), então não é preciso commitar cena nem prefabs.
+
+**Build manual** (alternativa): gere o APK pela Unity com a mesma keystore, crie uma Release com a tag `vX.Y.Z` e anexe o `.apk`. Rascunhos (drafts) e pré-lançamentos são ignorados pelo app.
 
 ## Estrutura
 
@@ -96,7 +117,8 @@ Assets/Craquez/
   Gerado/        criado pelo setup (materiais, animators, prefabs, URP)
 Assets/Plugins/Android/CraquezUpdater.androidlib   instalador de APK e vibração
 tools/           scripts Blender/Python usados para preparar os assets do rascunho
-VERSION          versão do jogo
+VERSION          versão do jogo (gera tag/Release automaticamente)
+.github/workflows  build Android e publicação da Release
 ```
 
 Os arquivos originais (alta resolução) continuam nos rascunhos das Releases. Em `tools/blender` estão os scripts que

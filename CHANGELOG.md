@@ -2,6 +2,14 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.1.2] — 2026-11-14
+
+### Adicionado
+- Build automático no GitHub: a cada versão nova no arquivo `VERSION` (na main), o GitHub Actions gera o APK assinado,
+  cria a tag e publica a Release com as notas deste CHANGELOG — o atualizador do app baixa dali.
+- Execução manual do build pela aba Actions, com opção de só gerar o APK.
+- Setup do projeto sem janelas (`CraquezSetup.Configure`) e build por linha de comando (`CraquezCI.BuildAndroid`).
+
 ## [0.1.1] — 2026-11-14
 
 ### Corrigido

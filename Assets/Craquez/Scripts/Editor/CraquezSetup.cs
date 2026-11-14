@@ -27,35 +27,51 @@ namespace Craquez.EditorTools
         const float PlayerHeight = 1.78f;
         const float KeeperHeight = 1.90f;
 
+        public const string Scene = ScenePath;
+
         [MenuItem("Craquez 3D/Configurar Projeto (gerar cena e assets)", priority = 0)]
         public static void Run()
         {
+            if (!Configure(true)) return;
+            EditorSceneManager.OpenScene(ScenePath);
+            EditorUtility.DisplayDialog("Craquez 3D", "Arena de treino pronta!\n\nAperte Play para jogar.\nVersão: " + PlayerSettings.bundleVersion, "Bora!");
+        }
+
+        /// <summary>
+        /// Gera URP, materiais, animators, prefabs, cena e Player Settings.
+        /// interactive=false: sem janelas (build automático no GitHub Actions).
+        /// </summary>
+        public static bool Configure(bool interactive)
+        {
             try
             {
-                EditorUtility.DisplayProgressBar("Craquez 3D", "Reimportando modelos e animações...", 0.05f);
-                ReimportAll();
+                if (interactive)
+                {
+                    EditorUtility.DisplayProgressBar("Craquez 3D", "Reimportando modelos e animações...", 0.05f);
+                    ReimportAll();
+                }
 
-                EditorUtility.DisplayProgressBar("Craquez 3D", "Configurando URP...", 0.15f);
+                Progress(interactive, "Configurando URP...", 0.15f);
                 Folder(Gen); Folder(Gen + "/Materiais"); Folder(Gen + "/Animacao"); Folder(Gen + "/Prefabs"); Folder(Gen + "/Render"); Folder(Root + "/Scenes");
                 var pipeline = SetupUrp();
 
-                EditorUtility.DisplayProgressBar("Craquez 3D", "Criando materiais...", 0.3f);
+                Progress(interactive, "Criando materiais...", 0.3f);
                 var mats = CreateMaterials();
 
-                EditorUtility.DisplayProgressBar("Craquez 3D", "Criando animações...", 0.45f);
+                Progress(interactive, "Criando animações...", 0.45f);
                 var playerCtrl = CreatePlayerController();
                 var keeperCtrl = CreateKeeperController();
 
-                EditorUtility.DisplayProgressBar("Craquez 3D", "Criando prefabs...", 0.6f);
+                Progress(interactive, "Criando prefabs...", 0.6f);
                 var playerPrefab = CreateCharacterPrefab("Jogador", PlayerHeight, playerCtrl, mats["Jogador"], typeof(PlayerController));
                 var keeperPrefab = CreateCharacterPrefab("Goleiro", KeeperHeight, keeperCtrl, mats["Goleiro"], typeof(GoalkeeperAI));
                 var ballPrefab = CreateBallPrefab(mats["Bola"]);
 
-                EditorUtility.DisplayProgressBar("Craquez 3D", "Montando a cena...", 0.75f);
+                Progress(interactive, "Montando a cena...", 0.75f);
                 var profiles = CreateVolumeProfiles();
                 CreateScene(mats, playerPrefab, keeperPrefab, ballPrefab, profiles);
 
-                EditorUtility.DisplayProgressBar("Craquez 3D", "Player Settings...", 0.9f);
+                Progress(interactive, "Player Settings...", 0.9f);
                 SetupPlayerSettings();
 
                 AssetDatabase.SaveAssets();
@@ -64,13 +80,21 @@ namespace Craquez.EditorTools
             catch (Exception e)
             {
                 Debug.LogError("[Craquez 3D] Falha no setup: " + e);
-                EditorUtility.ClearProgressBar();
-                EditorUtility.DisplayDialog("Craquez 3D", "Falha no setup:\n" + e.Message + "\n\nVeja o Console para detalhes.", "OK");
-                return;
+                if (interactive)
+                {
+                    EditorUtility.ClearProgressBar();
+                    EditorUtility.DisplayDialog("Craquez 3D", "Falha no setup:\n" + e.Message + "\n\nVeja o Console para detalhes.", "OK");
+                }
+                return false;
             }
-            EditorUtility.ClearProgressBar();
-            EditorSceneManager.OpenScene(ScenePath);
-            EditorUtility.DisplayDialog("Craquez 3D", "Arena de treino pronta!\n\nAperte Play para jogar.\nVersão: " + PlayerSettings.bundleVersion, "Bora!");
+            if (interactive) EditorUtility.ClearProgressBar();
+            return true;
+        }
+
+        static void Progress(bool interactive, string msg, float t)
+        {
+            if (interactive) EditorUtility.DisplayProgressBar("Craquez 3D", msg, t);
+            else Debug.Log("[Craquez 3D] " + msg);
         }
 
         // ------------------------------------------------------------------ utilidades

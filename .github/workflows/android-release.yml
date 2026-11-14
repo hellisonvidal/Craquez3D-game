@@ -1,0 +1,142 @@
+# Gera o APK Android na nuvem e publica uma Release no GitHub.
+# - Automático: a cada push na main que altere o arquivo VERSION.
+# - Manual: aba Actions -> "Android: build e Release" -> Run workflow (qualquer branch).
+# A Release (tag vX.Y.Z + APK) é o que o atualizador dentro do app baixa.
+name: "Android: build e Release"
+
+on:
+  push:
+    branches: [main]
+    paths: [VERSION]
+  workflow_dispatch:
+    inputs:
+      publicar:
+        description: "Publicar Release (se desmarcado, só gera o APK como artefato)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-release
+  cancel-in-progress: false
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Conferir segredos
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEYALIAS_NAME: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+          ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+        run: |
+          faltando=""
+          for s in UNITY_LICENSE UNITY_EMAIL UNITY_PASSWORD ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASS ANDROID_KEYALIAS_NAME ANDROID_KEYALIAS_PASS; do
+            [ -z "${!s}" ] && faltando="$faltando $s"
+          done
+          if [ -n "$faltando" ]; then
+            echo "::error::Faltam segredos em Settings > Secrets and variables > Actions:$faltando (veja o README, seção 'Build automático no GitHub')."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - name: Ler versão
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(tr -d ' \r\n' < VERSION)
+          if ! echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then echo "::error::VERSION inválido: '$V' (use X.Y.Z)"; exit 1; fi
+          IFS=. read -r MA MI PA <<< "$V"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "code=$((MA*10000 + MI*100 + PA))" >> "$GITHUB_OUTPUT"
+          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::warning::A Release v$V já existe. O APK será gerado só como artefato; aumente o arquivo VERSION para publicar outra."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Liberar espaço em disco
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: false
+          swap-storage: false
+
+      - name: Cache da pasta Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-Android-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-Android-
+
+      - name: Build Android (Unity)
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: Android
+          buildName: Craquez3D
+          buildMethod: Craquez.EditorTools.CraquezCI.BuildAndroid
+          versioning: Custom
+          version: ${{ steps.v.outputs.version }}
+          androidVersionCode: ${{ steps.v.outputs.code }}
+          androidExportType: androidPackage
+          androidKeystoreName: craquez.keystore
+          androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
+          androidKeyaliasPass: ${{ secrets.ANDROID_KEYALIAS_PASS }}
+
+      - name: Separar APK
+        id: apk
+        run: |
+          APK=$(sudo find build -name '*.apk' | head -n1)
+          if [ -z "$APK" ]; then echo "::error::Nenhum APK gerado"; exit 1; fi
+          mkdir -p saida
+          sudo cp "$APK" "saida/Craquez3D-v${{ steps.v.outputs.version }}.apk"
+          sudo chown -R "$(id -u):$(id -g)" saida
+          echo "file=saida/Craquez3D-v${{ steps.v.outputs.version }}.apk" >> "$GITHUB_OUTPUT"
+          ls -lh saida
+
+      - name: Guardar APK (artefato)
+        uses: actions/upload-artifact@v4
+        with:
+          name: Craquez3D-v${{ steps.v.outputs.version }}-android
+          path: ${{ steps.apk.outputs.file }}
+          retention-days: 30
+
+      - name: Publicar Release
+        if: steps.v.outputs.exists == 'false' && (github.event_name == 'push' || inputs.publicar)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=${{ steps.v.outputs.version }}
+          # notas = seção da versão no CHANGELOG.md
+          awk -v v="$V" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > notas.md
+          [ -s notas.md ] || echo "Craquez 3D v$V" > notas.md
+          gh release create "v$V" "${{ steps.apk.outputs.file }}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Craquez 3D v$V" \
+            --notes-file notas.md \
+            --latest
