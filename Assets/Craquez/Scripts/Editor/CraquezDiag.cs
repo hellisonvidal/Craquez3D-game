@@ -68,6 +68,19 @@ namespace Craquez.EditorTools
             Debug.Log("[Diag] " + prefabName + " avatar=" + (anim.avatar != null ? anim.avatar.name : "null") + " humano=" + (anim.avatar != null && anim.avatar.isHuman) +
                       " escala=" + anim.transform.localScale + " pos=" + anim.transform.localPosition + " humanScale=" + anim.humanScale);
 
+            // mapeamento dos ossos e limites (pernas/pés)
+            var mi = AssetImporter.GetAtPath("Assets/Craquez/Models/" + prefabName + ".fbx") as ModelImporter;
+            if (mi != null)
+                foreach (var hb in mi.humanDescription.human)
+                    if (hb.humanName.Contains("Leg") || hb.humanName.Contains("Foot") || hb.humanName.Contains("Toes"))
+                        Debug.Log("[Diag] mapa " + prefabName + " " + hb.humanName + " -> " + hb.boneName + " limite padrão=" + hb.limit.useDefaultValues);
+            var hph = new HumanPoseHandler(anim.avatar, anim.transform);
+            var hp = new HumanPose();
+            string[] musc = { "Left Foot Up-Down", "Left Foot Twist In-Out", "Left Lower Leg Twist In-Out", "Left Upper Leg Twist In-Out",
+                              "Right Foot Up-Down", "Right Foot Twist In-Out", "Right Lower Leg Twist In-Out", "Right Upper Leg Twist In-Out" };
+            var mIdx = new int[musc.Length];
+            for (int i = 0; i < musc.Length; i++) mIdx[i] = Array.IndexOf(HumanTrait.MuscleName, musc[i]);
+
             // pose de repouso (sem animação)
             Write(sb, ref first, prefabName, "REPOUSO", 0f, anim, go.transform);
 
@@ -90,9 +103,17 @@ namespace Craquez.EditorTools
                     cp.SetTime(t);
                     graph.Evaluate(0f);
                     Write(sb, ref first, prefabName, name, t, anim, go.transform);
+                    if (prefabName == "Jogador" && (name == "Correr" || name == "Andar") && k % 2 == 0)
+                    {
+                        hph.GetHumanPose(ref hp);
+                        var m = new StringBuilder("[Diag] musc " + name + " t=" + t.ToString("0.00") + ":");
+                        for (int i = 0; i < musc.Length; i++) if (mIdx[i] >= 0) m.Append(" ").Append(musc[i].Replace(" ", "")).Append("=").Append(hp.muscles[mIdx[i]].ToString("0.00"));
+                        Debug.Log(m.ToString());
+                    }
                 }
                 graph.Destroy();
             }
+            hph.Dispose();
             UnityEngine.Object.DestroyImmediate(go);
         }
 
