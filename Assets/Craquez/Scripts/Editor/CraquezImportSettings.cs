@@ -13,7 +13,7 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 9;
+        public const int Version = 10;
 
         static readonly string[] LoopClips =
         {
@@ -32,6 +32,9 @@ namespace Craquez.EditorTools
             mi.importLights = false;
             mi.importBlendShapes = false;
             mi.importVisibility = false;
+            // mantém o nó do esqueleto mesmo em arquivos só com animação: a hierarquia precisa ser igual
+            // à do modelo para reaproveitar o avatar do personagem (CraquezSetup.LinkClipAvatars)
+            mi.preserveHierarchy = true;
 
             if (assetPath.Contains("/Models/"))
             {

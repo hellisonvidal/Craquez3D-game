@@ -56,6 +56,9 @@ for pair in os.environ['MAP'].split(','):
     src.animation_data.action=None
     for a in list(bpy.data.actions):
         if a!=new: bpy.data.actions.remove(a)
+    # mesmo nome de esqueleto do modelo (a Unity compara a hierarquia ao reaproveitar o avatar)
+    bpy.data.objects.remove(src)
+    tgt.name=os.environ.get('RIGNAME','SmartRigArmature')
     bpy.context.view_layer.update()
     bpy.ops.object.select_all(action='DESELECT'); tgt.select_set(True); bpy.context.view_layer.objects.active=tgt
     bpy.ops.export_scene.fbx(filepath=os.path.join(os.environ['OUTDIR'], out+'.fbx'), use_selection=True, object_types={'ARMATURE'},
