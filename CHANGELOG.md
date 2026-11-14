@@ -2,6 +2,13 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.1.3] — 2026-11-14
+
+### Corrigido
+- Vídeo de abertura não entrava no APK gerado pelo GitHub: convertido para WebM (VP8 + Vorbis), formato que a Unity
+  importa em Linux, Windows e macOS e que o Android reproduz. O build automático agora falha se o vídeo não for importado.
+- Setup do URP no Unity 6: sombras suaves configuradas pelo campo serializado (a propriedade é somente leitura no URP 17).
+
 ## [0.1.2] — 2026-11-14
 
 ### Adicionado

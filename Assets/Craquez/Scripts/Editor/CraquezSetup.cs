@@ -28,6 +28,7 @@ namespace Craquez.EditorTools
         const float KeeperHeight = 1.90f;
 
         public const string Scene = ScenePath;
+        public const string IntroVideo = Root + "/Video/Abertura.webm";
 
         [MenuItem("Craquez 3D/Configurar Projeto (gerar cena e assets)", priority = 0)]
         public static void Run()
@@ -675,8 +676,8 @@ namespace Craquez.EditorTools
             boot.postProcessRoot = ppRoot.transform;
             boot.reflectionProbe = probe;
             boot.uiCircle = T("UI_Circulo");
-            boot.introClip = AssetDatabase.LoadAssetAtPath<VideoClip>(Root + "/Video/Abertura.mp4");
-            if (boot.introClip == null) Debug.LogWarning("[Craquez 3D] Vídeo de abertura não encontrado em " + Root + "/Video/Abertura.mp4");
+            boot.introClip = AssetDatabase.LoadAssetAtPath<VideoClip>(IntroVideo);
+            if (boot.introClip == null) Debug.LogWarning("[Craquez 3D] Vídeo de abertura não encontrado em " + IntroVideo);
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };

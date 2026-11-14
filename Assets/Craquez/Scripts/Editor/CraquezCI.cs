@@ -31,6 +31,8 @@ namespace Craquez.EditorTools
                     EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android);
 
                 if (!CraquezSetup.Configure(false)) throw new Exception("o setup do projeto falhou (veja o log acima)");
+                if (AssetDatabase.LoadAssetAtPath<UnityEngine.Video.VideoClip>(CraquezSetup.IntroVideo) == null)
+                    throw new Exception("vídeo de abertura não importado: " + CraquezSetup.IntroVideo);
 
                 string keystore = Arg("-androidKeystoreName");
                 if (!string.IsNullOrEmpty(keystore) && File.Exists(keystore))
