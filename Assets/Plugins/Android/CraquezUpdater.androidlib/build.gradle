@@ -1,0 +1,22 @@
+apply plugin: 'com.android.library'
+
+android {
+    namespace 'com.craquez.updater'
+    compileSdk (project.hasProperty('unity.compileSdkVersion') ? (project.property('unity.compileSdkVersion') as int) : 34)
+
+    defaultConfig {
+        minSdk 23
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            java.srcDirs = ['java']
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}

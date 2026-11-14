@@ -1,0 +1,7 @@
+* text=auto
+*.cs text eol=lf
+*.fbx binary
+*.png binary
+*.jpg binary
+*.mp4 binary
+*.jar binary
