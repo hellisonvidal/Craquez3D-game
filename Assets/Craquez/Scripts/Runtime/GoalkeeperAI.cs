@@ -166,7 +166,8 @@ namespace Craquez
             }
             else
             {
-                float wanted = Mathf.Clamp(absLat - 0.8f, 0f, maxDiveTravel);
+                // no voo as mãos ficam ~1,1 m além do centro do corpo (braços acima da cabeça)
+                float wanted = Mathf.Clamp(absLat - 1.05f, 0.2f, maxDiveTravel);
                 float travel = Mathf.Min(wanted, maxDiveSpeed * Mathf.Max(t, 0.05f));
                 StartDive(Mathf.Sign(lateral), travel, Mathf.Clamp(t, 0.22f, 0.65f), Mathf.Clamp(hit.y - 0.55f, 0f, 1.3f) * 0.85f);
             }

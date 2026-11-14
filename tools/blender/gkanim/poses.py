@@ -38,13 +38,13 @@ SHUF_B_H=(0.06,-0.09,-0.19)
 D_LOAD=merge(leg('Left',30,55,20,22), leg('Right',62,95,34,8), arm('Left',-30,60,50), arm('Right',10,40,40),
              spine(30,side=14,neck=12,head=10), {'Hips':[('F',12)]})
 D_LOAD_H=(0.12,-0.08,-0.28)
-D_LAUNCH=merge(leg('Left',-5,10,-15,20), leg('Right',40,70,10,14), arm('Left',95,30,15), arm('Right',110,25,10),
+D_LAUNCH=merge(leg('Left',-5,10,-15,20), leg('Right',40,70,10,14), arm('Left',90,25,10,25), arm('Right',95,20,8,25),
                spine(12,side=20,neck=6,head=6), {'Hips':[('F',48)]})
 D_LAUNCH_H=(0.35,0,-0.18)
-D_FLY=merge(leg('Left',5,15,-25,8), leg('Right',15,25,-20,6), arm('Left',150,25,8), arm('Right',150,20,8),
+D_FLY=merge(leg('Left',5,15,-25,8), leg('Right',15,25,-20,6), arm('Left',98,12,4,30), arm('Right',98,8,4,30),
             spine(4,side=6,neck=4,head=-4), {'Hips':[('F',84)]})
 D_FLY_H=(0.55,0,-0.42)
-D_LAND=merge(leg('Left',20,35,-10,6), leg('Right',30,45,-5,4), arm('Left',120,55,30), arm('Right',120,50,30),
+D_LAND=merge(leg('Left',20,35,-10,6), leg('Right',30,45,-5,4), arm('Left',95,40,25,22), arm('Right',95,35,25,22),
              spine(14,side=0,neck=8,head=4), {'Hips':[('F',90)]})
 D_LAND_H=(0.7,0,-0.76)
 D_LIE=merge(leg('Left',35,55,0,4), leg('Right',45,70,5,2), arm('Left',70,75,70), arm('Right',60,75,75),
@@ -61,9 +61,9 @@ G_KNEEL_H=(0.05,0.02,-0.45)
 # ---- salto (bola alta)
 J_CROUCH=merge(legs(72,112,40,10), arms(-70,-25,25), spine(42,neck=18,head=18))
 J_CROUCH_H=(0,-0.15,-0.33)
-J_TAKE=merge(leg('Left',75,95,10,6), leg('Right',-5,8,-25,6), arms(75,20,15), spine(-4,neck=-4,head=-12))
+J_TAKE=merge(leg('Left',75,95,10,6), leg('Right',-5,8,-25,6), arms(85,15,10,20), spine(-4,neck=-4,head=-12))
 J_TAKE_H=(0,0,0)
-J_PEAK=merge(leg('Left',60,85,0,6), leg('Right',15,40,-20,6), arms(80,10,8,15), spine(-8,neck=-8,head=-20))
+J_PEAK=merge(leg('Left',60,85,0,6), leg('Right',15,40,-20,6), arms(95,8,5,28), spine(-8,neck=-8,head=-20))
 J_PEAK_H=(0,0,-0.05)
 J_CATCH=merge(leg('Left',40,60,10,8), leg('Right',30,45,0,8), arms(25,55,65), spine(12,neck=4,head=0))
 J_CATCH_H=(0,0,-0.1)
