@@ -18,9 +18,9 @@ namespace Craquez
 
         public BallPhysics ball;
         public float maxShuffleSpeed = 4.2f;
-        public float maxDiveTravel = 1.9f;      // deslocamento do corpo no mergulho (m)
-        public float maxDiveSpeed = 6.0f;       // m/s
-        public float handReach = 0.3f;
+        public float maxDiveTravel = 2.3f;      // deslocamento do corpo no mergulho (m)
+        public float maxDiveSpeed = 6.8f;       // m/s
+        public float handReach = 0.24f;         // raio da palma (a bola tem 0,11 m de raio)
 
         [Header("Controle humano (modo goleiro)")]
         public bool humanControlled;
@@ -50,6 +50,7 @@ namespace Craquez
         float diveSide;
         static readonly int LateralHash = Animator.StringToHash("Lateral");
         static readonly int MirrorHash = Animator.StringToHash("Mirror");
+        static readonly int DiveSpeedHash = Animator.StringToHash("DiveSpeed");
 
         Vector3 GoalCenter { get { return Arena.AttackGoalCenter; } }
 
@@ -167,7 +168,7 @@ namespace Craquez
             {
                 float wanted = Mathf.Clamp(absLat - 0.8f, 0f, maxDiveTravel);
                 float travel = Mathf.Min(wanted, maxDiveSpeed * Mathf.Max(t, 0.05f));
-                StartDive(Mathf.Sign(lateral), travel, Mathf.Clamp(t, 0.22f, 0.65f), Mathf.Clamp(hit.y - 0.7f, 0f, 1.0f) * 0.75f);
+                StartDive(Mathf.Sign(lateral), travel, Mathf.Clamp(t, 0.22f, 0.65f), Mathf.Clamp(hit.y - 0.55f, 0f, 1.3f) * 0.85f);
             }
         }
 
@@ -197,7 +198,9 @@ namespace Craquez
             {
                 // a animação base mergulha para a DIREITA do goleiro; espelha para a esquerda
                 anim.SetBool(MirrorHash, side < 0f);
-                anim.CrossFadeInFixedTime("GK_Mergulho", 0.06f, 0, 0.02f);
+                // o quadro de voo (corpo esticado) acontece ~0,5 s após o início: acelera para coincidir com a chegada da bola
+                anim.SetFloat(DiveSpeedHash, Mathf.Clamp(0.5f / Mathf.Max(0.15f, duration), 0.8f, 2.2f));
+                anim.CrossFadeInFixedTime("GK_Mergulho", 0.05f, 0, 0.02f);
             }
         }
 
@@ -413,16 +416,57 @@ namespace Craquez
             }
         }
 
+        Vector3 prevBall;
+        bool havePrev;
+        Transform lFore, rFore;
+
+        Vector3 Palm(Transform hand, Transform fore)
+        {
+            if (hand == null) return Vector3.one * 999f;
+            if (fore == null) return hand.position;
+            Vector3 d = hand.position - fore.position;
+            return hand.position + d.normalized * 0.08f; // centro da palma, além do pulso
+        }
+
+        static float SegDist(Vector3 p, Vector3 a, Vector3 b)
+        {
+            Vector3 ab = b - a;
+            float t = ab.sqrMagnitude > 1e-8f ? Mathf.Clamp01(Vector3.Dot(p - a, ab) / ab.sqrMagnitude) : 0f;
+            return Vector3.Distance(p, a + ab * t);
+        }
+
         void FixedUpdate()
         {
-            if (State != Estado.Defendendo || resolved || ball == null || ball.IsHeld) return;
+            if (State != Estado.Defendendo || resolved || ball == null || ball.IsHeld) { havePrev = false; return; }
             Vector3 bp = ball.Body.position;
-            float dl = lHand != null ? Vector3.Distance(bp, lHand.position) : 99f;
-            float dr = rHand != null ? Vector3.Distance(bp, rHand.position) : 99f;
-            float dc = chest != null ? Vector3.Distance(bp, chest.position) : 99f;
-            float dh = hips != null ? Vector3.Distance(bp, hips.position) : 99f;
-            bool hand = Mathf.Min(dl, dr) < handReach;
-            bool body = Mathf.Min(dc, dh) < 0.38f;
+            Vector3 a = havePrev ? prevBall : bp;
+            prevBall = bp; havePrev = true;
+            if (lFore == null && anim != null && anim.isHuman)
+            {
+                lFore = anim.GetBoneTransform(HumanBodyBones.LeftLowerArm);
+                rFore = anim.GetBoneTransform(HumanBodyBones.RightLowerArm);
+            }
+            // teste contínuo: o trecho percorrido pela bola neste passo contra palmas e corpo (bola rápida não "atravessa" a mão)
+            float rb = Arena.BallRadius;
+            float dl = SegDist(Palm(lHand, lFore), a, bp);
+            float dr = SegDist(Palm(rHand, rFore), a, bp);
+            float dc = chest != null ? SegDist(chest.position, a, bp) : 99f;
+            float dh = hips != null ? SegDist(hips.position, a, bp) : 99f;
+            bool hand = Mathf.Min(dl, dr) < handReach + rb;
+            bool body = Mathf.Min(dc, dh) < 0.27f + rb;
+
+            // a bola cruzou a linha do goleiro: se as mãos estão perto o bastante, é contato de ponta de dedo
+            if (!hand && !body && lHand != null && rHand != null)
+            {
+                float px = transform.position.x - 0.15f;
+                if ((a.x - px) * (bp.x - px) <= 0f)
+                {
+                    float k = Mathf.Abs(bp.x - a.x) > 1e-5f ? (px - a.x) / (bp.x - a.x) : 0f;
+                    Vector3 c = Vector3.Lerp(a, bp, k);
+                    float near = Mathf.Min(Vector3.Distance(c, Palm(lHand, lFore)), Vector3.Distance(c, Palm(rHand, rFore)));
+                    if (near < handReach + rb + 0.16f) hand = true;
+                }
+            }
             if (hand || body) Resolve(hand);
         }
 
@@ -443,9 +487,9 @@ namespace Craquez
             float dl = lHand != null ? Vector3.Distance(bp, lHand.position) : 99f;
             float dr = rHand != null ? Vector3.Distance(bp, rHand.position) : 99f;
             hand = dl < dr ? lHand : rHand;
-            Vector3 handsMid = (lHand != null && rHand != null) ? (lHand.position + rHand.position) * 0.5f : bp;
+            Vector3 handsMid = (lHand != null && rHand != null) ? (Palm(lHand, lFore) + Palm(rHand, rFore)) * 0.5f : bp;
             float quality = handContact
-                ? Mathf.Clamp01(1f - Vector3.Distance(bp, handsMid) / (handReach + 0.12f))
+                ? Mathf.Clamp01(1f - Vector3.Distance(bp, handsMid) / (handReach + 0.3f))
                 : 0.8f;
             // esticado no limite do mergulho = contato pior
             if (diving) quality *= Mathf.Lerp(1f, 0.6f, Mathf.Clamp01(Vector3.Distance(diveFrom, transform.position) / maxDiveTravel));

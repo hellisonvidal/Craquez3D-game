@@ -392,6 +392,10 @@ namespace Craquez.EditorTools
             var ac = NewController("Goleiro");
             ac.AddParameter("Lateral", AnimatorControllerParameterType.Float);
             ac.AddParameter("Mirror", AnimatorControllerParameterType.Bool);
+            ac.AddParameter("DiveSpeed", AnimatorControllerParameterType.Float);
+            var pars = ac.parameters;
+            foreach (var par in pars) if (par.name == "DiveSpeed") par.defaultFloat = 1f;
+            ac.parameters = pars;
             var sm = ac.layers[0].stateMachine;
 
             // animações próprias do goleiro (geradas em tools/gkanim a partir do esqueleto dele)
@@ -413,7 +417,9 @@ namespace Craquez.EditorTools
             // mergulho: a animação base vai para a DIREITA do goleiro; o parâmetro Mirror leva para a esquerda
             var dive = sm.AddState("GK_Mergulho");
             dive.motion = Clip("Goleiro", "GK_Mergulho");
-            dive.speed = 1.15f;
+            dive.speed = 1f;
+            dive.speedParameterActive = true;
+            dive.speedParameter = "DiveSpeed";
             dive.mirrorParameterActive = true;
             dive.mirrorParameter = "Mirror";
 

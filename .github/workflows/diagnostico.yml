@@ -27,6 +27,12 @@ jobs:
           targetPlatform: StandaloneLinux64
           buildMethod: Craquez.EditorTools.CraquezDiag.Run
           versioning: None
+      - name: Mostrar resultado no log
+        if: always()
+        run: |
+          echo "POSES_INICIO"
+          cat Diagnostico/poses.json || true
+          echo "POSES_FIM"
       - name: Guardar resultado
         if: always()
         uses: actions/upload-artifact@v4

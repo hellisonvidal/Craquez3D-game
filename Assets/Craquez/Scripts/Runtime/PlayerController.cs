@@ -70,7 +70,27 @@ namespace Craquez
                 var relay = anim.GetComponent<IKRelay>();
                 if (relay == null) relay = anim.gameObject.AddComponent<IKRelay>();
                 relay.onIK = OnIK;
+                if (anim.isHuman)
+                {
+                    lToe = anim.GetBoneTransform(HumanBodyBones.LeftToes) ?? anim.GetBoneTransform(HumanBodyBones.LeftFoot);
+                    rToe = anim.GetBoneTransform(HumanBodyBones.RightToes) ?? anim.GetBoneTransform(HumanBodyBones.RightFoot);
+                }
             }
+        }
+
+        Transform lToe, rToe;
+
+        /// <summary>Distância horizontal do pé mais próximo até a bola (99 se não houver ossos).</summary>
+        float FootDistance(Vector3 bp, out Transform foot)
+        {
+            foot = null;
+            if (lToe == null || rToe == null) return 99f;
+            Vector3 b = new Vector3(bp.x, 0f, bp.z);
+            Vector3 l = lToe.position; l.y = 0f;
+            Vector3 r = rToe.position; r.y = 0f;
+            float dl = Vector3.Distance(b, l), dr = Vector3.Distance(b, r);
+            foot = dl < dr ? lToe : rToe;
+            return Mathf.Min(dl, dr);
         }
 
         public void Teleport(Vector3 pos, Vector3 lookAt)
@@ -353,6 +373,13 @@ namespace Craquez
             {
                 HasBall = true;
                 Vector3 tgt = pos + transform.forward * 0.48f + transform.right * 0.1f;
+                if (rToe != null)
+                {
+                    // perto do contato, a bola encontra o pé que chuta (o peito do pé fica logo à frente dos dedos)
+                    float k = 1f - Mathf.Clamp01((kickContactAt - now) / 0.2f);
+                    Vector3 toe = rToe.position + transform.forward * 0.08f; toe.y = pos.y;
+                    tgt = Vector3.Lerp(tgt, toe, k * 0.7f);
+                }
                 Vector3 desired = velocity + (tgt - bp) * 12f; desired.y = 0f;
                 Vector3 nv = Vector3.MoveTowards(flatBv, desired, 60f * Mathf.Lerp(0.75f, 1f, Grip()) * dt);
                 Compat.SetVelocity(ball.Body, new Vector3(nv.x, bv.y, nv.z));
@@ -413,6 +440,11 @@ namespace Craquez
             bool sharpTurn = wm > 0.15f && Vector3.Dot(ballDir, wd) < 0.7f;
             if (now < nextTouchAt && !sharpTurn) return;
             if (sharpTurn && now - lastTouchAt < 0.12f) return;
+            // o toque acontece quando um pé chega à bola (passada), não "de longe"
+            Transform foot;
+            float fd = FootDistance(bp, out foot);
+            bool footOk = fd < Arena.BallRadius + 0.2f || d < 0.4f || now > nextTouchAt + 0.3f || foot == null;
+            if (!footOk && rel.magnitude < 6.5f) return;
 
             float grip = Grip();
             float jitter = Random.Range(0.92f, 1.08f);
