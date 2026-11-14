@@ -45,6 +45,7 @@ namespace Craquez
 
         void Awake()
         {
+            ErrorOverlay.Ensure();
             Application.targetFrameRate = 60;
             Time.timeScale = 1f;
             QualitySettings.vSyncCount = 0;
@@ -62,17 +63,21 @@ namespace Craquez
 
             Renderer[] grassRenderers;
             PitchBuilder.Build(world, gl, gd, lines, out grassRenderers);
-            GoalNet.Build(world, "GolTreino", new Vector3(Arena.HalfLength - PitchBuilder.LineWidth * 0.5f, 0f, 0f), 0f, post, net);
-            GoalNet.Build(world, "GolOposto", new Vector3(-Arena.HalfLength + PitchBuilder.LineWidth * 0.5f, 0f, 0f), 180f, post, net);
+            // partes "decorativas" protegidas: um erro aqui não pode impedir o jogo de abrir
+            Safe("gols", () =>
+            {
+                GoalNet.Build(world, "GolTreino", new Vector3(Arena.HalfLength - PitchBuilder.LineWidth * 0.5f, 0f, 0f), 0f, post, net);
+                GoalNet.Build(world, "GolOposto", new Vector3(-Arena.HalfLength + PitchBuilder.LineWidth * 0.5f, 0f, 0f), 180f, post, net);
+            });
 
             var pfGo = new GameObject("Pocas");
             pfGo.transform.SetParent(world, false);
             var puddles = pfGo.AddComponent<PuddleField>();
-            puddles.Init(pm, sm, ripple);
+            Safe("poças", () => puddles.Init(pm, sm, ripple));
 
             var audioGo = new GameObject("AudioProcedural");
             audioGo.transform.SetParent(world, false);
-            audioGo.AddComponent<ProceduralAudio>();
+            Safe("áudio", () => audioGo.AddComponent<ProceduralAudio>());
 
             // personagens e bola
             var ballGo = Instantiate(ballPrefab, new Vector3(30f, Arena.BallRadius, 0f), Quaternion.identity);
@@ -117,7 +122,7 @@ namespace Craquez
             CollectCharacterMaterials(playerGo, weather.characterMaterials);
             CollectCharacterMaterials(keeperGo, weather.characterMaterials);
             CollectCharacterMaterials(ballGo, weather.characterMaterials);
-            weather.Build();
+            Safe("clima", () => weather.Build());
 
             // câmera
             var rig = mainCamera.GetComponent<CameraRig>();
@@ -153,6 +158,12 @@ namespace Craquez
             WeatherBallLink link = ui.AddComponent<WeatherBallLink>();
             link.ball = ball;
             link.weather = weather;
+        }
+
+        static void Safe(string step, System.Action action)
+        {
+            try { action(); }
+            catch (System.Exception e) { Debug.LogError("[Craquez 3D] Falha ao montar " + step + ": " + e); }
         }
 
         static void CollectCharacterMaterials(GameObject go, List<Material> list)

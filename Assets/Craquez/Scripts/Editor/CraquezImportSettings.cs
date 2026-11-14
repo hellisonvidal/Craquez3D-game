@@ -13,7 +13,7 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 4;
+        public const int Version = 5;
 
         static readonly string[] LoopClips =
         {
@@ -125,6 +125,15 @@ namespace Craquez.EditorTools
                 ti.textureCompression = TextureImporterCompression.Uncompressed;
             }
             if (f == "Rede") ti.mipmapEnabled = true;
+            if (f.StartsWith("Icone_"))
+            {
+                ti.textureType = TextureImporterType.Default;
+                ti.maxTextureSize = 1024;
+                ti.mipmapEnabled = false;
+                ti.textureCompression = TextureImporterCompression.Uncompressed;
+                ti.alphaSource = TextureImporterAlphaSource.FromInput;
+                ti.alphaIsTransparency = true;
+            }
         }
     }
 }

@@ -86,8 +86,17 @@ namespace Craquez
             c.transform.localScale = new Vector3(radius * 2f, length * 0.5f, radius * 2f);
             c.GetComponent<MeshRenderer>().sharedMaterial = mat;
             var col = c.GetComponent<Collider>();
-            if (!collide) { Destroy(col); return; }
-            // a primitiva já tem um CapsuleCollider (raio 0,5 / altura 2 no eixo Y) que escala junto
+            if (!collide) { if (col != null) Destroy(col); return; }
+            // a primitiva costuma vir com um CapsuleCollider (raio 0,5 / altura 2 no eixo Y) que escala junto;
+            // no APK ele pode ter sido removido pelo "strip" de código, então garantimos um.
+            if (col == null)
+            {
+                var cap = c.AddComponent<CapsuleCollider>();
+                cap.radius = 0.5f;
+                cap.height = 2f;
+                cap.direction = 1;
+                col = cap;
+            }
             Compat.SetPhysicsMaterial(col, "Trave", 0.2f, 0.2f, 0.75f, false);
         }
 

@@ -422,7 +422,8 @@ namespace Craquez
             if (cloudMaterial == null) return null;
             var go = GameObject.CreatePrimitive(PrimitiveType.Quad);
             go.name = "CamadaNuvens";
-            Destroy(go.GetComponent<Collider>());
+            var qc = go.GetComponent<Collider>();
+            if (qc != null) Destroy(qc);
             go.transform.SetParent(transform, false);
             go.transform.position = new Vector3(0f, 140f, 0f);
             go.transform.rotation = Quaternion.Euler(-90f, 0f, 0f); // face voltada para baixo => visível do campo

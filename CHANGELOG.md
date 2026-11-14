@@ -2,6 +2,18 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.1.4] — 2026-11-14
+
+### Corrigido
+- Jogo travava logo após a tela da Unity, só com o gramado e uma trave: o build Android removia o colisor das traves
+  (componente criado só em tempo de execução) e a montagem da arena parava ali, sem jogadores, gols nem menus.
+  Agora o colisor é garantido no código, a remoção de código da engine foi desligada e há um `link.xml` de proteção.
+- A montagem da arena continua mesmo se uma parte decorativa (gols, poças, áudio, clima) falhar.
+
+### Adicionado
+- Ícone do app a partir da capa do vídeo de abertura (logo Craquez), com ícone adaptativo para Android 8+.
+- Caixa vermelha de erro na tela quando algo falha no celular (toque para fechar) — tire um print e envie.
+
 ## [0.1.3] — 2026-11-14
 
 ### Corrigido

@@ -725,12 +725,42 @@ namespace Craquez.EditorTools
             PlayerSettings.allowedAutorotateToPortraitUpsideDown = false;
             PlayerSettings.allowedAutorotateToLandscapeLeft = true;
             PlayerSettings.allowedAutorotateToLandscapeRight = true;
+            // o jogo cria componentes só em tempo de execução (CreatePrimitive, AddComponent):
+            // não deixar o build remover partes da engine
+            PlayerSettings.stripEngineCode = false;
+            PlayerSettings.SetManagedStrippingLevel(NamedBuildTarget.Android, ManagedStrippingLevel.Minimal);
+            SetupIcons();
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan, GraphicsDeviceType.OpenGLES3 });
 #if UNITY_2023_1_OR_NEWER
             // o atualizador usa UnityPlayer.currentActivity
             PlayerSettings.Android.applicationEntry = AndroidApplicationEntry.Activity;
 #endif
+        }
+
+        const string IconDir = Root + "/Textures/Icone/";
+
+        /// <summary>Ícone do app (capa do vídeo de abertura): ícone padrão + ícones adaptativos do Android 8+.</summary>
+        public static void SetupIcons()
+        {
+            var full = AssetDatabase.LoadAssetAtPath<Texture2D>(IconDir + "Icone_App.png");
+            var bg = AssetDatabase.LoadAssetAtPath<Texture2D>(IconDir + "Icone_Adaptativo_Fundo.png");
+            var fg = AssetDatabase.LoadAssetAtPath<Texture2D>(IconDir + "Icone_Adaptativo_Frente.png");
+            if (full == null) { Debug.LogWarning("[Craquez 3D] Ícone não encontrado em " + IconDir); return; }
+
+            PlayerSettings.SetIcons(NamedBuildTarget.Unknown, new[] { full }, IconKind.Any);
+
+            foreach (var kind in PlayerSettings.GetSupportedIconKinds(NamedBuildTarget.Android))
+            {
+                var icons = PlayerSettings.GetPlatformIcons(NamedBuildTarget.Android, kind);
+                foreach (var icon in icons)
+                {
+                    if (icon.maxLayerCount >= 2 && bg != null && fg != null) icon.SetTextures(bg, fg);
+                    else icon.SetTexture(full, 0);
+                }
+                PlayerSettings.SetPlatformIcons(NamedBuildTarget.Android, kind, icons);
+            }
+            Debug.Log("[Craquez 3D] Ícone do app configurado.");
         }
     }
 
