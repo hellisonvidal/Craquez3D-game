@@ -171,7 +171,10 @@ namespace Craquez.EditorTools
             asset.renderScale = 1f;
             asset.shadowDistance = 70f;
             asset.shadowCascadeCount = 2;
-            asset.supportsSoftShadows = true;
+            // supportsSoftShadows é somente leitura no URP 17: grava o campo serializado
+            var so = new SerializedObject(asset);
+            var soft = so.FindProperty("m_SoftShadowsSupported");
+            if (soft != null) { soft.boolValue = true; so.ApplyModifiedPropertiesWithoutUndo(); }
             asset.mainLightShadowmapResolution = 2048;
             asset.maxAdditionalLightsCount = 4;
             asset.supportsCameraDepthTexture = false;
