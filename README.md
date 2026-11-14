@@ -1,7 +1,7 @@
 # Craquez 3D
 
 Jogo de futebol realista (estilo FIFA / eFootball / UFL) para **Android**, com versão **Windows** planejada.
-Esta primeira versão (**v0.1.0**) é a **Arena de Treino de finalização**: um atacante e um goleiro, para validar física, animações e clima.
+Esta versão (**v0.1.1**) é a **Arena de Treino de finalização**: um atacante e um goleiro, para validar física, animações e clima.
 
 > Jogo totalmente programado por Inteligência Artificial.
 

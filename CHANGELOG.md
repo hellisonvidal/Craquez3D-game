@@ -2,6 +2,14 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.1.1] — 2026-11-14
+
+### Corrigido
+- Goleiro "torto": substituído pelo novo modelo do rascunho (em pé, simétrico, pesos 100% nos ossos Humanoid),
+  colocado em T-pose, 1,90 m e 32 mil triângulos. O modelo anterior tinha o rosto e o cabelo presos a ossos
+  extras do peito (a cabeça não acompanhava as animações) e o tronco inclinado 20° na pose de repouso.
+- Jogador: parte da mão esquerda estava presa a ossos extras do antebraço; pesos transferidos para as mãos.
+
 ## [0.1.0] — 2026-11-14
 
 Primeira versão: Arena de Treino de finalização.
