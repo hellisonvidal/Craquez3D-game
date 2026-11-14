@@ -49,3 +49,11 @@ r = S * 72 / 108 / 2
 ImageDraw.Draw(mb).ellipse((S/2 - r, S/2 - r, S/2 + r, S/2 + r), fill=255)
 pv.paste(b, (S + 40, 20), mb)
 pv.save(sys.argv[3] if len(sys.argv) > 3 else f"{out}/preview.png")
+
+# logo com fundo transparente (para os menus): recorte + máscara suave
+lg = logo.convert("RGBA")
+m2 = Image.new("L", (lw, lh), 0)
+ImageDraw.Draw(m2).ellipse((lw * 0.03, lh * 0.06, lw * 0.97, lh * 0.94), fill=255)
+m2 = m2.filter(ImageFilter.GaussianBlur(lh * 0.06))
+lg.putalpha(m2)
+lg.resize((1024, int(1024 * lh / lw)), Image.LANCZOS).save(f"{out}/Logo_Craquez.png")

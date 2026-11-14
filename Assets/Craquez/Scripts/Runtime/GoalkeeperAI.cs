@@ -40,6 +40,7 @@ namespace Craquez
         float stateTime;
         bool resolved;
         float ikWeight;
+        float readyWeight;   // postura de espera: mãos à frente na altura da cintura, cotovelos abertos
         Vector3 ikTarget;
         Vector3 diveFrom, diveTo;
         float diveStart, diveDuration, diveHeight;
@@ -293,6 +294,9 @@ namespace Craquez
                     break;
             }
             if (anim != null) anim.SetFloat(LateralHash, Vector3.Dot(velocity, transform.right), 0.1f, dt);
+            // a animação de espera deixa os braços caídos e os cotovelos para trás: corrigimos com IK
+            bool ready = State == Estado.Posicionando && !diving;
+            readyWeight = Mathf.MoveTowards(readyWeight, ready ? 0.85f : 0f, dt * (ready ? 2.5f : 6f));
         }
 
         void UpdatePositioning(float dt)
@@ -481,14 +485,32 @@ namespace Craquez
             if (anim == null || ball == null) return;
             anim.SetLookAtWeight(1f, 0.25f, 0.85f, 1f, 0.5f);
             anim.SetLookAtPosition(ball.transform.position);
-            if (ikWeight <= 0.001f) return;
-            Vector3 r = transform.right;
-            Vector3 lt = ikTarget - r * 0.11f;
-            Vector3 rt = ikTarget + r * 0.11f;
-            anim.SetIKPositionWeight(AvatarIKGoal.LeftHand, ikWeight);
-            anim.SetIKPositionWeight(AvatarIKGoal.RightHand, ikWeight);
+            float w = Mathf.Max(ikWeight, readyWeight);
+            if (w <= 0.001f) return;
+
+            Vector3 r = transform.right, f = transform.forward, u = Vector3.up;
+            Vector3 body = anim.bodyPosition;
+            // postura de goleiro: mãos à frente do corpo, palmas para a bola, levemente abertas
+            float breathe = Mathf.Sin(Time.time * 2.1f) * 0.015f;
+            Vector3 readyL = body + u * (0.14f + breathe) + f * 0.4f - r * 0.3f;
+            Vector3 readyR = body + u * (0.14f + breathe) + f * 0.4f + r * 0.3f;
+            Vector3 ballL = ikTarget - r * 0.11f;
+            Vector3 ballR = ikTarget + r * 0.11f;
+            float k = ikWeight / Mathf.Max(w, 1e-3f); // quanto do alvo vem da bola
+            Vector3 lt = Vector3.Lerp(readyL, ballL, k);
+            Vector3 rt = Vector3.Lerp(readyR, ballR, k);
+
+            anim.SetIKPositionWeight(AvatarIKGoal.LeftHand, w);
+            anim.SetIKPositionWeight(AvatarIKGoal.RightHand, w);
             anim.SetIKPosition(AvatarIKGoal.LeftHand, lt);
             anim.SetIKPosition(AvatarIKGoal.RightHand, rt);
+
+            // cotovelos para fora e um pouco à frente (nunca para trás)
+            float hw = readyWeight * 0.8f;
+            anim.SetIKHintPositionWeight(AvatarIKHint.LeftElbow, hw);
+            anim.SetIKHintPositionWeight(AvatarIKHint.RightElbow, hw);
+            anim.SetIKHintPosition(AvatarIKHint.LeftElbow, body + u * 0.25f - r * 0.55f + f * 0.12f);
+            anim.SetIKHintPosition(AvatarIKHint.RightElbow, body + u * 0.25f + r * 0.55f + f * 0.12f);
         }
     }
 }

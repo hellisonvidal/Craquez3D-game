@@ -280,11 +280,11 @@ namespace Craquez.EditorTools
             Keywords(rede, true);
             d["Rede"] = rede;
 
-            var poca = Lit("Poca", null, T("Poca_Normal"), null, new Color(0.1f, 0.12f, 0.13f, 0.82f), 0.96f, 0f, 0.35f);
+            var poca = Lit("Poca", null, T("Poca_Normal"), null, new Color(0.3f, 0.34f, 0.38f, 0.6f), 0.95f, 0f, 0.35f);
             MakeTransparent(poca, true);
             d["Poca"] = poca;
 
-            var encharcado = Lit("GramadoEncharcado", null, T("Poca_Normal"), null, new Color(0.05f, 0.08f, 0.04f, 0.38f), 0.9f, 0f, 0.15f);
+            var encharcado = Lit("GramadoEncharcado", null, T("Poca_Normal"), null, new Color(0.16f, 0.24f, 0.13f, 0.22f), 0.9f, 0f, 0.15f);
             MakeTransparent(encharcado, true);
             d["Encharcado"] = encharcado;
 
@@ -565,8 +565,8 @@ namespace Craquez.EditorTools
             return new Dictionary<string, VolumeProfile>
             {
                 { "PP_Sol", Profile("Sol", 0.35f, 0.1f, 12f, 8f, Color.white, 0.18f) },
-                { "PP_Chuva", Profile("Chuva", 0.25f, -0.05f, 6f, -18f, new Color(0.93f, 0.97f, 1f), 0.26f) },
-                { "PP_Tempestade", Profile("Tempestade", 0.45f, -0.2f, 16f, -32f, new Color(0.86f, 0.91f, 1f), 0.36f) },
+                { "PP_Chuva", Profile("Chuva", 0.25f, 0.2f, 8f, -12f, new Color(0.95f, 0.98f, 1f), 0.2f) },
+                { "PP_Tempestade", Profile("Tempestade", 0.4f, 0.35f, 10f, -20f, new Color(0.9f, 0.94f, 1f), 0.24f) },
             };
         }
 
@@ -676,6 +676,7 @@ namespace Craquez.EditorTools
             boot.postProcessRoot = ppRoot.transform;
             boot.reflectionProbe = probe;
             boot.uiCircle = T("UI_Circulo");
+            boot.logo = T("Icone/Logo_Craquez");
             boot.introClip = AssetDatabase.LoadAssetAtPath<VideoClip>(IntroVideo);
             if (boot.introClip == null) Debug.LogWarning("[Craquez 3D] Vídeo de abertura não encontrado em " + IntroVideo);
 

@@ -4,41 +4,49 @@ using UnityEngine;
 namespace Craquez
 {
     /// <summary>
-    /// Controles de toque para Android (multitoque): analógico flutuante à esquerda,
-    /// botões CHUTE / COLOCADO / CAVADINHA / CORRER à direita. Desenhado com IMGUI,
-    /// lógica de toque feita à mão (não depende de EventSystem).
+    /// Controles de toque para Android (multitoque), desenhados com IMGUI e lógica de toque própria:
+    /// analógico flutuante à esquerda (aparece onde o dedo encosta) e botões à direita em dois arcos:
+    /// CHUTE (grande) com COLOCADO, CAVADINHA e RASTEIRO em volta; CORRER, DRIBLE e ARRANCADA no arco externo.
+    /// No modo goleiro ficam só MERGULHAR / DEFESA / SALTAR / SAIR.
     /// Ativo automaticamente em celulares; tecla T alterna no editor/PC para testar com o mouse.
     /// </summary>
     public class TouchControls : MonoBehaviour
     {
-        public Texture2D circle;
+        public Texture2D circle; // mantido por compatibilidade (o desenho usa UiKit)
         public bool visible;
-        /// <summary>No modo goleiro os botões viram MERGULHAR / DEFESA / SALTAR / SAIR.</summary>
         public bool goalkeeperMode;
 
         class Button
         {
-            public string label;
-            public Vector2 center; // normalizado (0..1) a partir do canto inferior direito
+            public string label, gkLabel;
+            public Vector2 center; // em alturas de tela, a partir do canto inferior direito
             public float radius;   // fração da altura da tela
             public int finger = int.MinValue;
             public bool held;
+            public float pressAnim;
             public Color color;
+            public bool attackerOnly;
         }
 
         readonly List<PointerPoint> pointers = new List<PointerPoint>();
-        readonly Button shoot = new Button { label = "CHUTE", center = new Vector2(0.11f, 0.2f), radius = 0.1f, color = new Color(0.9f, 0.25f, 0.2f) };
-        readonly Button finesse = new Button { label = "COLOCADO", center = new Vector2(0.26f, 0.13f), radius = 0.075f, color = new Color(0.2f, 0.55f, 0.95f) };
-        readonly Button chip = new Button { label = "CAVADINHA", center = new Vector2(0.08f, 0.44f), radius = 0.07f, color = new Color(0.95f, 0.75f, 0.15f) };
-        readonly Button sprint = new Button { label = "CORRER", center = new Vector2(0.25f, 0.36f), radius = 0.07f, color = new Color(0.3f, 0.8f, 0.4f) };
+        readonly HashSet<int> seen = new HashSet<int>();
+        readonly Button shoot = new Button { label = "CHUTE", gkLabel = "MERGULHAR", center = new Vector2(0.17f, 0.2f), radius = 0.105f, color = UiKit.Red };
+        readonly Button finesse = new Button { label = "COLOCADO", gkLabel = "DEFESA", center = new Vector2(0.39f, 0.13f), radius = 0.07f, color = UiKit.Blue };
+        readonly Button low = new Button { label = "RASTEIRO", gkLabel = "", center = new Vector2(0.38f, 0.32f), radius = 0.066f, color = new Color(0.55f, 0.35f, 0.95f), attackerOnly = true };
+        readonly Button chip = new Button { label = "CAVADINHA", gkLabel = "SALTAR", center = new Vector2(0.2f, 0.44f), radius = 0.066f, color = UiKit.Yellow };
+        readonly Button sprint = new Button { label = "CORRER", gkLabel = "SAIR", center = new Vector2(0.6f, 0.11f), radius = 0.075f, color = UiKit.Green };
+        readonly Button skill = new Button { label = "DRIBLE", gkLabel = "", center = new Vector2(0.58f, 0.3f), radius = 0.062f, color = new Color(1f, 0.55f, 0.15f), attackerOnly = true };
+        readonly Button knock = new Button { label = "ARRANCADA", gkLabel = "", center = new Vector2(0.43f, 0.5f), radius = 0.058f, color = new Color(0.2f, 0.8f, 0.85f), attackerOnly = true };
         Button[] buttons;
 
         int stickFinger = int.MinValue;
         Vector2 stickOrigin, stickPos;
+        GUIStyle labelStyle;
+        int styleH;
 
         void Awake()
         {
-            buttons = new[] { shoot, finesse, chip, sprint };
+            buttons = new[] { shoot, finesse, low, chip, sprint, skill, knock };
             visible = Application.isMobilePlatform;
         }
 
@@ -48,14 +56,18 @@ namespace Craquez
         {
             InputBridge.VirtualMove = Vector2.zero;
             InputBridge.VirtualShoot = InputBridge.VirtualFinesse = InputBridge.VirtualChip = InputBridge.VirtualSprint = false;
+            InputBridge.VirtualLow = InputBridge.VirtualSkill = InputBridge.VirtualKnock = false;
         }
+
+        bool Active(Button b) { return !(goalkeeperMode && b.attackerOnly); }
 
         Vector2 ButtonScreen(Button b)
         {
-            return new Vector2(Screen.width - b.center.x * Screen.height * 1.6f, b.center.y * Screen.height);
+            float h = Screen.height;
+            return new Vector2(Screen.width - b.center.x * h, b.center.y * h);
         }
 
-        float StickRadius { get { return Screen.height * 0.11f; } }
+        float StickRadius { get { return Screen.height * 0.12f; } }
 
         void Update()
         {
@@ -63,31 +75,27 @@ namespace Craquez
             if (!visible) { ClearVirtual(); stickFinger = int.MinValue; return; }
 
             InputBridge.GetPointers(pointers);
-            // libera dedos que saíram
             bool stickAlive = false;
             foreach (var b in buttons) b.held = false;
-            var seen = new HashSet<int>();
+            seen.Clear();
             foreach (var p in pointers)
             {
                 seen.Add(p.id);
                 if (p.id == stickFinger) { stickAlive = true; stickPos = p.position; continue; }
                 bool claimed = false;
                 foreach (var b in buttons)
-                {
                     if (b.finger == p.id) { b.held = true; claimed = true; break; }
-                }
                 if (claimed) continue;
-                // novo toque
+                // novo toque: botão mais próximo dentro da área (área de toque 35% maior que o desenho)
+                Button best = null; float bestD = float.MaxValue;
                 foreach (var b in buttons)
                 {
-                    if (b.finger != int.MinValue) continue;
-                    if (Vector2.Distance(p.position, ButtonScreen(b)) < b.radius * Screen.height * 1.25f)
-                    {
-                        b.finger = p.id; b.held = true; claimed = true; break;
-                    }
+                    if (b.finger != int.MinValue || !Active(b)) continue;
+                    float d = Vector2.Distance(p.position, ButtonScreen(b));
+                    if (d < b.radius * Screen.height * 1.35f && d < bestD) { best = b; bestD = d; }
                 }
-                if (claimed) continue;
-                if (stickFinger == int.MinValue && p.position.x < Screen.width * 0.45f && p.position.y < Screen.height * 0.8f)
+                if (best != null) { best.finger = p.id; best.held = true; continue; }
+                if (stickFinger == int.MinValue && p.position.x < Screen.width * 0.45f && p.position.y < Screen.height * 0.82f)
                 {
                     stickFinger = p.id; stickOrigin = p.position; stickPos = p.position; stickAlive = true;
                 }
@@ -100,73 +108,81 @@ namespace Craquez
             {
                 Vector2 d = stickPos - stickOrigin;
                 float r = StickRadius;
+                // a base acompanha o dedo quando ele passa do limite (mudanças de direção rápidas)
                 if (d.magnitude > r) { stickOrigin = stickPos - d.normalized * r; d = stickPos - stickOrigin; }
-                move = d / r;
-                if (move.magnitude < 0.12f) move = Vector2.zero;
+                float m = d.magnitude / r;
+                const float dead = 0.07f;
+                move = m > dead ? d.normalized * Mathf.Clamp01((m - dead) / (1f - dead - 0.05f)) : Vector2.zero;
             }
+            float dt = Time.unscaledDeltaTime;
+            foreach (var b in buttons) b.pressAnim = Mathf.MoveTowards(b.pressAnim, b.held ? 1f : 0f, dt * 12f);
+
             InputBridge.VirtualMove = move;
             InputBridge.VirtualShoot = shoot.held;
             InputBridge.VirtualFinesse = finesse.held;
             InputBridge.VirtualChip = chip.held;
-            InputBridge.VirtualSprint = sprint.held || move.magnitude > 0.95f;
+            InputBridge.VirtualSprint = sprint.held;
+            InputBridge.VirtualLow = low.held && Active(low);
+            InputBridge.VirtualSkill = skill.held && Active(skill);
+            InputBridge.VirtualKnock = knock.held && Active(knock);
         }
 
         /// <summary>Retorna true se o ponto (tela, origem embaixo) está sobre um controle de toque.</summary>
         public bool Covers(Vector2 screenPos)
         {
             if (!visible) return false;
-            foreach (var b in buttons) if (Vector2.Distance(screenPos, ButtonScreen(b)) < b.radius * Screen.height * 1.25f) return true;
+            foreach (var b in buttons) if (Active(b) && Vector2.Distance(screenPos, ButtonScreen(b)) < b.radius * Screen.height * 1.35f) return true;
             return false;
         }
 
         public void Draw()
         {
-            if (!visible || circle == null) return;
-            Color old = GUI.color;
+            if (!visible) return;
+            float H = Screen.height;
+            if (labelStyle == null || styleH != Screen.height)
+            {
+                styleH = Screen.height;
+                labelStyle = new GUIStyle(GUI.skin.label)
+                {
+                    font = Compat.DefaultFont(),
+                    alignment = TextAnchor.MiddleCenter,
+                    fontStyle = FontStyle.Bold,
+                    fontSize = Mathf.RoundToInt(H * 0.021f),
+                    wordWrap = false,
+                    clipping = TextClipping.Overflow
+                };
+            }
+
             // analógico
-            if (stickFinger != int.MinValue)
-            {
-                DrawCircle(stickOrigin, StickRadius, new Color(1f, 1f, 1f, 0.18f));
-                DrawCircle(stickPos, StickRadius * 0.45f, new Color(1f, 1f, 1f, 0.55f));
-            }
-            else
-            {
-                Vector2 hint = new Vector2(Screen.height * 0.22f, Screen.height * 0.22f);
-                DrawCircle(hint, StickRadius, new Color(1f, 1f, 1f, 0.1f));
-                DrawCircle(hint, StickRadius * 0.45f, new Color(1f, 1f, 1f, 0.25f));
-            }
-            var style = new GUIStyle(GUI.skin.label)
-            {
-                alignment = TextAnchor.MiddleCenter,
-                fontStyle = FontStyle.Bold,
-                fontSize = Mathf.RoundToInt(Screen.height * 0.022f)
-            };
-            style.normal.textColor = Color.white;
+            float R = StickRadius;
+            Vector2 o = stickFinger != int.MinValue ? stickOrigin : new Vector2(H * 0.26f, H * 0.24f);
+            Vector2 k = stickFinger != int.MinValue ? stickPos : o;
+            Vector2 og = new Vector2(o.x, H - o.y), kg = new Vector2(k.x, H - k.y);
+            float act = stickFinger != int.MinValue ? 1f : 0.55f;
+            UiKit.Disc(og, R, new Color(0.02f, 0.05f, 0.14f, 0.35f * act));
+            UiKit.RingAt(og, R, new Color(1f, 1f, 1f, 0.35f * act));
+            UiKit.RingAt(og, R * 0.62f, new Color(1f, 1f, 1f, 0.12f * act));
+            UiKit.Disc(kg, R * 0.42f, new Color(1f, 1f, 1f, 0.75f * act));
+            UiKit.RingAt(kg, R * 0.42f, UiKit.A(UiKit.Cyan, 0.9f * act));
+
             foreach (var b in buttons)
             {
+                if (!Active(b)) continue;
                 Vector2 c = ButtonScreen(b);
-                float r = b.radius * Screen.height;
-                Color col = b.color; col.a = b.held ? 0.85f : 0.5f;
-                DrawCircle(c, r, col);
-                GUI.color = Color.white;
-                GUI.Label(new Rect(c.x - r * 1.5f, Screen.height - c.y - r, r * 3f, r * 2f), Label(b), style);
+                Vector2 g = new Vector2(c.x, H - c.y);
+                float r = b.radius * H * (1f - 0.08f * b.pressAnim);
+                UiKit.Disc(g + new Vector2(0f, r * 0.08f), r * 1.04f, new Color(0f, 0f, 0f, 0.3f));
+                Color fill = Color.Lerp(UiKit.A(b.color, 0.42f), UiKit.A(b.color, 0.9f), b.pressAnim);
+                UiKit.Disc(g, r, fill);
+                UiKit.Disc(g - new Vector2(0f, r * 0.25f), r * 0.6f, new Color(1f, 1f, 1f, 0.08f + 0.06f * b.pressAnim)); // brilho
+                UiKit.RingAt(g, r, new Color(1f, 1f, 1f, 0.55f + 0.4f * b.pressAnim));
+                string text = goalkeeperMode ? b.gkLabel : b.label;
+                var st = labelStyle;
+                int keep = st.fontSize;
+                if (b == shoot) st.fontSize = Mathf.RoundToInt(keep * 1.25f);
+                UiKit.Text(new Rect(g.x - r * 1.6f, g.y - r, r * 3.2f, r * 2f), text, st, Color.white, Mathf.Max(1f, H * 0.002f));
+                st.fontSize = keep;
             }
-            GUI.color = old;
-        }
-
-        string Label(Button b)
-        {
-            if (!goalkeeperMode) return b.label;
-            if (b == shoot) return "MERGULHAR";
-            if (b == finesse) return "DEFESA";
-            if (b == chip) return "SALTAR";
-            return "SAIR";
-        }
-
-        void DrawCircle(Vector2 screenCenter, float r, Color c)
-        {
-            GUI.color = c;
-            GUI.DrawTexture(new Rect(screenCenter.x - r, Screen.height - screenCenter.y - r, r * 2f, r * 2f), circle);
         }
     }
 }

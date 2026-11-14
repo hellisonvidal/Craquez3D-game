@@ -56,27 +56,27 @@ namespace Craquez
                 case Clima.Chuva:
                     return new Perfil
                     {
-                        sunIntensity = 0.6f, sunColor = new Color(0.8f, 0.85f, 0.95f), sunPitch = 58f, shadowStrength = 0.45f,
-                        ambientSky = new Color(0.42f, 0.46f, 0.53f), ambientEquator = new Color(0.34f, 0.36f, 0.38f), ambientGround = new Color(0.14f, 0.15f, 0.14f),
-                        fogDensity = 0.0065f, fogColor = new Color(0.5f, 0.53f, 0.57f),
-                        skyTint = new Color(0.33f, 0.35f, 0.39f), skyExposure = 0.62f, atmosphere = 2.4f, skyGround = new Color(0.28f, 0.29f, 0.3f),
+                        sunIntensity = 1.0f, sunColor = new Color(0.86f, 0.9f, 0.98f), sunPitch = 58f, shadowStrength = 0.5f,
+                        ambientSky = new Color(0.6f, 0.66f, 0.76f), ambientEquator = new Color(0.47f, 0.5f, 0.54f), ambientGround = new Color(0.22f, 0.23f, 0.22f),
+                        fogDensity = 0.0045f, fogColor = new Color(0.58f, 0.62f, 0.67f),
+                        skyTint = new Color(0.42f, 0.46f, 0.52f), skyExposure = 1.0f, atmosphere = 0.9f, skyGround = new Color(0.36f, 0.37f, 0.39f),
                         clouds = 0.85f, rainRate = 4500f, rainSpeed = 15f,
                         windBase = 4.5f, windGust = 3f, rollDecel = 0.85f, bounce = 0.52f,
                         puddles = 14, soakedAreas = 10, puddleDepth = 0.65f, puddleSize = 1f, rippleSpeed = 0.06f, ripplesPerSecond = 70f, wetness = 0.7f,
-                        lightning = false, floodlights = 2f, rainVolume = 0.55f, windVolume = 0.25f,
+                        lightning = false, floodlights = 0.9f, rainVolume = 0.55f, windVolume = 0.25f,
                         gkReaction = 0.04f, gkFumble = 0.14f, gkCatchSpeed = 18f, playerGrip = 0.85f, postProcess = "PP_Chuva"
                     };
                 default:
                     return new Perfil
                     {
-                        sunIntensity = 0.22f, sunColor = new Color(0.62f, 0.68f, 0.85f), sunPitch = 62f, shadowStrength = 0.25f,
-                        ambientSky = new Color(0.22f, 0.25f, 0.31f), ambientEquator = new Color(0.17f, 0.19f, 0.22f), ambientGround = new Color(0.07f, 0.08f, 0.08f),
-                        fogDensity = 0.013f, fogColor = new Color(0.24f, 0.27f, 0.31f),
-                        skyTint = new Color(0.2f, 0.21f, 0.25f), skyExposure = 0.3f, atmosphere = 3.6f, skyGround = new Color(0.12f, 0.12f, 0.13f),
+                        sunIntensity = 0.65f, sunColor = new Color(0.72f, 0.78f, 0.92f), sunPitch = 62f, shadowStrength = 0.3f,
+                        ambientSky = new Color(0.46f, 0.51f, 0.62f), ambientEquator = new Color(0.36f, 0.39f, 0.45f), ambientGround = new Color(0.17f, 0.18f, 0.19f),
+                        fogDensity = 0.0075f, fogColor = new Color(0.38f, 0.42f, 0.49f),
+                        skyTint = new Color(0.3f, 0.34f, 0.42f), skyExposure = 0.7f, atmosphere = 0.75f, skyGround = new Color(0.22f, 0.23f, 0.26f),
                         clouds = 1f, rainRate = 9500f, rainSpeed = 19f,
                         windBase = 10.5f, windGust = 6.5f, rollDecel = 0.95f, bounce = 0.45f,
                         puddles = 26, soakedAreas = 18, puddleDepth = 1f, puddleSize = 1.35f, rippleSpeed = 0.14f, ripplesPerSecond = 190f, wetness = 1f,
-                        lightning = true, floodlights = 5f, rainVolume = 1f, windVolume = 0.7f,
+                        lightning = true, floodlights = 1.6f, rainVolume = 1f, windVolume = 0.7f,
                         gkReaction = 0.08f, gkFumble = 0.25f, gkCatchSpeed = 15f, playerGrip = 0.72f, postProcess = "PP_Tempestade"
                     };
             }
@@ -154,8 +154,9 @@ namespace Craquez
                 go.transform.LookAt(new Vector3(t.x * 0.45f, 0f, t.z * 0.2f));
                 var l = go.AddComponent<Light>();
                 l.type = LightType.Spot;
-                l.range = 120f;
-                l.spotAngle = 62f;
+                l.range = 160f;
+                l.spotAngle = 70f;
+                l.innerSpotAngle = 40f;
                 l.color = new Color(1f, 0.97f, 0.9f);
                 l.shadows = LightShadows.None;
                 l.enabled = false;
@@ -192,7 +193,7 @@ namespace Craquez
 
             if (cloudMaterial != null)
             {
-                Color cc = Color.Lerp(new Color(1f, 1f, 1f), new Color(0.32f, 0.34f, 0.38f), Mathf.Clamp01((p.clouds - 0.3f) / 0.7f));
+                Color cc = Color.Lerp(new Color(1f, 1f, 1f), new Color(0.5f, 0.53f, 0.6f), Mathf.Clamp01((p.clouds - 0.3f) / 0.7f));
                 cc.a = p.clouds;
                 cloudMaterial.SetColor("_BaseColor", cc);
             }
@@ -203,13 +204,14 @@ namespace Craquez
             var em2 = groundSplash.emission; em2.rateOverTime = p.rainRate * 0.12f * GameSettings.Particulas;
             if (p.rainRate > 0f) { if (!groundSplash.isPlaying) groundSplash.Play(); } else groundSplash.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
 
-            foreach (var l in floods) { l.enabled = p.floodlights > 0f; l.intensity = p.floodlights; }
+            // refletores: o URP usa queda física (1/d²); a ~70 m do campo precisamos de intensidade alta
+            foreach (var l in floods) { l.enabled = p.floodlights > 0f; l.intensity = p.floodlights * 2600f; }
 
             for (int i = 0; i < grassMaterials.Count; i++)
             {
                 var m = grassMaterials[i];
                 Color b = i < grassBaseColors.Count ? grassBaseColors[i] : Color.white;
-                float k = Mathf.Lerp(1f, 0.7f, p.wetness);
+                float k = Mathf.Lerp(1f, 0.85f, p.wetness);
                 m.SetColor("_BaseColor", new Color(b.r * k, b.g * k, b.b * k, 1f));
                 m.SetFloat("_Smoothness", Mathf.Lerp(0.12f, 0.58f, p.wetness));
             }

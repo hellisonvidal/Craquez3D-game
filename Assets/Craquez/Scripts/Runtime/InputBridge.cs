@@ -25,7 +25,7 @@ namespace Craquez
     {
         // Valores escritos pelos controles de toque a cada quadro.
         public static Vector2 VirtualMove;
-        public static bool VirtualSprint, VirtualShoot, VirtualFinesse, VirtualChip;
+        public static bool VirtualSprint, VirtualShoot, VirtualFinesse, VirtualChip, VirtualLow, VirtualSkill, VirtualKnock;
 
         // ------------------------------------------------------------ gamepad
 
@@ -85,6 +85,9 @@ namespace Craquez
                 case "colocado": return ps ? (circle ? "□" : "○") : (circle ? "X" : "B");
                 case "cavadinha": return ps ? "△" : "Y";
                 case "correr": return ps ? "R2" : "RT";
+                case "rasteiro": return ps ? "✕" : "A";
+                case "drible": return ps ? "R1" : "RB";
+                case "arrancada": return ps ? "L1" : "LB";
                 case "confirmar": return ps ? "✕" : "A";
                 case "voltar": return ps ? "○" : "B";
                 case "camera": return ps ? "R3" : "RS";
@@ -114,7 +117,8 @@ namespace Craquez
                 if (gp != null)
                 {
                     Vector2 s = gp.leftStick.ReadValue();
-                    if (s.sqrMagnitude > 0.02f) m += s;
+                    float mag = s.magnitude;
+                    if (mag > 0.12f) m += s / mag * Mathf.Clamp01((mag - 0.12f) / 0.8f); // zona morta radial reescalada
                     m += gp.dpad.ReadValue();
                 }
 #elif ENABLE_LEGACY_INPUT_MANAGER
@@ -190,6 +194,54 @@ namespace Craquez
                 if (Pad != null && Pad.buttonNorth.isPressed) v = true;
 #elif ENABLE_LEGACY_INPUT_MANAGER
                 if (Input.GetKey(KeyCode.Q) || Input.GetKey(KeyCode.JoystickButton3)) v = true;
+#endif
+                return v;
+            }
+        }
+
+        /// <summary>Chute rasteiro (segurar para força): ✕ / A, tecla Z.</summary>
+        public static bool LowShot
+        {
+            get
+            {
+                bool v = VirtualLow;
+#if ENABLE_INPUT_SYSTEM
+                if (Keyboard.current != null && Keyboard.current.zKey.isPressed) v = true;
+                if (Pad != null && Pad.buttonSouth.isPressed) v = true;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+                if (Input.GetKey(KeyCode.Z) || Input.GetKey(KeyCode.JoystickButton0)) v = true;
+#endif
+                return v;
+            }
+        }
+
+        /// <summary>Drible: com direção = corte/finta; para trás = puxada; sem direção = parar a bola. R1 / RB, tecla F.</summary>
+        public static bool Skill
+        {
+            get
+            {
+                bool v = VirtualSkill;
+#if ENABLE_INPUT_SYSTEM
+                if (Keyboard.current != null && Keyboard.current.fKey.isPressed) v = true;
+                if (Pad != null && Pad.rightShoulder.isPressed) v = true;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+                if (Input.GetKey(KeyCode.F) || Input.GetKey(KeyCode.JoystickButton5)) v = true;
+#endif
+                return v;
+            }
+        }
+
+        /// <summary>Arrancada (toque longo para frente e disparada). L1 / LB, tecla X.</summary>
+        public static bool KnockOn
+        {
+            get
+            {
+                bool v = VirtualKnock;
+#if ENABLE_INPUT_SYSTEM
+                if (Keyboard.current != null && Keyboard.current.xKey.isPressed) v = true;
+                if (Pad != null && Pad.leftShoulder.isPressed) v = true;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+                if (Input.GetKey(KeyCode.X) || Input.GetKey(KeyCode.JoystickButton4)) v = true;
 #endif
                 return v;
             }

@@ -2,6 +2,31 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.2.0] — 2026-11-14
+
+### Novo visual
+- Menus refeitos com a identidade do logo (azul-noite, azul elétrico, amarelo e vermelho): cartões grandes para toque,
+  animações de entrada, logo na tela inicial, estádio ao vivo ao fundo.
+- "Arena de treino" virou uma tela de preparação: cartões de clima com ícones animados (o estádio ao fundo já muda
+  para o clima escolhido) e cartões Atacante / Goleiro.
+- Configurações em duas colunas com seções, chaves liga/desliga e barra de volume; pausa em painel central.
+- HUD novo (painel de clima/vento, botões arredondados, barra de força com faixa de risco, nome do drible na tela).
+- Botões de toque redesenhados, com área de toque maior e resposta visual ao apertar.
+
+### Jogabilidade
+- Condução de bola por toques (antes a bola ficava "presa" ao pé): toque curto no trote, longo no sprint,
+  o jogador ajusta a passada para alcançar a bola, domínio que amortece bolas rápidas, mudança brusca de direção com toque curto.
+- Novos comandos: chute rasteiro, drible (corte lateral, puxada para trás, parar a bola) e arrancada.
+- Resposta mais rápida: aceleração e giro maiores, freada e pivô mais firmes, zona morta menor no analógico
+  (toque e controle) e fim do sprint automático ao empurrar o analógico até o fim.
+- Botões que estavam apertados ao sair de um menu não disparam chute sem querer.
+
+### Corrigido
+- Tela muito escura na chuva e na tempestade: luz e ambiente mais fortes, céu sem o tom laranja,
+  refletores que iluminam de verdade, pós-processamento mais claro, poças e áreas encharcadas menos escuras.
+- Goleiro com os braços para trás: a animação de espera deixava os cotovelos atrás do corpo;
+  agora ele fica na postura de defesa (mãos à frente na altura da cintura, cotovelos abertos).
+
 ## [0.1.4] — 2026-11-14
 
 ### Corrigido

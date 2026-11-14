@@ -13,7 +13,7 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 5;
+        public const int Version = 6;
 
         static readonly string[] LoopClips =
         {
@@ -125,7 +125,7 @@ namespace Craquez.EditorTools
                 ti.textureCompression = TextureImporterCompression.Uncompressed;
             }
             if (f == "Rede") ti.mipmapEnabled = true;
-            if (f.StartsWith("Icone_"))
+            if (f.StartsWith("Icone_") || f.StartsWith("Logo_"))
             {
                 ti.textureType = TextureImporterType.Default;
                 ti.maxTextureSize = 1024;

@@ -76,6 +76,7 @@ namespace Craquez
                 cameraRig.mode = CameraRig.ModosAtacante[idx];
             }
             if (touch != null) { touch.enabled = true; touch.goalkeeperMode = role == PapelControle.Goleiro; }
+            player.BlockInput(0.4f);
             ResetDrill();
             cameraRig.Snap();
             Show("CLIMA: " + Arena.Nome(c).ToUpper(), Color.white, 2.2f);
@@ -95,7 +96,7 @@ namespace Craquez
             Time.timeScale = paused ? 0f : 1f;
             AudioListener.pause = paused;
             if (touch != null) touch.enabled = !paused && Active;
-            if (paused) SetControl(false, Role); else if (Active) SetControl(true, Role);
+            if (paused) SetControl(false, Role); else if (Active) { SetControl(true, Role); player.BlockInput(0.35f); }
         }
 
         public void ResetDrill()
@@ -199,33 +200,52 @@ namespace Craquez
             float W = Screen.width, H = Screen.height;
             GUI.depth = 1;
 
-            // clima e vento
-            GUI.Label(new Rect(24 * s, 18 * s, 700 * s, 44 * s), "Clima: " + Arena.Nome(weather.Current) + (Role == PapelControle.Goleiro ? "   •   Você é o GOLEIRO" : ""), ui.Label);
+            // painel de informações (clima, vento, câmera)
+            Rect info = new Rect(20 * s, 18 * s, 430 * s, 112 * s);
+            UiKit.RoundRect(info, UiKit.A(UiKit.Navy, 0.62f), 18 * s);
+            UiKit.Fill(new Rect(info.x, info.y + 16 * s, 6 * s, info.height - 32 * s), WeatherColor());
+            UiKit.Text(new Rect(info.x + 24 * s, info.y + 8 * s, 400 * s, 44 * s),
+                       Arena.Nome(weather.Current).ToUpper() + (Role == PapelControle.Goleiro ? "  •  GOLEIRO" : ""), ui.H2, Color.white, 2 * s);
             float kmh = weather.WindSpeed * 3.6f;
-            GUI.Label(new Rect(24 * s, 60 * s, 700 * s, 44 * s), "Vento: " + kmh.ToString("0") + " km/h", ui.Label);
-            DrawWindArrow(new Vector2(330 * s, 82 * s), 34 * s);
-            GUI.Label(new Rect(24 * s, 102 * s, 700 * s, 40 * s), "Câmera: " + CameraRig.Nome(cameraRig.mode), ui.Small);
+            UiKit.Text(new Rect(info.x + 24 * s, info.y + 50 * s, 300 * s, 34 * s), "Vento " + kmh.ToString("0") + " km/h", ui.Body, UiKit.TextDim, 0f);
+            DrawWindArrow(new Vector2(info.x + 330 * s, info.y + 66 * s), 34 * s);
+            UiKit.Text(new Rect(info.x + 24 * s, info.y + 80 * s, 400 * s, 28 * s), "Câmera: " + CameraRig.Nome(cameraRig.mode), ui.Tiny, UiKit.A(UiKit.TextDim, 0.85f), 0f);
 
-            // botões
-            float bw = 210 * s, bh = 74 * s, gap = 14 * s;
+            // botões do topo
+            float bw = 190 * s, bh = 68 * s, gap = 12 * s;
             float bx = W - bw - 20 * s;
-            if (GUI.Button(new Rect(bx, 18 * s, bw, bh), "PAUSA", ui.Button)) { if (OnPauseRequested != null) OnPauseRequested(); return; }
-            if (GUI.Button(new Rect(bx - (bw + gap), 18 * s, bw, bh), "CÂMERA", ui.Button)) cameraRig.Cycle();
-            if (GUI.Button(new Rect(bx - (bw + gap) * 2f, 18 * s, bw, bh), "NOVA BOLA", ui.Button)) ResetDrill();
+            if (TopButton(new Rect(bx, 18 * s, bw, bh), "PAUSA", UiKit.Red, s)) { if (OnPauseRequested != null) OnPauseRequested(); return; }
+            if (TopButton(new Rect(bx - (bw + gap), 18 * s, bw, bh), "CÂMERA", UiKit.Blue, s)) cameraRig.Cycle();
+            if (TopButton(new Rect(bx - (bw + gap) * 2f, 18 * s, bw, bh), "NOVA BOLA", UiKit.Blue, s)) ResetDrill();
 
             // barra de força
             if (player.Charging && Role == PapelControle.Atacante)
             {
-                float pw = 520 * s, ph = 26 * s;
-                Rect r = new Rect((W - pw) * 0.5f, H * 0.78f, pw, ph);
-                GUI.color = new Color(0f, 0f, 0f, 0.6f);
-                GUI.DrawTexture(new Rect(r.x - 4 * s, r.y - 4 * s, r.width + 8 * s, r.height + 8 * s), Texture2D.whiteTexture);
+                float pw = 560 * s, ph = 28 * s;
+                Rect r = new Rect((W - pw) * 0.5f, H * 0.74f, pw, ph);
+                UiKit.RoundRect(new Rect(r.x - 6 * s, r.y - 6 * s, r.width + 12 * s, r.height + 12 * s), UiKit.A(UiKit.Navy, 0.75f), (ph + 12 * s) * 0.5f);
                 float c = player.Charge;
-                GUI.color = Color.Lerp(new Color(0.3f, 0.9f, 0.3f), new Color(1f, 0.2f, 0.15f), Mathf.InverseLerp(0.6f, 1f, c));
-                GUI.DrawTexture(new Rect(r.x, r.y, r.width * c, r.height), Texture2D.whiteTexture);
-                GUI.color = Color.white;
-                string tipo = player.ChargingType == TipoChute.Forte ? "CHUTE FORTE" : (player.ChargingType == TipoChute.Colocado ? "CHUTE COLOCADO" : "CAVADINHA");
-                GUI.Label(new Rect(r.x, r.y - 46 * s, r.width, 40 * s), tipo, ui.LabelCenter);
+                Color col = c < 0.6f ? Color.Lerp(UiKit.Green, UiKit.Yellow, c / 0.6f) : Color.Lerp(UiKit.Yellow, UiKit.Red, (c - 0.6f) / 0.4f);
+                UiKit.RoundRect(new Rect(r.x, r.y, Mathf.Max(ph, r.width * c), r.height), col, ph * 0.5f);
+                UiKit.Fill(new Rect(r.x + r.width * 0.85f, r.y - 4 * s, 3 * s, r.height + 8 * s), UiKit.A(Color.white, 0.7f)); // acima disso: chute descontrolado
+                string tipo;
+                switch (player.ChargingType)
+                {
+                    case TipoChute.Colocado: tipo = "CHUTE COLOCADO"; break;
+                    case TipoChute.Cavadinha: tipo = "CAVADINHA"; break;
+                    case TipoChute.Rasteiro: tipo = "CHUTE RASTEIRO"; break;
+                    default: tipo = "CHUTE FORTE"; break;
+                }
+                UiKit.Text(new Rect(r.x, r.y - 50 * s, r.width, 40 * s), tipo, new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 2 * s);
+            }
+
+            // nome do drible feito
+            if (Role == PapelControle.Atacante && !string.IsNullOrEmpty(player.LastMove) && Time.time - player.LastMoveTime < 0.9f)
+            {
+                float a = Mathf.Clamp01((0.9f - (Time.time - player.LastMoveTime)) / 0.3f);
+                Rect m = new Rect((W - 340 * s) * 0.5f, H * 0.62f, 340 * s, 56 * s);
+                UiKit.RoundRect(m, UiKit.A(UiKit.Navy, 0.6f * a), 28 * s);
+                UiKit.Text(m, player.LastMove, ui.Pill, UiKit.A(UiKit.Yellow, a), 0f);
             }
 
             // mensagem central
@@ -234,14 +254,38 @@ namespace Craquez
                 float a = Mathf.Clamp01((messageUntil - Time.time) / 0.4f) * Mathf.Clamp01((Time.time - messageStart) / 0.12f);
                 float pop = 1f + 0.25f * Mathf.Exp(-(Time.time - messageStart) * 10f);
                 var st = new GUIStyle(ui.Big) { fontSize = Mathf.RoundToInt(ui.Big.fontSize * pop) };
-                st.normal.textColor = new Color(0f, 0f, 0f, a * 0.6f);
-                GUI.Label(new Rect(4 * s, H * 0.25f + 4 * s, W, 160 * s), message, st);
-                st.normal.textColor = new Color(messageColor.r, messageColor.g, messageColor.b, a);
-                GUI.Label(new Rect(0, H * 0.25f, W, 160 * s), message, st);
+                Rect band = new Rect(0, H * 0.24f, W, 170 * s);
+                UiKit.Fill(new Rect(0, band.y + 20 * s, W, band.height - 40 * s), UiKit.A(UiKit.Navy, 0.45f * a));
+                UiKit.Fill(new Rect(0, band.y + 20 * s, W, 4 * s), UiKit.A(messageColor, 0.8f * a));
+                UiKit.Fill(new Rect(0, band.yMax - 24 * s, W, 4 * s), UiKit.A(messageColor, 0.8f * a));
+                UiKit.Text(band, message, st, new Color(messageColor.r, messageColor.g, messageColor.b, a), 5 * s);
             }
 
             if (touch != null && touch.enabled) touch.Draw();
-            if (touch == null || !touch.visible) GUI.Label(new Rect(0, H - 50 * s, W, 40 * s), Hint(), ui.Small);
+            if (touch == null || !touch.visible)
+            {
+                Rect hr = new Rect(20 * s, H - 64 * s, W - 40 * s, 50 * s);
+                UiKit.RoundRect(hr, UiKit.A(UiKit.Navy, 0.55f), 25 * s);
+                UiKit.Text(hr, Hint(), ui.SmallCenter, UiKit.A(Color.white, 0.9f), 0f);
+            }
+        }
+
+        bool TopButton(Rect r, string text, Color accent, float s)
+        {
+            UiKit.RoundRect(r, UiKit.A(UiKit.Navy, 0.68f), r.height * 0.5f);
+            UiKit.RoundBorder(r, UiKit.A(accent, 0.95f), r.height * 0.5f, 3 * s);
+            UiKit.Text(r, text, ui.Pill, Color.white, 0f);
+            return ui.Hit(r);
+        }
+
+        Color WeatherColor()
+        {
+            switch (weather.Current)
+            {
+                case Clima.Sol: return UiKit.Yellow;
+                case Clima.Chuva: return UiKit.Cyan;
+                default: return new Color(0.6f, 0.45f, 1f);
+            }
         }
 
         string Hint()
@@ -250,14 +294,15 @@ namespace Craquez
             if (t != TipoControle.Nenhum)
             {
                 if (Role == PapelControle.Goleiro)
-                    return "Analógico: mover   " + InputBridge.Glyph("chute") + " + direção: mergulhar   " + InputBridge.Glyph("colocado") + ": defesa parada   " +
+                    return "Analógico: mover   " + InputBridge.Glyph("chute") + " + direção: mergulhar   " + InputBridge.Glyph("colocado") + ": defesa   " +
                            InputBridge.Glyph("cavadinha") + ": saltar   " + InputBridge.Glyph("correr") + ": sair do gol   " + InputBridge.Glyph("camera") + ": câmera   " + InputBridge.Glyph("pausa") + ": pausa";
-                return "Analógico: mover   " + InputBridge.Glyph("correr") + ": correr   " + InputBridge.Glyph("chute") + ": chute   " + InputBridge.Glyph("colocado") + ": colocado   " +
-                       InputBridge.Glyph("cavadinha") + ": cavadinha (segure para força)   " + InputBridge.Glyph("camera") + ": câmera   " + InputBridge.Glyph("pausa") + ": pausa";
+                return InputBridge.Glyph("correr") + " correr   " + InputBridge.Glyph("chute") + " chute   " + InputBridge.Glyph("colocado") + " colocado   " +
+                       InputBridge.Glyph("cavadinha") + " cavadinha   " + InputBridge.Glyph("rasteiro") + " rasteiro (segure = força)   " +
+                       InputBridge.Glyph("drible") + " drible   " + InputBridge.Glyph("arrancada") + " arrancada   " + InputBridge.Glyph("camera") + " câmera";
             }
             if (Role == PapelControle.Goleiro)
-                return "WASD: mover   Espaço + direção: mergulhar   E: defesa parada   Q: saltar   Shift: sair do gol   C: câmera   R: nova bola   Esc: pausa";
-            return "WASD: mover   Shift: correr   Espaço: chute   E: colocado   Q: cavadinha (segure para força)   R: nova bola   C: câmera   T: toque   Esc: pausa";
+                return "WASD mover   Espaço + direção mergulhar   E defesa   Q saltar   Shift sair do gol   C câmera   R nova bola   Esc pausa";
+            return "WASD mover   Shift correr   Espaço chute   E colocado   Q cavadinha   Z rasteiro   F drible   X arrancada   R nova bola   C câmera   Esc pausa";
         }
 
         void DrawWindArrow(Vector2 center, float len)
@@ -280,50 +325,6 @@ namespace Craquez
             GUI.DrawTexture(new Rect(center.x - th * 0.5f, center.y - len * 0.5f, hs, th), Texture2D.whiteTexture);
             GUI.matrix = m;
             GUI.color = Color.white;
-        }
-    }
-
-    /// <summary>Estilos IMGUI compartilhados (escalados pela altura da tela).</summary>
-    public class Ui
-    {
-        public float Scale { get; private set; }
-        public GUIStyle Title, Label, LabelCenter, Small, Big, Button, ButtonSel, Row, RowSel, Value;
-        float built = -1f;
-
-        public void Begin()
-        {
-            float s = Screen.height / 1080f;
-            if (Mathf.Approximately(s, built) && Title != null) return;
-            built = s; Scale = s;
-            Font f = Compat.DefaultFont();
-            Title = new GUIStyle(GUI.skin.label) { font = f, fontSize = R(72), fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            Title.normal.textColor = Color.white;
-            Label = new GUIStyle(GUI.skin.label) { font = f, fontSize = R(30), fontStyle = FontStyle.Bold };
-            Label.normal.textColor = Color.white;
-            LabelCenter = new GUIStyle(Label) { alignment = TextAnchor.MiddleCenter, wordWrap = true };
-            Small = new GUIStyle(GUI.skin.label) { font = f, fontSize = R(22), alignment = TextAnchor.LowerCenter, wordWrap = true };
-            Small.normal.textColor = new Color(1f, 1f, 1f, 0.8f);
-            Big = new GUIStyle(GUI.skin.label) { font = f, fontSize = R(96), fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
-            Button = new GUIStyle(GUI.skin.button) { font = f, fontSize = R(32), fontStyle = FontStyle.Bold };
-            Button.normal.background = Tex(new Color(0f, 0f, 0f, 0.55f));
-            Button.hover.background = Tex(new Color(0.15f, 0.15f, 0.15f, 0.7f));
-            Button.active.background = Tex(new Color(0.3f, 0.3f, 0.3f, 0.8f));
-            Button.normal.textColor = Button.hover.textColor = Button.active.textColor = Color.white;
-            ButtonSel = new GUIStyle(Button);
-            ButtonSel.normal.background = ButtonSel.hover.background = Tex(new Color(0.85f, 0.12f, 0.1f, 0.92f));
-            Row = new GUIStyle(Button) { alignment = TextAnchor.MiddleLeft, padding = new RectOffset(R(30), R(30), 0, 0), fontSize = R(34) };
-            RowSel = new GUIStyle(ButtonSel) { alignment = TextAnchor.MiddleLeft, padding = new RectOffset(R(30), R(30), 0, 0), fontSize = R(34) };
-            Value = new GUIStyle(Label) { alignment = TextAnchor.MiddleRight, fontSize = R(32) };
-        }
-
-        int R(float v) { return Mathf.Max(8, Mathf.RoundToInt(v * Scale)); }
-
-        static Texture2D Tex(Color c)
-        {
-            var t = new Texture2D(2, 2);
-            t.SetPixels(new[] { c, c, c, c });
-            t.Apply();
-            return t;
         }
     }
 }

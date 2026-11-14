@@ -37,6 +37,7 @@ namespace Craquez
         public Transform postProcessRoot;
         public ReflectionProbe reflectionProbe;
         public Texture2D uiCircle;
+        public Texture2D logo;
         public VideoClip introClip;
 
         [Header("Jogador")]
@@ -152,6 +153,7 @@ namespace Craquez
             flow.session = session;
             flow.updater = updater;
             flow.introClip = introClip;
+            flow.logo = logo;
             flow.cameraRig = rig;
 
             // bola quica menos com o gramado molhado
