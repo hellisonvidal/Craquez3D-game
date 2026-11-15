@@ -18,6 +18,21 @@ namespace Craquez
         public const float BallMass = 0.43f;
         public const float NetDepth = 2.0f;
 
+        /// <summary>Camadas de física dedicadas (Camada 1: PlayerBody ignora colisão direta com Ball).</summary>
+        public const int LayerPlayerBody = 8;
+        public const int LayerBall = 9;
+        public const int LayerGKGloves = 10;
+
+        public static void ConfigurePhysicsLayers()
+        {
+            // Regra Crítica Camada 1: A Cápsula Principal (PlayerBody) IGNORA colisão direta com a Bola (Ball)
+            Physics.IgnoreLayerCollision(LayerPlayerBody, LayerBall, true);
+            // Jogadores colidem entre si (corpo-a-corpo)
+            Physics.IgnoreLayerCollision(LayerPlayerBody, LayerPlayerBody, false);
+            // Luvas/Sockets de interceptação usam SphereCast/Trigger dedicado, não bloqueiam locomoção
+            Physics.IgnoreLayerCollision(LayerPlayerBody, LayerGKGloves, true);
+        }
+
         /// <summary>Gol onde o jogador treina finalização (+X).</summary>
         public static Vector3 AttackGoalCenter { get { return new Vector3(HalfLength, 0f, 0f); } }
 

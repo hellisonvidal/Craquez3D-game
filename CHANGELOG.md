@@ -2,6 +2,23 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.5.0] — 2026-11-14
+
+### Arquitetura de Personagens (3 Camadas) e Física 3D
+- **Camada 1 (`PlayerBody` vs `Ball`):** Isolamento da matriz de colisão (`Physics.IgnoreLayerCollision`) para que o `CapsuleCollider` principal do jogador e do goleiro ignore colisão física bruta com a bola, eliminando o efeito de "parede invisível" e rebotes artificiais.
+- **Camada 2 (Rig Mixamo In-Place):** Travamento horizontal (`lockRootPositionXZ`) na importação e trava em tempo de execução no osso `mixamorig:Hips` para impedir desalinhamento entre malha 3D e cápsula.
+- **Camada 3 (`MixamoBoneSockets`):** Vinculação programática dos ossos `mixamorig:` (`Foot_R`, `Foot_L`, `Hand_R`, `Hand_L`, `Chest`) e criação dos sockets virtuais `BallControlPoint` (`0.35m`–`0.45m` à frente da raiz) e `GK_CatchSocket` (centralizado entre as mãos à frente de `mixamorig:Spine2`).
+
+### Física Cinemática de Linha, Condução e Chutes
+- **Movimentação com Inércia Controlada:** Curva de aceleração (`18 m/s²`) e frenagem (`25 m/s²`) com *Turn Rate* dinâmico (`540°/s` em baixa velocidade/proteção de bola até `300°/s` em *Sprint*) e sincronização de `Speed`, `Direction` e `Angle` com o `Animator`.
+- **Condução Magnética + Toques:** Micro-impulsos magnéticos dentro do raio de domínio (`< 0.65m`) guiando a bola ao `BallControlPoint` com rotação visual (*spin*) compatível.
+- **Chutes Determinísticos:** Disparo sincronizado na janela normalizada de impacto `[0.35, 0.45]` da animação do Mixamo, validando o alcance dos pés (`Foot_R` / `Foot_L`) e aplicando o vetor balístico + efeito Magnus sem depender do ângulo da malha do pé.
+
+### Goleiro (GK System)
+- **Posicionamento em Arco (Bissetriz):** Movimentação em *Strafe/Sidestep* sobre o arco da bissetriz do gol encarando sempre a bola.
+- **Seleção por Quadrante e Motion Warping:** Predição matemática do ponto/tempo de interceptação (`TimeToImpact`, `DeltaX`, `HeightY`) selecionando `GK_Catch`, `GK_FootSave`, `Dive_Low`, `Dive_Mid` ou `Dive_High`, com impulso concentrado na janela `[0.10, 0.45]` e cápsula reclinada horizontalmente no voo.
+- **Esfera de Interceptação das Luvas:** Remoção dos colisores brutos nos ossos (fim das "mãos de alface"); encaixe firme no `GK_CatchSocket` ou espalmada direcionada para as laterais/linha de fundo com redução de 50%–70% da energia cinética.
+
 ## [0.4.0] — 2026-11-14
 
 ### Corrigido

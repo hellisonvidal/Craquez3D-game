@@ -13,7 +13,7 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 10;
+        public const int Version = 11;
 
         static readonly string[] LoopClips =
         {
@@ -83,12 +83,12 @@ namespace Craquez.EditorTools
                 c.name = clips.Length == 1 ? file : file + "_" + i;
                 c.loopTime = loop;
                 c.loopPose = loop;
-                // rotação e altura ficam na pose; deslocamento XZ vira root motion (descartado => animação no lugar)
+                // Rotação, altura e deslocamentos horizontais travados (In-Place puro) para evitar desalinhamento com a cápsula
                 c.lockRootRotation = true;
                 c.keepOriginalOrientation = true;
                 c.lockRootHeightY = true;
                 c.keepOriginalPositionY = true;
-                c.lockRootPositionXZ = false;
+                c.lockRootPositionXZ = true;
                 c.keepOriginalPositionXZ = false;
                 c.heightFromFeet = true; // altura do corpo calculada a partir dos pés: nada de "flutuar"
                 clips[i] = c;

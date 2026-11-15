@@ -49,6 +49,8 @@ namespace Craquez
 
         void Awake()
         {
+            Arena.ConfigurePhysicsLayers();
+            gameObject.layer = Arena.LayerBall;
             Body = GetComponent<Rigidbody>();
             Sphere = GetComponent<SphereCollider>();
             Body.mass = Arena.BallMass;
@@ -105,7 +107,14 @@ namespace Craquez
         {
             holder = t;
             holderOffset = localOffset;
+            Compat.SetVelocity(Body, Vector3.zero);
+            Body.angularVelocity = Vector3.zero;
             Body.isKinematic = true;
+        }
+
+        public void HoldAtSocket(Transform socketTransform)
+        {
+            Hold(socketTransform, Vector3.zero);
         }
 
         public void Release()

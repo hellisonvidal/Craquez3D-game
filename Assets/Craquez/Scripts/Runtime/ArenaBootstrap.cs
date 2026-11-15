@@ -54,6 +54,7 @@ namespace Craquez
             Screen.sleepTimeout = SleepTimeout.NeverSleep;
             Physics.gravity = new Vector3(0f, -9.81f, 0f);
             Physics.bounceThreshold = 0.6f;
+            Arena.ConfigurePhysicsLayers();
 
             var world = new GameObject("Mundo").transform;
 

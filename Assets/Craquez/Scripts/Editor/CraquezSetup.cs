@@ -52,8 +52,10 @@ namespace Craquez.EditorTools
                     ReimportAll();
                 }
 
-                Progress(interactive, "Configurando URP...", 0.15f);
+                Progress(interactive, "Configurando URP e Layers de Colisão...", 0.15f);
                 Folder(Gen); Folder(Gen + "/Materiais"); Folder(Gen + "/Animacao"); Folder(Gen + "/Prefabs"); Folder(Gen + "/Render"); Folder(Root + "/Scenes");
+                SetupTagsAndLayers();
+                Arena.ConfigurePhysicsLayers();
                 var pipeline = SetupUrp();
 
                 Progress(interactive, "Criando materiais...", 0.3f);
@@ -109,6 +111,30 @@ namespace Craquez.EditorTools
             string parent = Path.GetDirectoryName(path).Replace('\\', '/');
             Folder(parent);
             AssetDatabase.CreateFolder(parent, Path.GetFileName(path));
+        }
+
+        static void SetupTagsAndLayers()
+        {
+            var tagAssets = AssetDatabase.LoadAllAssetsAtPath("ProjectSettings/TagManager.asset");
+            if (tagAssets == null || tagAssets.Length == 0) return;
+            var so = new SerializedObject(tagAssets[0]);
+            var layersProp = so.FindProperty("layers");
+            if (layersProp != null && layersProp.isArray)
+            {
+                SetLayerName(layersProp, Arena.LayerPlayerBody, "PlayerBody");
+                SetLayerName(layersProp, Arena.LayerBall, "Ball");
+                SetLayerName(layersProp, Arena.LayerGKGloves, "GKGloves");
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
+        }
+
+        static void SetLayerName(SerializedProperty layersProp, int index, string name)
+        {
+            if (index >= 0 && index < layersProp.arraySize)
+            {
+                var el = layersProp.GetArrayElementAtIndex(index);
+                if (el != null) el.stringValue = name;
+            }
         }
 
         /// <summary>
@@ -384,6 +410,8 @@ namespace Craquez.EditorTools
         {
             var ac = NewController("Jogador");
             ac.AddParameter("Speed", AnimatorControllerParameterType.Float);
+            ac.AddParameter("Direction", AnimatorControllerParameterType.Float);
+            ac.AddParameter("Angle", AnimatorControllerParameterType.Float);
             var sm = ac.layers[0].stateMachine;
 
             var idle = Clip("Jogador", "Idle");
@@ -558,6 +586,18 @@ namespace Craquez.EditorTools
                 }
             }
             model.AddComponent<IKRelay>();
+            root.layer = Arena.LayerPlayerBody;
+            var cap = root.AddComponent<CapsuleCollider>();
+            cap.direction = 1;
+            cap.radius = name == "Goleiro" ? 0.25f : 0.24f;
+            cap.height = height;
+            cap.center = new Vector3(0f, height * 0.5f, 0f);
+            var rb = root.AddComponent<Rigidbody>();
+            rb.isKinematic = true;
+            rb.useGravity = false;
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
+            var sockets = root.AddComponent<MixamoBoneSockets>();
+            sockets.InitializeSockets();
             root.AddComponent(controller);
             root.AddComponent<FootGrounder>().height = height;
 
@@ -570,6 +610,7 @@ namespace Craquez.EditorTools
         static GameObject CreateBallPrefab(Material mat)
         {
             var root = new GameObject("Bola");
+            root.layer = Arena.LayerBall;
             var model = (GameObject)PrefabUtility.InstantiatePrefab(Load<GameObject>(Root + "/Models/Bola.fbx"));
             model.name = "Modelo";
             model.transform.SetParent(root.transform, false);
@@ -585,6 +626,8 @@ namespace Craquez.EditorTools
             }
             var rb = root.AddComponent<Rigidbody>();
             rb.mass = Arena.BallMass;
+            rb.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+            rb.interpolation = RigidbodyInterpolation.Interpolate;
             var sc = root.AddComponent<SphereCollider>();
             sc.radius = Arena.BallRadius;
             root.AddComponent<BallPhysics>();
