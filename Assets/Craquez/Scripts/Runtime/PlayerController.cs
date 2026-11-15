@@ -394,21 +394,21 @@ namespace Craquez
             if (anim != null) anim.CrossFadeInFixedTime(activeKickState, 0.07f, 0, 0f);
 
             // Janela determinística sincronizada com o avanço do pé em cada clipe (speed = 1.25x no Animator)
-            float fallback = kickType == TipoChute.Colocado ? 0.37f : (kickType == TipoChute.Cavadinha ? 0.29f : 0.27f);
+            float fallback = kickType == TipoChute.Colocado ? 0.36f : (kickType == TipoChute.Cavadinha ? 0.30f : 0.26f);
             kickFallbackContactAt = Time.time + fallback;
-            lockMoveUntil = Time.time + fallback + 0.28f;
+            lockMoveUntil = Time.time + fallback + 0.32f;
         }
 
         /// <summary>
-        /// Avalia se a animação de chute do Mixamo entrou na janela normalizada de impacto
-        /// (ou atingiu o tempo de segurança) e dispara o contato determinístico.
+        /// Avalia se a animação de chute entrou na janela de impacto E o pé já avançou à frente do corpo,
+        /// garantindo que o chute só saia quando o pé visualmente encosta na bola.
         /// </summary>
         void CheckKickWindowContact()
         {
             if (!kickPending) return;
 
-            float minNorm = kickType == TipoChute.Colocado ? 0.42f : 0.32f;
-            float maxNorm = minNorm + 0.18f;
+            float minNorm = kickType == TipoChute.Colocado ? 0.38f : 0.28f;
+            float maxNorm = minNorm + 0.22f;
             bool inImpactWindow = false;
             if (anim != null && !string.IsNullOrEmpty(activeKickState))
             {
@@ -426,7 +426,14 @@ namespace Craquez
                 }
             }
 
-            if (inImpactWindow || Time.time >= kickFallbackContactAt)
+            bool footForward = true;
+            if (rToe != null)
+            {
+                Vector3 footRel = rToe.position - transform.position;
+                footForward = Vector3.Dot(footRel, transform.forward) > 0.14f;
+            }
+
+            if ((inImpactWindow && footForward) || Time.time >= kickFallbackContactAt + 0.08f)
             {
                 DoContact();
             }
@@ -571,21 +578,14 @@ namespace Craquez
             bool recentlyKicked = now - ball.LastKickTime < 0.35f;
             bool controlled = InputEnabled || aiControlled;
 
-            // Preparando chute: guia magneticamente a bola até o ponto ideal de impacto do pé
+            // Preparando chute: mantém a bola na zona de impacto à frente do pé de apoio (sem puxar para trás no recuo da perna)
             if (kickPending && low && distFromRoot < 2.2f)
             {
                 HasPossession = true;
-                Vector3 tgt = controlPt + transform.right * 0.08f;
-                if (rToe != null)
-                {
-                    float k = 1f - Mathf.Clamp01((kickFallbackContactAt - now) / 0.2f);
-                    Vector3 toe = sockets != null ? sockets.RightFootContactPosition : rToe.position;
-                    toe += transform.forward * 0.08f;
-                    toe.y = pos.y;
-                    tgt = Vector3.Lerp(tgt, toe, k * 0.65f);
-                }
-                Vector3 desired = velocity + (tgt - bp) * 14f; desired.y = 0f;
-                Vector3 nv = Vector3.MoveTowards(flatBv, desired, 65f * Mathf.Lerp(0.75f, 1f, Grip()) * dt);
+                Vector3 strikeSpot = pos + transform.forward * 0.42f + transform.right * 0.08f;
+                strikeSpot.y = bp.y;
+                Vector3 desired = velocity * 0.35f + (strikeSpot - bp) * 12f; desired.y = 0f;
+                Vector3 nv = Vector3.MoveTowards(flatBv, desired, 42f * Mathf.Lerp(0.75f, 1f, Grip()) * dt);
                 Compat.SetVelocity(ball.Body, new Vector3(nv.x, bv.y, nv.z));
                 ball.Body.angularVelocity = Vector3.Cross(Vector3.up, nv) / Arena.BallRadius;
                 return;
@@ -903,15 +903,15 @@ namespace Craquez
 
         void OnIK(int layer)
         {
-            if (anim == null || ball == null) return;
+            if (anim == null || ball == null || kickPending || Time.time < lockMoveUntil) return;
             Vector3 bp = ball.transform.position;
             float d = Vector3.Distance(bp, transform.position);
-            // Quando está conduzindo perto da bola, olha à frente/para o gol em vez de torcer o pescoço para o chão
-            Vector3 lookTarget = d < 2.2f
-                ? transform.position + transform.forward * 4f + Vector3.up * 1.25f
-                : new Vector3(bp.x, Mathf.Max(bp.y, 0.85f), bp.z);
-            float w = d < 2.2f ? 0.35f : Mathf.Clamp01(1.1f - d / 25f) * 0.65f;
-            anim.SetLookAtWeight(w, 0.1f, 0.45f, 0f, 0f);
+            // bodyWeight = 0 para não entortar o tronco; apenas leve acompanhamento de cabeça quando a bola está longe
+            Vector3 lookTarget = d < 2.5f
+                ? transform.position + transform.forward * 5f + Vector3.up * 1.45f
+                : new Vector3(bp.x, Mathf.Max(bp.y, 1.0f), bp.z);
+            float w = d < 2.5f ? 0.15f : Mathf.Clamp01(1.1f - d / 25f) * 0.45f;
+            anim.SetLookAtWeight(w, 0f, 0.35f, 0f, 0f);
             anim.SetLookAtPosition(lookTarget);
         }
     }

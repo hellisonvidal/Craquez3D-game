@@ -233,9 +233,9 @@ namespace Craquez
         {
             if (lockHipsHorizontalInPlace && Hips != null && modelTransform != null)
             {
-                // Mantém o quadril alinhado horizontalmente sobre a raiz quando em locomoção In-Place
+                // Mantém o quadril alinhado horizontalmente apenas contra desvios extremos (> 0.35m) sem entortar o tronco
                 Vector3 localInRoot = transform.InverseTransformPoint(Hips.position);
-                const float maxHorizontalDrift = 0.08f;
+                const float maxHorizontalDrift = 0.35f;
                 Vector2 xz = new Vector2(localInRoot.x, localInRoot.z);
                 if (xz.sqrMagnitude > maxHorizontalDrift * maxHorizontalDrift)
                 {

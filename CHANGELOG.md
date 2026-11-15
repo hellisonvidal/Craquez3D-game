@@ -2,6 +2,11 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.5.5] — 2026-11-15
+
+- **Goleiro:** Animações de defesa (`GK_Mergulho`, `GK_Caido`, `GK_Levantar`, `GK_Salto`) substituídas por mocap real Mixamo, reação sincronizada ao tempo de voo da bola e movimentação lateral suavizada.
+- **Atacante:** Corpo alinhado sem distorção de `Hips` ou `LookAt` IK durante o chute; contato do chute validado apenas com o pé à frente e ponto de preparo estável à frente do corpo.
+
 ## [0.5.4] — 2026-11-15
 
 - **Goleiro:** Removido o IK estático dos braços durante o posicionamento normal, liberando as animações nativas (`GK_Pronto`, `GK_DeslocarEsq`, `GK_DeslocarDir`).

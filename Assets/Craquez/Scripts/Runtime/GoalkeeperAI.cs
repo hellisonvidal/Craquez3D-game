@@ -217,11 +217,13 @@ namespace Craquez
             if (!BallPhysics.PredictPlaneCrossing(info.origin, info.velocity, info.spin, wind, planeX, 3.5f, out hit, out t)) return;
             if (Mathf.Abs(hit.z) > Arena.GoalHalfWidth + 2.5f || hit.y > Arena.GoalHeight + 1.5f) return;
 
-            float reaction = Random.Range(0.14f, 0.23f);
+            float reaction = Random.Range(0.16f, 0.25f);
             if (ws != null && ws.P != null) reaction += ws.P.gkReaction;
-            // Chutes muito próximos reduzem o atraso de leitura para permitir reflexo imediato
-            reaction = Mathf.Min(reaction, Mathf.Max(0.04f, t * 0.32f));
-            reactAt = Time.time + reaction;
+            // Em chutes de longa distância, acompanha a bola antes de saltar para o mergulho não sair antes da hora
+            float absDx = Mathf.Abs(Vector3.Dot(hit - transform.position, transform.right));
+            float diveLead = Mathf.Clamp(0.24f + absDx * 0.15f, 0.30f, 0.56f);
+            float waitBeforeDive = Mathf.Max(reaction, t - diveLead);
+            reactAt = Time.time + Mathf.Min(waitBeforeDive, Mathf.Max(0.10f, t - 0.18f));
             resolved = false;
         }
 
@@ -522,7 +524,7 @@ namespace Craquez
             }
 
             if (anim != null)
-                anim.SetFloat(LateralHash, Vector3.Dot(velocity, transform.right), 0.08f, dt);
+                anim.SetFloat(LateralHash, Vector3.Dot(velocity, transform.right), 0.14f, dt);
 
             bool ready = State == Estado.Posicionando && !diving;
             if (grounder == null) grounder = GetComponent<FootGrounder>();
@@ -602,7 +604,7 @@ namespace Craquez
 
             Vector3 toTarget = target - transform.position; toTarget.y = 0f;
             float maxSpeed = looseBall ? 6.5f : maxShuffleSpeed;
-            Vector3 desired = Vector3.ClampMagnitude(toTarget * 3.6f, maxSpeed);
+            Vector3 desired = toTarget.magnitude < 0.08f ? Vector3.zero : Vector3.ClampMagnitude(toTarget * 3.2f, maxSpeed);
             float accel = desired.magnitude < velocity.magnitude ? shuffleDeceleration : shuffleAcceleration;
             velocity = Vector3.MoveTowards(velocity, desired, accel * dt);
             transform.position += velocity * dt;
@@ -639,7 +641,7 @@ namespace Craquez
         void UpdateDefending(float dt)
         {
             velocity = Vector3.zero;
-            ikWeight = Mathf.MoveTowards(ikWeight, 1f, dt * 8.5f);
+            ikWeight = Mathf.MoveTowards(ikWeight, 0.55f, dt * 4.5f);
 
             if (ball != null && !ball.IsHeld)
             {
