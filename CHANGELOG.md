@@ -2,6 +2,11 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.5.6] — 2026-11-15
+
+- **Atacante:** Substituído pelo modelo `Atacante.glb` (sem `Icosphere`, texturas Albedo/Normal/MetallicSmoothness atualizadas) com todos os movimentos (`Andar` e `Correr` nativos + `Idle`, `Trote`, `Disparada`, `ChuteForte`, `ChuteColocado`, `Cavadinha`, `ChuteRasteiro` e `Drible` retargeted).
+- **Goleiro:** Removida elevação artificial `p.y` que fazia o goleiro flutuar no mergulho/salto, removido IK forçado nas mãos durante defesas e recuperações, ampliado ganho de locomoção lateral/frontal e substituído `GK_Defesa` por mocap real Mixamo.
+
 ## [0.5.5] — 2026-11-15
 
 - **Goleiro:** Animações de defesa (`GK_Mergulho`, `GK_Caido`, `GK_Levantar`, `GK_Salto`) substituídas por mocap real Mixamo, reação sincronizada ao tempo de voo da bola e movimentação lateral suavizada.

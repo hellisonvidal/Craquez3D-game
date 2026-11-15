@@ -510,7 +510,7 @@ namespace Craquez
 
                 case Estado.ComBola:
                     velocity = Vector3.zero;
-                    ikWeight = Mathf.MoveTowards(ikWeight, repo == Reposicao.Nenhuma ? 0.85f : 0f, dt * 4f);
+                    ikWeight = Mathf.MoveTowards(ikWeight, 0f, dt * 6f);
                     if (diving && stateTime > 0.95f && repo == Reposicao.Nenhuma)
                     {
                         diving = false;
@@ -524,7 +524,13 @@ namespace Craquez
             }
 
             if (anim != null)
-                anim.SetFloat(LateralHash, Vector3.Dot(velocity, transform.right), 0.14f, dt);
+            {
+                float latVel = Vector3.Dot(velocity, transform.right);
+                float speed = velocity.magnitude;
+                if (speed > 0.25f && Mathf.Abs(latVel) < 0.35f)
+                    latVel = (latVel >= 0f ? 1f : -1f) * speed * 0.85f;
+                anim.SetFloat(LateralHash, latVel * 1.45f, 0.12f, dt);
+            }
 
             bool ready = State == Estado.Posicionando && !diving;
             if (grounder == null) grounder = GetComponent<FootGrounder>();
@@ -641,7 +647,7 @@ namespace Craquez
         void UpdateDefending(float dt)
         {
             velocity = Vector3.zero;
-            ikWeight = Mathf.MoveTowards(ikWeight, 0.55f, dt * 4.5f);
+            ikWeight = Mathf.MoveTowards(ikWeight, 0f, dt * 8f);
 
             if (ball != null && !ball.IsHeld)
             {
@@ -678,7 +684,7 @@ namespace Craquez
                 }
 
                 Vector3 p = Vector3.Lerp(diveFrom, diveTo, warpProgress);
-                p.y = diveHeight * Mathf.Sin(Mathf.PI * Mathf.Clamp01(k * 0.88f));
+                p.y = 0f;
                 transform.position = p;
             }
 
@@ -994,35 +1000,15 @@ namespace Craquez
         void OnIK(int layer)
         {
             if (anim == null || ball == null) return;
-            anim.SetLookAtWeight(1f, 0.25f, 0.85f, 1f, 0.5f);
-            anim.SetLookAtPosition(ball.transform.position);
-
-            float w = Mathf.Max(ikWeight, readyWeight);
-            if (w <= 0.001f) return;
-
-            Vector3 r = transform.right, f = transform.forward, u = Vector3.up;
-            Vector3 body = anim.bodyPosition;
-            float breathe = Mathf.Sin(Time.time * 2.1f) * 0.015f;
-
-            Vector3 readyL = body + u * (0.14f + breathe) + f * 0.4f - r * 0.3f;
-            Vector3 readyR = body + u * (0.14f + breathe) + f * 0.4f + r * 0.3f;
-            Vector3 ballL = ikTarget - r * 0.11f;
-            Vector3 ballR = ikTarget + r * 0.11f;
-
-            float k = ikWeight / Mathf.Max(w, 1e-3f);
-            Vector3 lt = Vector3.Lerp(readyL, ballL, k);
-            Vector3 rt = Vector3.Lerp(readyR, ballR, k);
-
-            anim.SetIKPositionWeight(AvatarIKGoal.LeftHand, w);
-            anim.SetIKPositionWeight(AvatarIKGoal.RightHand, w);
-            anim.SetIKPosition(AvatarIKGoal.LeftHand, lt);
-            anim.SetIKPosition(AvatarIKGoal.RightHand, rt);
-
-            float hw = readyWeight * 0.8f;
-            anim.SetIKHintPositionWeight(AvatarIKHint.LeftElbow, hw);
-            anim.SetIKHintPositionWeight(AvatarIKHint.RightElbow, hw);
-            anim.SetIKHintPosition(AvatarIKHint.LeftElbow, body + u * 0.25f - r * 0.55f + f * 0.12f);
-            anim.SetIKHintPosition(AvatarIKHint.RightElbow, body + u * 0.25f + r * 0.55f + f * 0.12f);
+            if (State == Estado.Posicionando)
+            {
+                anim.SetLookAtWeight(0.65f, 0f, 0.45f, 0f, 0f);
+                anim.SetLookAtPosition(ball.transform.position);
+            }
+            else
+            {
+                anim.SetLookAtWeight(0f);
+            }
         }
     }
 }
