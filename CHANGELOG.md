@@ -2,6 +2,11 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.5.8] — 2026-11-15
+
+- **Goleiro:** Restaurado mergulho lateral real em `GK_Mergulho` (esquerda/direita via `Mirror`) e incluídas todas as animações extras (`GK_Orientar`, `GK_PosicionarBola`, `GK_Frustracao`, `GK_Carrinho`).
+- **Atacante:** Incluídas todas as animações disponíveis de futebol (`Dominio`, `Cabeceio`, `Voleio`, `Carrinho`) integradas ao `AnimatorController` e ao `PlayerController`.
+
 ## [0.5.7] — 2026-11-15
 
 - **Goleiro:** Corrigida a colisão contínua em `FixedUpdate` para defender/bloquear qualquer bola na direção do corpo ou luvas mesmo antes do mergulho completo; reação reajustada e faixa central reduzida (`< 0.42m`) para acionar mergulhos laterais (`GK_Mergulho`) e saltos (`GK_Salto`) além da defesa central.

@@ -145,8 +145,8 @@ namespace Craquez.EditorTools
         {
             var sets = new[]
             {
-                new { model = "Jogador", folder = "Jogador", clips = new[] { "Idle", "Andar", "Trote", "Correr", "Disparada", "ChuteForte", "ChuteColocado", "Cavadinha", "ChuteRasteiro", "Drible" } },
-                new { model = "Goleiro", folder = "Goleiro", clips = new[] { "GK_Pronto", "GK_DeslocarDir", "GK_DeslocarEsq", "GK_Mergulho", "GK_Caido", "GK_Levantar", "GK_Salto", "GK_Defesa", "GK_Lancar", "GK_Chutao" } },
+                new { model = "Jogador", folder = "Jogador", clips = new[] { "Idle", "Andar", "Trote", "Correr", "Disparada", "ChuteForte", "ChuteColocado", "Cavadinha", "ChuteRasteiro", "Drible", "Dominio", "Cabeceio", "Voleio", "Carrinho" } },
+                new { model = "Goleiro", folder = "Goleiro", clips = new[] { "GK_Pronto", "GK_DeslocarDir", "GK_DeslocarEsq", "GK_Mergulho", "GK_Caido", "GK_Levantar", "GK_Salto", "GK_Defesa", "GK_Lancar", "GK_Chutao", "GK_Orientar", "GK_PosicionarBola", "GK_Frustracao", "GK_Carrinho" } },
             };
             foreach (var set in sets)
             {
@@ -439,7 +439,7 @@ namespace Craquez.EditorTools
             bt.children = ch;
             sm.defaultState = loco;
 
-            foreach (var n in new[] { "ChuteForte", "ChuteColocado", "Cavadinha", "ChuteRasteiro", "Drible" })
+            foreach (var n in new[] { "ChuteForte", "ChuteColocado", "Cavadinha", "ChuteRasteiro", "Drible", "Dominio", "Cabeceio", "Voleio", "Carrinho" })
             {
                 var st = sm.AddState(n);
                 st.motion = Clip("Jogador", n);
@@ -522,12 +522,31 @@ namespace Craquez.EditorTools
             puntBall.motion = Clip("Goleiro", "GK_Chutao");
             puntBall.speed = 1.1f;
 
+            var directWall = sm.AddState("GK_Orientar");
+            directWall.motion = Clip("Goleiro", "GK_Orientar");
+
+            var placeBall = sm.AddState("GK_PosicionarBola");
+            placeBall.motion = Clip("Goleiro", "GK_PosicionarBola");
+
+            var missReact = sm.AddState("GK_Frustracao");
+            missReact.motion = Clip("Goleiro", "GK_Frustracao");
+
+            var slideSave = sm.AddState("GK_Carrinho");
+            slideSave.motion = Clip("Goleiro", "GK_Carrinho");
+            slideSave.speed = 1.2f;
+            slideSave.mirrorParameterActive = true;
+            slideSave.mirrorParameter = "Mirror";
+
             var t = getUp.AddTransition(loco); t.hasExitTime = true; t.exitTime = 0.92f; t.duration = 0.2f;
             var t2 = jump.AddTransition(loco); t2.hasExitTime = true; t2.exitTime = 0.95f; t2.duration = 0.25f;
             var t3 = block.AddTransition(loco); t3.hasExitTime = true; t3.exitTime = 0.95f; t3.duration = 0.3f;
             var t4 = dive.AddTransition(getUp); t4.hasExitTime = true; t4.exitTime = 0.97f; t4.duration = 0.2f;
             var t5 = throwBall.AddTransition(loco); t5.hasExitTime = true; t5.exitTime = 0.92f; t5.duration = 0.25f;
             var t6 = puntBall.AddTransition(loco); t6.hasExitTime = true; t6.exitTime = 0.90f; t6.duration = 0.25f;
+            var t7 = directWall.AddTransition(loco); t7.hasExitTime = true; t7.exitTime = 0.95f; t7.duration = 0.25f;
+            var t8 = placeBall.AddTransition(loco); t8.hasExitTime = true; t8.exitTime = 0.95f; t8.duration = 0.2f;
+            var t9 = missReact.AddTransition(loco); t9.hasExitTime = true; t9.exitTime = 0.95f; t9.duration = 0.25f;
+            var t10 = slideSave.AddTransition(getUp); t10.hasExitTime = true; t10.exitTime = 0.92f; t10.duration = 0.2f;
 
             EnableIK(ac);
             EditorUtility.SetDirty(ac);

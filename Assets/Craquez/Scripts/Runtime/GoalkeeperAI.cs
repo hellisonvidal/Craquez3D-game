@@ -345,10 +345,17 @@ namespace Craquez
             if (anim != null)
             {
                 anim.SetBool(MirrorHash, side < 0f);
-                // Ajusta a velocidade da animação para que a janela de extensão máxima (0.35..0.45) coincida com TimeToImpact
-                float animSpeed = Mathf.Clamp(0.42f / Mathf.Max(0.16f, duration), 0.85f, 2.1f);
-                anim.SetFloat(DiveSpeedHash, animSpeed);
-                anim.CrossFadeInFixedTime("GK_Mergulho", 0.05f, 0, 0.02f);
+                if (quadrant == QuadranteDefesa.GK_FootSave)
+                {
+                    anim.CrossFadeInFixedTime("GK_Carrinho", 0.05f, 0, 0.02f);
+                }
+                else
+                {
+                    // Ajusta a velocidade da animação para que a janela de extensão máxima (0.35..0.45) coincida com TimeToImpact
+                    float animSpeed = Mathf.Clamp(0.42f / Mathf.Max(0.16f, duration), 0.85f, 2.1f);
+                    anim.SetFloat(DiveSpeedHash, animSpeed);
+                    anim.CrossFadeInFixedTime("GK_Mergulho", 0.05f, 0, 0.02f);
+                }
             }
         }
 
@@ -684,13 +691,17 @@ namespace Craquez
                 }
 
                 Vector3 p = Vector3.Lerp(diveFrom, diveTo, warpProgress);
-                p.y = 0f;
+                p.y = (ActiveQuadrant == QuadranteDefesa.Dive_Mid || ActiveQuadrant == QuadranteDefesa.Dive_High)
+                    ? Mathf.Clamp(diveHeight, 0f, 0.36f) * Mathf.Sin(Mathf.PI * Mathf.Clamp01(k * 0.88f))
+                    : 0f;
                 transform.position = p;
             }
 
             bool wasDive = diving && anim != null &&
                            (anim.GetCurrentAnimatorStateInfo(0).IsName("GK_Mergulho") ||
-                            anim.GetNextAnimatorStateInfo(0).IsName("GK_Mergulho"));
+                            anim.GetNextAnimatorStateInfo(0).IsName("GK_Mergulho") ||
+                            anim.GetCurrentAnimatorStateInfo(0).IsName("GK_Carrinho") ||
+                            anim.GetNextAnimatorStateInfo(0).IsName("GK_Carrinho"));
             float total = diving ? 1.12f : 0.85f;
             if (stateTime > total)
             {

@@ -391,6 +391,11 @@ namespace Craquez
             activeKickState = kickType == TipoChute.Colocado ? "ChuteColocado" :
                               (kickType == TipoChute.Cavadinha ? "Cavadinha" :
                               (kickType == TipoChute.Rasteiro ? "ChuteRasteiro" : "ChuteForte"));
+            if (ball != null && !ball.Grounded)
+            {
+                if (ball.transform.position.y > 1.35f) activeKickState = "Cabeceio";
+                else if (ball.transform.position.y > 0.82f && kickType == TipoChute.Forte) activeKickState = "Voleio";
+            }
             if (anim != null) anim.CrossFadeInFixedTime(activeKickState, 0.07f, 0, 0f);
 
             // Janela determinística sincronizada com o avanço do pé em cada clipe (speed = 1.25x no Animator)
@@ -427,7 +432,7 @@ namespace Craquez
             }
 
             bool footForward = true;
-            if (rToe != null)
+            if (activeKickState != "Cabeceio" && rToe != null)
             {
                 Vector3 footRel = rToe.position - transform.position;
                 footForward = Vector3.Dot(footRel, transform.forward) > 0.14f;
