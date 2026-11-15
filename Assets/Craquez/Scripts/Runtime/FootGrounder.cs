@@ -15,7 +15,7 @@ namespace Craquez
         [Tooltip("Altura do personagem (m), igual à usada no prefab.")]
         public float height = 1.8f;
         // medidas dos modelos (tools/blender): tornozelo e dedos acima da sola, em fração da altura
-        const float AnkleRatio = 0.088f, ToeRatio = 0.031f;
+        const float AnkleRatio = 0.088f, ToeRatio = 0.0265f;
         [Tooltip("Rapidez da correção (1/s).")]
         public float speed = 14f;
 
@@ -27,7 +27,7 @@ namespace Craquez
         float offset;
         bool ready;
 
-        void Start()
+        void Awake()
         {
             anim = GetComponentInChildren<Animator>();
             if (anim == null || !anim.isHuman) { enabled = false; return; }
@@ -38,10 +38,22 @@ namespace Craquez
             lToe = anim.GetBoneTransform(HumanBodyBones.LeftToes);
             rToe = anim.GetBoneTransform(HumanBodyBones.RightToes);
             if (lFoot == null || rFoot == null) { enabled = false; return; }
-            // altura real das articulações acima da sola (medida nos modelos, independente da montagem do prefab)
-            lFootRest = rFootRest = AnkleRatio * height;
-            lToeRest = rToeRest = lToe != null ? ToeRatio * height : AnkleRatio * height;
+            // mede a altura real das articulações em repouso antes do Animator sobrescrever o primeiro quadro
+            float y0 = transform.position.y;
+            lFootRest = Mathf.Clamp(lFoot.position.y - y0, 0.06f, 0.22f);
+            rFootRest = Mathf.Clamp(rFoot.position.y - y0, 0.06f, 0.22f);
+            lToeRest = lToe != null ? Mathf.Clamp(lToe.position.y - y0, 0.02f, 0.12f) : AnkleRatio * height;
+            rToeRest = rToe != null ? Mathf.Clamp(rToe.position.y - y0, 0.02f, 0.12f) : AnkleRatio * height;
             ready = true;
+        }
+
+        void Start()
+        {
+            if (!ready && enabled) Awake();
+            if (!ready) return;
+            // garante coerência caso height tenha sido ajustado no prefab
+            if (lToe == null) lToeRest = ToeRatio * height;
+            if (rToe == null) rToeRest = ToeRatio * height;
         }
 
         void LateUpdate()

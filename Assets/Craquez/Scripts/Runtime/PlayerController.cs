@@ -87,6 +87,7 @@ namespace Craquez
         Vector3 kickAimWorld;
         Vector3 ballVelAtContact;
         float splashTimer;
+        bool splashLeftFoot;
 
         static readonly int SpeedHash = Animator.StringToHash("Speed");
         static readonly int DirectionHash = Animator.StringToHash("Direction");
@@ -228,6 +229,20 @@ namespace Craquez
             float max = sprint ? sprintSpeed : jogSpeed;
             if (HasPossession) max *= sprint ? 0.95f : 0.92f;
             if (Time.time < burstUntil) max += 1.1f;
+
+            var pfSurf = PuddleField.Instance;
+            float surfDepth = 0f;
+            Superficie surf = pfSurf != null ? pfSurf.SurfaceAt(transform.position, out surfDepth) : Superficie.Grama;
+            if (surf == Superficie.Poca)
+            {
+                max *= Mathf.Lerp(1f, 0.84f, surfDepth);
+                grip *= Mathf.Lerp(1f, 0.72f, surfDepth);
+            }
+            else if (surf == Superficie.Encharcado)
+            {
+                grip *= Mathf.Lerp(1f, 0.88f, surfDepth);
+            }
+
             Vector3 target = kicking ? Vector3.zero : wish * max;
             if (Charging) target *= 0.65f;
 
@@ -285,15 +300,17 @@ namespace Craquez
             HandleShootInput(dt, mv);
             CheckKickWindowContact();
 
-            // Respingos ao correr nas poças
-            var pf = PuddleField.Instance;
-            float depth;
+            // Passadas e respingos visíveis ao correr sobre poças ou gramado encharcado
             splashTimer -= dt;
-            if (pf != null && velocity.magnitude > 1.8f && splashTimer <= 0f && pf.Query(transform.position, out depth))
+            if (pfSurf != null && velocity.magnitude > 0.9f && splashTimer <= 0f && surf != Superficie.Grama)
             {
-                if (WeatherSystem.Instance != null)
-                    WeatherSystem.Instance.Splash(transform.position + transform.forward * 0.2f, Mathf.Clamp01(velocity.magnitude / 8f) * depth);
-                splashTimer = Mathf.Lerp(0.45f, 0.22f, velocity.magnitude / sprintSpeed);
+                splashLeftFoot = !splashLeftFoot;
+                Vector3 footPos = splashLeftFoot
+                    ? (sockets != null ? sockets.LeftFootContactPosition : transform.position - transform.right * 0.12f)
+                    : (sockets != null ? sockets.RightFootContactPosition : transform.position + transform.right * 0.12f);
+                float baseInt = surf == Superficie.Poca ? Mathf.Lerp(0.45f, 1.0f, surfDepth) : 0.28f;
+                pfSurf.FootStep(footPos, baseInt * Mathf.Clamp01(velocity.magnitude / jogSpeed));
+                splashTimer = Mathf.Lerp(0.36f, 0.17f, speedRatio);
             }
         }
 
@@ -372,7 +389,8 @@ namespace Craquez
             kickStartedAt = Time.time;
 
             activeKickState = kickType == TipoChute.Colocado ? "ChuteColocado" :
-                              (kickType == TipoChute.Cavadinha ? "Cavadinha" : "ChuteForte");
+                              (kickType == TipoChute.Cavadinha ? "Cavadinha" :
+                              (kickType == TipoChute.Rasteiro ? "ChuteRasteiro" : "ChuteForte"));
             if (anim != null) anim.CrossFadeInFixedTime(activeKickState, 0.07f, 0, 0f);
 
             // Janela determinística: 0.35 a 0.45 do tempo normalizado da animação (com fallback seguro em segundos)
@@ -511,6 +529,7 @@ namespace Craquez
                 velocity = dir * sp;
                 burstUntil = Time.time + 0.45f;
                 StartTouchDecay(dir, 2.2f, 0.45f);
+                if (anim != null) anim.CrossFadeInFixedTime("Drible", 0.08f, 0, 0f);
                 Move("CORTE");
             }
             lastTouchAt = Time.time;
@@ -883,10 +902,15 @@ namespace Craquez
         void OnIK(int layer)
         {
             if (anim == null || ball == null) return;
-            float d = Vector3.Distance(ball.transform.position, transform.position);
-            float w = Mathf.Clamp01(1.2f - d / 25f);
-            anim.SetLookAtWeight(w, 0.15f, 0.7f, 1f, 0.6f);
-            anim.SetLookAtPosition(ball.transform.position);
+            Vector3 bp = ball.transform.position;
+            float d = Vector3.Distance(bp, transform.position);
+            // Quando está conduzindo perto da bola, olha à frente/para o gol em vez de torcer o pescoço para o chão
+            Vector3 lookTarget = d < 2.2f
+                ? transform.position + transform.forward * 4f + Vector3.up * 1.25f
+                : new Vector3(bp.x, Mathf.Max(bp.y, 0.85f), bp.z);
+            float w = d < 2.2f ? 0.35f : Mathf.Clamp01(1.1f - d / 25f) * 0.65f;
+            anim.SetLookAtWeight(w, 0.1f, 0.45f, 0f, 0f);
+            anim.SetLookAtPosition(lookTarget);
         }
     }
 }

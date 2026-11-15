@@ -49,6 +49,9 @@ namespace Craquez
         readonly List<Item> items = new List<Item>();
         bool usingPointer;
 
+        // altura (fração da tela) onde o texto aparece, logo abaixo do logo no último quadro do vídeo
+        const float LogoTextY = 0.72f;
+
         static readonly string[] Climas = { "SOL", "CHUVA", "TEMPESTADE", "ALEATÓRIO" };
         static readonly string[] ClimaDesc =
         {
@@ -125,7 +128,13 @@ namespace Craquez
                     if (telaTime > 4.2f || (telaTime > 1.2f && InputBridge.AnyPressed)) { Go(Tela.Video); StartVideo(); }
                     break;
                 case Tela.Video:
-                    if (videoDone || (!videoStarted && telaTime > 8f) || (telaTime > 1.5f && InputBridge.AnyPressed))
+                    // toque durante o vídeo: pula direto para o quadro final (logo) em vez de parar no meio
+                    if (!videoDone && vp != null && videoStarted && telaTime > 1.0f && InputBridge.AnyPressed && vp.frameCount > 2)
+                    {
+                        long last = (long)vp.frameCount - 2;
+                        if (vp.frame < last) vp.frame = last;
+                    }
+                    if (videoDone || (!videoStarted && telaTime > 8f))
                     {
                         if (vp != null && vp.isPlaying) vp.Pause();
                         Go(Tela.ToqueIniciar);
@@ -250,7 +259,6 @@ namespace Craquez
 
                 case Tela.Pausa:
                     items.Add(new Item { label = "CONTINUAR", activate = Resume });
-                    items.Add(new Item { label = "NOVA BOLA", activate = () => { session.ResetDrill(); Resume(); } });
                     items.Add(new Item { label = "CÂMERA", tipo = Tipo.Lista, value = () => CameraRig.Nome(cameraRig.mode), change = d => cameraRig.Cycle() });
                     items.Add(new Item { label = "CONFIGURAÇÕES", activate = () => { configBack = Tela.Pausa; Go(Tela.Config); } });
                     items.Add(new Item { label = "SAIR PARA O MENU", activate = () => { session.SetPaused(false); session.Preview(); Go(Tela.Principal); } });
@@ -406,15 +414,13 @@ namespace Craquez
                 float lw = Mathf.Min(760 * S, W * 0.6f);
                 DrawLogo(new Rect((W - lw) * 0.5f, H * 0.16f, lw, lw * 0.53f), 1f);
             }
-            UiKit.Gradient(new Rect(0, H * 0.6f, W, H * 0.4f), UiKit.A(Color.black, 0.75f), true);
-            float pulse = 0.6f + 0.4f * Mathf.Sin(Time.unscaledTime * 3.5f);
+            // só texto (sem moldura), aparece depois que o vídeo termina no logo
+            float fade = Mathf.Clamp01((telaTime - 0.15f) / 0.6f);
+            float pulse = 0.55f + 0.45f * Mathf.Sin(Time.unscaledTime * 3.2f);
             string txt = InputBridge.ControleConectado != TipoControle.Nenhum && !Application.isMobilePlatform
                 ? "PRESSIONE QUALQUER BOTÃO" : "TOQUE NA TELA PARA INICIAR";
-            float pw = 760 * S, ph = 84 * S;
-            Rect pill = new Rect((W - pw) * 0.5f, H * 0.83f, pw, ph);
-            UiKit.RoundRect(pill, UiKit.A(UiKit.Navy, 0.75f), ph * 0.5f);
-            UiKit.RoundBorder(pill, UiKit.A(UiKit.Yellow, pulse), ph * 0.5f, 3 * S);
-            UiKit.Text(pill, txt, ui.Pill, new Color(1f, 1f, 1f, 0.75f + 0.25f * pulse), 2 * S);
+            Rect tr = new Rect(0, H * LogoTextY, W, 70 * S);
+            UiKit.Text(tr, txt, new GUIStyle(ui.Pill) { alignment = TextAnchor.MiddleCenter }, new Color(1f, 1f, 1f, fade * (0.55f + 0.45f * pulse)), 2 * S);
         }
 
         // --- menu principal: logo + cartões grandes

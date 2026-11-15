@@ -145,8 +145,8 @@ namespace Craquez.EditorTools
         {
             var sets = new[]
             {
-                new { model = "Jogador", folder = "Jogador", clips = new[] { "Idle", "Correr", "Andar", "Disparada" } },
-                new { model = "Goleiro", folder = "Goleiro", clips = new[] { "GK_Pronto", "GK_DeslocarDir", "GK_DeslocarEsq", "GK_Mergulho", "GK_Caido", "GK_Levantar", "GK_Salto", "GK_Defesa" } },
+                new { model = "Jogador", folder = "Jogador", clips = new[] { "Idle", "Andar", "Trote", "Correr", "Disparada", "ChuteForte", "ChuteColocado", "Cavadinha", "ChuteRasteiro", "Drible" } },
+                new { model = "Goleiro", folder = "Goleiro", clips = new[] { "GK_Pronto", "GK_DeslocarDir", "GK_DeslocarEsq", "GK_Mergulho", "GK_Caido", "GK_Levantar", "GK_Salto", "GK_Defesa", "GK_Lancar", "GK_Chutao" } },
             };
             foreach (var set in sets)
             {
@@ -341,11 +341,11 @@ namespace Craquez.EditorTools
             Keywords(rede, true);
             d["Rede"] = rede;
 
-            var poca = Lit("Poca", T("Poca_Mascara"), T("Poca_Normal"), null, new Color(0.22f, 0.30f, 0.38f, 0.76f), 0.98f, 0.14f, 0.42f);
+            var poca = Lit("Poca", T("Poca_Mascara"), T("Poca_Normal"), null, new Color(0.18f, 0.28f, 0.38f, 0.84f), 0.99f, 0.22f, 0.45f);
             MakeTransparent(poca, true);
             d["Poca"] = poca;
 
-            var encharcado = Lit("GramadoEncharcado", T("Poca_Mascara"), T("Poca_Normal"), null, new Color(0.10f, 0.18f, 0.12f, 0.38f), 0.90f, 0.04f, 0.20f);
+            var encharcado = Lit("GramadoEncharcado", T("Poca_Mascara"), T("Poca_Normal"), null, new Color(0.10f, 0.18f, 0.12f, 0.42f), 0.92f, 0.06f, 0.22f);
             MakeTransparent(encharcado, true);
             d["Encharcado"] = encharcado;
 
@@ -438,14 +438,14 @@ namespace Craquez.EditorTools
             bt.children = ch;
             sm.defaultState = loco;
 
-            foreach (var n in new[] { "ChuteForte", "ChuteColocado", "Cavadinha" })
+            foreach (var n in new[] { "ChuteForte", "ChuteColocado", "Cavadinha", "ChuteRasteiro", "Drible" })
             {
                 var st = sm.AddState(n);
                 st.motion = Clip("Jogador", n);
                 var tr = st.AddTransition(loco);
                 tr.hasExitTime = true;
-                tr.exitTime = 0.8f;
-                tr.duration = 0.2f;
+                tr.exitTime = 0.85f;
+                tr.duration = 0.18f;
             }
             EnableIK(ac);
             EditorUtility.SetDirty(ac);
@@ -511,10 +511,21 @@ namespace Craquez.EditorTools
             getUp.speed = 1.2f;
             getUp.mirrorParameterActive = true;
             getUp.mirrorParameter = "Mirror";
+
+            var throwBall = sm.AddState("GK_Lancar");
+            throwBall.motion = Clip("Goleiro", "GK_Lancar");
+            throwBall.speed = 1.15f;
+
+            var puntBall = sm.AddState("GK_Chutao");
+            puntBall.motion = Clip("Goleiro", "GK_Chutao");
+            puntBall.speed = 1.1f;
+
             var t = getUp.AddTransition(loco); t.hasExitTime = true; t.exitTime = 0.92f; t.duration = 0.2f;
             var t2 = jump.AddTransition(loco); t2.hasExitTime = true; t2.exitTime = 0.95f; t2.duration = 0.25f;
             var t3 = block.AddTransition(loco); t3.hasExitTime = true; t3.exitTime = 0.95f; t3.duration = 0.3f;
             var t4 = dive.AddTransition(getUp); t4.hasExitTime = true; t4.exitTime = 0.97f; t4.duration = 0.2f;
+            var t5 = throwBall.AddTransition(loco); t5.hasExitTime = true; t5.exitTime = 0.92f; t5.duration = 0.25f;
+            var t6 = puntBall.AddTransition(loco); t6.hasExitTime = true; t6.exitTime = 0.90f; t6.duration = 0.25f;
 
             EnableIK(ac);
             EditorUtility.SetDirty(ac);
@@ -585,7 +596,7 @@ namespace Craquez.EditorTools
                 var rt = anim.GetBoneTransform(HumanBodyBones.RightToes);
                 if (lt != null && rt != null)
                 {
-                    float sole = Mathf.Min(lt.position.y, rt.position.y) - 0.031f * height;
+                    float sole = Mathf.Min(lt.position.y, rt.position.y) - 0.0265f * height;
                     model.transform.localPosition -= new Vector3(0f, sole - root.transform.position.y, 0f);
                     Debug.Log("[Craquez 3D] " + name + ": pés apoiados (ajuste " + sole.ToString("0.000") + " m)");
                 }

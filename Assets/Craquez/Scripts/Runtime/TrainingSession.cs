@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 namespace Craquez
@@ -130,11 +130,9 @@ namespace Craquez
             bool gk = Role == PapelControle.Goleiro;
             if (caught)
             {
-                Show(gk ? "QUE DEFESA!" : "DEFESA DO GOLEIRO!", new Color(1f, 0.85f, 0.3f), 2.4f);
                 resultLocked = true;
-                resetAt = Time.time + 2.6f;
+                resetAt = Time.time + 3.6f; // o goleiro repõe a bola com as mãos ou com um chutão
             }
-            else Show(gk ? "ESPALMOU! ATENÇÃO AO REBOTE" : "ESPALMOU!", new Color(1f, 0.85f, 0.3f), 1.6f);
         }
 
         void OnImpact(Vector3 p, float speed, Collider c)
@@ -147,7 +145,7 @@ namespace Craquez
             {
                 au.Post(p, speed / 20f);
                 GameSettings.Vibrar();
-                if (Active && !resultLocked && speed > 4f) Show(n.StartsWith("Travessao") ? "NO TRAVESSÃO!" : "NA TRAVE!", new Color(1f, 0.6f, 0.3f), 1.5f);
+               
             }
             else if (c.GetComponent<GoalNetPanel>() != null) au.Net(p, speed / 15f);
         }
@@ -172,13 +170,12 @@ namespace Craquez
             bool gk = Role == PapelControle.Goleiro;
             if (b.x > L + R && Mathf.Abs(b.z) < Arena.GoalHalfWidth && b.y < Arena.GoalHeight)
             {
-                Show(gk ? "GOL... TENTE DE NOVO" : "GOOOL!", gk ? new Color(1f, 0.45f, 0.4f) : new Color(0.4f, 1f, 0.45f), 2.6f);
-                resultLocked = true; resetAt = Time.time + 3.2f;
+                resultLocked = true; resetAt = Time.time + 4.2f;
+                keeper.RetrieveAndDistribute();
             }
             else if (b.x > L + R || b.x < -L - R || Mathf.Abs(b.z) > Arena.HalfWidth + R)
             {
-                Show("PRA FORA", gk ? new Color(0.4f, 1f, 0.45f) : new Color(1f, 0.45f, 0.4f), 1.8f);
-                resultLocked = true; resetAt = Time.time + 2.2f;
+                resultLocked = true; resetAt = Time.time + 1.6f;
             }
             else
             {
@@ -186,7 +183,7 @@ namespace Craquez
                 float dp = Vector3.Distance(player.transform.position, b);
                 bool aiStuck = gk && Time.time - lastShotTime > 2f && lastShotTime > 0f;
                 ballStillTimer = (still && (dp > 12f || aiStuck) && Time.time - lastShotTime > 2f) ? ballStillTimer + Time.deltaTime : 0f;
-                if (ballStillTimer > (gk ? 2.5f : 6f)) { Show("NOVA BOLA", Color.white, 1.2f); ResetDrill(); }
+                if (ballStillTimer > (gk ? 2.5f : 6f)) ResetDrill();
             }
         }
 
@@ -216,7 +213,6 @@ namespace Craquez
             float bx = W - bw - 20 * s;
             if (TopButton(new Rect(bx, 18 * s, bw, bh), "PAUSA", UiKit.Red, s)) { if (OnPauseRequested != null) OnPauseRequested(); return; }
             if (TopButton(new Rect(bx - (bw + gap), 18 * s, bw, bh), "CÂMERA", UiKit.Blue, s)) cameraRig.Cycle();
-            if (TopButton(new Rect(bx - (bw + gap) * 2f, 18 * s, bw, bh), "NOVA BOLA", UiKit.Blue, s)) ResetDrill();
 
             // barra de força
             if (player.Charging && Role == PapelControle.Atacante)
@@ -301,8 +297,8 @@ namespace Craquez
                        InputBridge.Glyph("drible") + " drible   " + InputBridge.Glyph("arrancada") + " arrancada   " + InputBridge.Glyph("camera") + " câmera";
             }
             if (Role == PapelControle.Goleiro)
-                return "WASD mover   Espaço + direção mergulhar   E defesa   Q saltar   Shift sair do gol   C câmera   R nova bola   Esc pausa";
-            return "WASD mover   Shift correr   Espaço chute   E colocado   Q cavadinha   Z rasteiro   F drible   X arrancada   R nova bola   C câmera   Esc pausa";
+                return "WASD mover   Espaço + direção mergulhar   E defesa   Q saltar   Shift sair do gol   C câmera   Esc pausa";
+            return "WASD mover   Shift correr   Espaço chute   E colocado   Q cavadinha   Z rasteiro   F drible   X arrancada   C câmera   Esc pausa";
         }
 
         void DrawWindArrow(Vector2 center, float len)

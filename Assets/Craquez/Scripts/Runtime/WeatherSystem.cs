@@ -219,7 +219,12 @@ namespace Craquez
             {
                 if (m == null) continue;
                 bool hasPbrMap = m.HasProperty("_MetallicGlossMap") && m.GetTexture("_MetallicGlossMap") != null;
-                m.SetFloat("_Smoothness", hasPbrMap ? Mathf.Lerp(0.95f, 1.0f, p.wetness) : Mathf.Lerp(0.55f, 0.85f, p.wetness));
+                // uniforme e pele ficam levemente mais escuros e reflexivos quando molhados pela chuva
+                if (m.HasProperty("_BaseColor"))
+                    m.SetColor("_BaseColor", Color.Lerp(Color.white, new Color(0.68f, 0.72f, 0.78f, 1f), p.wetness));
+                if (m.HasProperty("_Metallic"))
+                    m.SetFloat("_Metallic", Mathf.Lerp(0f, 0.18f, p.wetness));
+                m.SetFloat("_Smoothness", hasPbrMap ? Mathf.Lerp(0.90f, 1.0f, p.wetness) : Mathf.Lerp(0.50f, 0.90f, p.wetness));
             }
 
             if (puddleField != null)

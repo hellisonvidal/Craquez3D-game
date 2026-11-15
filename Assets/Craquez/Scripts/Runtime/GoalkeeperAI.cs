@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
@@ -85,6 +85,8 @@ namespace Craquez
         float diveStart, diveDuration, diveHeight;
         bool diving;
         float diveSide; // +1 = Direita do goleiro, -1 = Esquerda do goleiro
+        float gkSplashTimer;
+        bool gkSplashLeft;
 
         static readonly int LateralHash = Animator.StringToHash("Lateral");
         static readonly int MirrorHash = Animator.StringToHash("Mirror");
@@ -186,6 +188,8 @@ namespace Craquez
             shotInFlight = false;
             diving = false;
             resolved = false;
+            repo = Reposicao.Nenhuma;
+            retrieveAt = -1f;
             ikWeight = 0f;
             SetCapsuleStanding(true);
             if (sockets != null)
@@ -475,6 +479,7 @@ namespace Craquez
                 Physics.IgnoreCollision(bodyCapsule, ball.Sphere, true);
 
             if (reactAt > 0f && Time.time >= reactAt) React();
+            UpdateDistribution();
 
             switch (State)
             {
@@ -503,8 +508,8 @@ namespace Craquez
 
                 case Estado.ComBola:
                     velocity = Vector3.zero;
-                    ikWeight = Mathf.MoveTowards(ikWeight, 0.85f, dt * 4f);
-                    if (diving && stateTime > 0.95f)
+                    ikWeight = Mathf.MoveTowards(ikWeight, repo == Reposicao.Nenhuma ? 0.85f : 0f, dt * 4f);
+                    if (diving && stateTime > 0.95f && repo == Reposicao.Nenhuma)
                     {
                         diving = false;
                         SetCapsuleStanding(true);
@@ -522,9 +527,23 @@ namespace Craquez
             bool ready = State == Estado.Posicionando && !diving;
             if (grounder == null) grounder = GetComponent<FootGrounder>();
             if (grounder != null)
-                grounder.grounding = ready || (State == Estado.Defendendo && !diving);
+                grounder.grounding = ready || (State == Estado.Defendendo && !diving) || (State == Estado.ComBola && !diving);
 
             readyWeight = Mathf.MoveTowards(readyWeight, ready ? 0.32f : 0f, dt * (ready ? 2.5f : 6f));
+
+            // Passadas e respingos do goleiro em poças d'água
+            gkSplashTimer -= dt;
+            var pfGk = PuddleField.Instance;
+            float gkDepth;
+            if (pfGk != null && velocity.magnitude > 0.8f && gkSplashTimer <= 0f && pfGk.SurfaceAt(transform.position, out gkDepth) != Superficie.Grama)
+            {
+                gkSplashLeft = !gkSplashLeft;
+                Vector3 foot = gkSplashLeft
+                    ? (sockets != null ? sockets.LeftFootContactPosition : transform.position - transform.right * 0.14f)
+                    : (sockets != null ? sockets.RightFootContactPosition : transform.position + transform.right * 0.14f);
+                pfGk.FootStep(foot, Mathf.Clamp01(velocity.magnitude / maxShuffleSpeed) * Mathf.Max(0.4f, gkDepth));
+                gkSplashTimer = Mathf.Lerp(0.38f, 0.20f, Mathf.Clamp01(velocity.magnitude / maxShuffleSpeed));
+            }
         }
 
         /// <summary>
@@ -865,6 +884,98 @@ namespace Craquez
             }
             State = Estado.ComBola;
             stateTime = 0f;
+        }
+
+        // ------------------------------------------------------------ Reposição de bola (arremesso com as mãos ou chutão)
+
+        enum Reposicao { Nenhuma, Segurando, Arremesso, Chutao }
+        Reposicao repo = Reposicao.Nenhuma;
+        float repoStart, repoAt;
+        bool repoReleased;
+        float retrieveAt = -1f;
+
+        /// <summary>Depois de um gol: o goleiro pega a bola no fundo da rede e repõe em jogo.</summary>
+        public void RetrieveAndDistribute()
+        {
+            retrieveAt = Time.time + 0.9f;
+        }
+
+        void BeginDistribution()
+        {
+            repoStart = Time.time;
+            repoReleased = false;
+            bool punt = Random.value < 0.45f;
+            repo = punt ? Reposicao.Chutao : Reposicao.Arremesso;
+            repoAt = punt ? 0.5f : 0.68f;
+            if (anim != null) anim.CrossFadeInFixedTime(punt ? "GK_Chutao" : "GK_Lancar", 0.12f);
+        }
+
+        Vector3 FieldDirection()
+        {
+            float ang = Random.Range(-28f, 28f);
+            return Quaternion.Euler(0f, ang, 0f) * (-Vector3.right);
+        }
+
+        void UpdateDistribution()
+        {
+            if (retrieveAt > 0f && Time.time >= retrieveAt && ball != null)
+            {
+                retrieveAt = -1f;
+                diving = false;
+                SetCapsuleStanding(true);
+                if (anim != null) anim.CrossFadeInFixedTime("Locomocao", 0.1f);
+                transform.rotation = Quaternion.LookRotation(-Vector3.right);
+                HoldBallInCatchSocket();
+                repo = Reposicao.Nenhuma;
+            }
+            if (ball == null) return;
+
+            if (repo == Reposicao.Nenhuma)
+            {
+                if (State != Estado.ComBola) return;
+                float wait = (diving || stateTime > 1.2f) ? 1.35f : 0.8f;
+                if (ball.IsHeld && stateTime > wait) BeginDistribution();
+                return;
+            }
+
+            float t = Time.time - repoStart;
+            if (repo == Reposicao.Arremesso)
+            {
+                if (!repoReleased && t >= repoAt)
+                {
+                    repoReleased = true;
+                    Vector3 d = FieldDirection();
+                    ball.Deflect(d * Random.Range(12f, 16f) + Vector3.up * Random.Range(4.5f, 6.5f), Vector3.zero);
+                }
+            }
+            else
+            {
+                if (!repoReleased && t >= 0.14f && t < repoAt)
+                {
+                    // solta a bola para quicar na frente do pé
+                    if (ball.IsHeld) ball.Deflect(transform.forward * 0.6f + Vector3.down * 0.2f, Vector3.zero);
+                }
+                if (!repoReleased && t >= repoAt)
+                {
+                    repoReleased = true;
+                    Vector3 foot = rFoot != null ? rFoot.position : transform.position + transform.forward * 0.4f;
+                    Vector3 p = foot + transform.forward * 0.18f; p.y = Mathf.Max(foot.y, 0.18f);
+                    Vector3 d = FieldDirection();
+                    ball.PlaceAt(p);
+                    ball.Deflect(d * Random.Range(19f, 24f) + Vector3.up * Random.Range(11f, 14f), Vector3.Cross(d, Vector3.up) * 25f);
+                    if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.Kick(p, 0.9f);
+                }
+            }
+
+            if (t > 1.1f)
+            {
+                repo = Reposicao.Nenhuma;
+                State = Estado.Posicionando;
+                stateTime = 0f;
+                ActiveQuadrant = QuadranteDefesa.Nenhum;
+                if (sockets != null) sockets.lockHipsHorizontalInPlace = true;
+                if (anim != null) { anim.SetBool(MirrorHash, false); anim.CrossFadeInFixedTime("Locomocao", 0.3f); }
+            }
         }
 
         void Grab()

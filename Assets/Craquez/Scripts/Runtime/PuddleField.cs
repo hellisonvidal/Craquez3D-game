@@ -57,9 +57,9 @@ namespace Craquez
             rippleSpeed = ripple;
             ripplesPerSecond = ripplesPerSec;
             rng = new System.Random(seed);
-            // áreas encharcadas primeiro (maiores, mais rasas), poças depois
-            Place(soaked, soakedCount, 2.2f, 5.0f, sizeScale, soakedMat, 0.005f, 0.6f);
-            Place(puddles, puddleCount, 0.9f, 2.6f, sizeScale, puddleMat, 0.008f, 0.9f);
+            // áreas encharcadas primeiro (maiores, mais rasas), poças depois (acima das linhas do campo)
+            Place(soaked, soakedCount, 2.2f, 5.0f, sizeScale, soakedMat, 0.007f, 0.6f);
+            Place(puddles, puddleCount, 0.9f, 2.6f, sizeScale, puddleMat, 0.011f, 0.9f);
             totalPuddleArea = 0f;
             foreach (var p in puddles) totalPuddleArea += p.areaM2;
         }
@@ -164,6 +164,24 @@ namespace Craquez
             foreach (var p in puddles)
                 if ((q - p.center).magnitude < p.radius * 1.35f + margin) return true;
             return false;
+        }
+
+        /// <summary>Gera ondas concêntricas e respingos no ponto da passada sobre poça ou gramado encharcado.</summary>
+        public void FootStep(Vector3 worldPos, float intensity)
+        {
+            if (ripples != null)
+            {
+                var ep = new ParticleSystem.EmitParams
+                {
+                    position = new Vector3(worldPos.x, 0.015f, worldPos.z),
+                    startSize = Mathf.Lerp(0.32f, 0.65f, Mathf.Clamp01(intensity)),
+                    startLifetime = Mathf.Lerp(0.45f, 0.72f, Mathf.Clamp01(intensity)),
+                    startColor = new Color(0.88f, 0.94f, 1f, 0.85f)
+                };
+                ripples.Emit(ep, 1);
+            }
+            if (WeatherSystem.Instance != null)
+                WeatherSystem.Instance.Splash(worldPos, Mathf.Clamp01(intensity));
         }
 
         bool RandomPointInPuddle(out Vector3 pos)
