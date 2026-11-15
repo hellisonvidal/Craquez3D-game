@@ -459,8 +459,9 @@ namespace Craquez
             float rootStrikeDist = Vector3.Distance(new Vector3(bp.x, 0f, bp.z), new Vector3(strike.x, 0f, strike.z));
             float effectiveOff = Mathf.Min(footDist, rootStrikeDist);
 
-            // Valida se a bola está dentro do alcance do pé (Foot_R / Foot_L) ou do ponto de batida
-            if (effectiveOff > kickFootReach || bp.y > 0.95f) return;
+            // Valida se a bola está dentro do alcance do pé (Foot_R / Foot_L) ou do ponto de batida (ou cabeça/voleio no ar)
+            float maxBallY = (activeKickState == "Cabeceio" || activeKickState == "Voleio") ? 2.35f : 0.95f;
+            if (effectiveOff > kickFootReach || bp.y > maxBallY) return;
 
             Vector3 spin;
             ballVelAtContact = ball.Velocity;
@@ -514,6 +515,7 @@ namespace Craquez
                 ball.Body.angularVelocity = Vector3.zero;
                 velocity *= 0.25f;
                 touchEnd = 0f; nextTouchAt = Time.time + 0.25f; lastTouchAt = Time.time;
+                if (anim != null) anim.CrossFadeInFixedTime("Dominio", 0.08f, 0, 0f);
                 Move("PAROU A BOLA");
                 return;
             }

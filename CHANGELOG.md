@@ -2,6 +2,11 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.5.9] — 2026-11-15
+
+- **Goleiro (Locomoção 2D e Novas Animações):** Adicionadas animações `GK_Andar` e `GK_Correr` (de `Craquez-GK.zip`), `GK_Recuar`, `GK_Espera` e `GK_Soco`, com BlendTree 2D (`Lateral` + `Forward`) para avançar/recuar/deslocar naturalmente, e duração sincronizada de mergulho e levantamento.
+- **Atacante (Física de Chutes Aéreos e Domínio):** Liberado contato em bolas altas (`y <= 2.35m`) para `Cabeceio` e `Voleio`, e acionamento de `Dominio` ao parar a bola.
+
 ## [0.5.8] — 2026-11-15
 
 - **Goleiro:** Restaurado mergulho lateral real em `GK_Mergulho` (esquerda/direita via `Mirror`) e incluídas todas as animações extras (`GK_Orientar`, `GK_PosicionarBola`, `GK_Frustracao`, `GK_Carrinho`).

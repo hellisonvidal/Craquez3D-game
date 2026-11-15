@@ -13,17 +13,17 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 15;
+        public const int Version = 16;
 
         static readonly string[] LoopClips =
         {
-            "Idle", "Andar", "Trote", "Correr", "Disparada", "GK_Pronto", "GK_DeslocarEsq", "GK_DeslocarDir", "GK_Caido"
+            "Idle", "Andar", "Trote", "Correr", "Disparada", "GK_Pronto", "GK_DeslocarEsq", "GK_DeslocarDir", "GK_Andar", "GK_Correr", "GK_Recuar", "GK_Espera", "GK_Caido"
         };
 
         // Clipes de ação vertical/solo do goleiro: preservam a altura Y real do salto/mergulho/queda sem achatar nos pés
         static readonly string[] FreeHeightClips =
         {
-            "GK_Salto", "GK_Mergulho", "GK_Caido", "GK_Levantar"
+            "GK_Salto", "GK_Mergulho", "GK_Soco", "GK_Caido", "GK_Levantar"
         };
 
         public override uint GetVersion() { return Version; }

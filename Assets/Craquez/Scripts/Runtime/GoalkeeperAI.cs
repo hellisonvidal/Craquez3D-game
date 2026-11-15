@@ -89,6 +89,7 @@ namespace Craquez
         bool gkSplashLeft;
 
         static readonly int LateralHash = Animator.StringToHash("Lateral");
+        static readonly int ForwardHash = Animator.StringToHash("Forward");
         static readonly int MirrorHash = Animator.StringToHash("Mirror");
         static readonly int DiveSpeedHash = Animator.StringToHash("DiveSpeed");
 
@@ -373,7 +374,8 @@ namespace Craquez
             if (anim != null)
             {
                 anim.SetBool(MirrorHash, lateralOffset < 0f);
-                anim.CrossFadeInFixedTime("GK_Salto", 0.07f, 0, 0.08f);
+                string jumpState = Mathf.Abs(lateralOffset) < 0.45f ? "GK_Soco" : "GK_Salto";
+                anim.CrossFadeInFixedTime(jumpState, 0.07f, 0, 0.05f);
             }
         }
 
@@ -533,10 +535,9 @@ namespace Craquez
             if (anim != null)
             {
                 float latVel = Vector3.Dot(velocity, transform.right);
-                float speed = velocity.magnitude;
-                if (speed > 0.25f && Mathf.Abs(latVel) < 0.35f)
-                    latVel = (latVel >= 0f ? 1f : -1f) * speed * 0.85f;
-                anim.SetFloat(LateralHash, latVel * 1.45f, 0.12f, dt);
+                float fwdVel = Vector3.Dot(velocity, transform.forward);
+                anim.SetFloat(LateralHash, latVel * 1.25f, 0.12f, dt);
+                anim.SetFloat(ForwardHash, fwdVel, 0.12f, dt);
             }
 
             bool ready = State == Estado.Posicionando && !diving;
@@ -702,7 +703,7 @@ namespace Craquez
                             anim.GetNextAnimatorStateInfo(0).IsName("GK_Mergulho") ||
                             anim.GetCurrentAnimatorStateInfo(0).IsName("GK_Carrinho") ||
                             anim.GetNextAnimatorStateInfo(0).IsName("GK_Carrinho"));
-            float total = diving ? 1.12f : 0.85f;
+            float total = diving ? Mathf.Clamp(diveDuration + 0.42f, 0.78f, 1.15f) : 0.72f;
             if (stateTime > total)
             {
                 State = Estado.Recuperando;
@@ -713,7 +714,7 @@ namespace Craquez
 
                 if (wasDive)
                 {
-                    recoverTime = 1.0f;
+                    recoverTime = 0.85f;
                     if (anim != null) anim.CrossFadeInFixedTime("GK_Levantar", 0.18f);
                 }
                 else

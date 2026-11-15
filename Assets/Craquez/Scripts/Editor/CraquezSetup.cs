@@ -146,7 +146,7 @@ namespace Craquez.EditorTools
             var sets = new[]
             {
                 new { model = "Jogador", folder = "Jogador", clips = new[] { "Idle", "Andar", "Trote", "Correr", "Disparada", "ChuteForte", "ChuteColocado", "Cavadinha", "ChuteRasteiro", "Drible", "Dominio", "Cabeceio", "Voleio", "Carrinho" } },
-                new { model = "Goleiro", folder = "Goleiro", clips = new[] { "GK_Pronto", "GK_DeslocarDir", "GK_DeslocarEsq", "GK_Mergulho", "GK_Caido", "GK_Levantar", "GK_Salto", "GK_Defesa", "GK_Lancar", "GK_Chutao", "GK_Orientar", "GK_PosicionarBola", "GK_Frustracao", "GK_Carrinho" } },
+                new { model = "Goleiro", folder = "Goleiro", clips = new[] { "GK_Pronto", "GK_DeslocarDir", "GK_DeslocarEsq", "GK_Andar", "GK_Correr", "GK_Recuar", "GK_Espera", "GK_Soco", "GK_Mergulho", "GK_Caido", "GK_Levantar", "GK_Salto", "GK_Defesa", "GK_Lancar", "GK_Chutao", "GK_Orientar", "GK_PosicionarBola", "GK_Frustracao", "GK_Carrinho" } },
             };
             foreach (var set in sets)
             {
@@ -458,6 +458,7 @@ namespace Craquez.EditorTools
         {
             var ac = NewController("Goleiro");
             ac.AddParameter("Lateral", AnimatorControllerParameterType.Float);
+            ac.AddParameter("Forward", AnimatorControllerParameterType.Float);
             ac.AddParameter("Mirror", AnimatorControllerParameterType.Bool);
             ac.AddParameter("DiveSpeed", AnimatorControllerParameterType.Float);
             var pars = ac.parameters;
@@ -465,23 +466,33 @@ namespace Craquez.EditorTools
             ac.parameters = pars;
             var sm = ac.layers[0].stateMachine;
 
-            // animações próprias do goleiro
+            // animações próprias do goleiro (locomoção 2D: lateral + avanço/recuo)
             var idle = Clip("Goleiro", "GK_Pronto");
             var left = Clip("Goleiro", "GK_DeslocarEsq");
             var right = Clip("Goleiro", "GK_DeslocarDir");
+            var walkFwd = Clip("Goleiro", "GK_Andar");
+            var runFwd = Clip("Goleiro", "GK_Correr");
+            var walkBack = Clip("Goleiro", "GK_Recuar");
             float sl = NativeSpeed(left, 1.85f), sr = NativeSpeed(right, 1.85f);
 
             BlendTree bt;
             var loco = ac.CreateBlendTreeInController("Locomocao", out bt, 0);
-            bt.blendType = BlendTreeType.Simple1D;
+            bt.blendType = BlendTreeType.FreeformDirectional2D;
             bt.blendParameter = "Lateral";
+            bt.blendParameterY = "Forward";
             bt.useAutomaticThresholds = false;
-            bt.AddChild(left, -sl);
-            bt.AddChild(idle, 0f);
-            bt.AddChild(right, sr);
+            bt.AddChild(idle, new Vector2(0f, 0f));
+            bt.AddChild(left, new Vector2(-sl, 0f));
+            bt.AddChild(right, new Vector2(sr, 0f));
+            if (walkFwd != null) bt.AddChild(walkFwd, new Vector2(0f, 1.6f));
+            if (runFwd != null) bt.AddChild(runFwd, new Vector2(0f, 4.5f));
+            if (walkBack != null) bt.AddChild(walkBack, new Vector2(0f, -2.2f));
             var gkCh = bt.children;
-            gkCh[0].timeScale = 1.25f;
-            gkCh[2].timeScale = 1.25f;
+            if (gkCh.Length >= 3)
+            {
+                gkCh[1].timeScale = 1.25f;
+                gkCh[2].timeScale = 1.25f;
+            }
             bt.children = gkCh;
             sm.defaultState = loco;
 
@@ -537,6 +548,13 @@ namespace Craquez.EditorTools
             slideSave.mirrorParameterActive = true;
             slideSave.mirrorParameter = "Mirror";
 
+            var waitIdle = sm.AddState("GK_Espera");
+            waitIdle.motion = Clip("Goleiro", "GK_Espera");
+
+            var punchJump = sm.AddState("GK_Soco");
+            punchJump.motion = Clip("Goleiro", "GK_Soco");
+            punchJump.speed = 1.15f;
+
             var t = getUp.AddTransition(loco); t.hasExitTime = true; t.exitTime = 0.92f; t.duration = 0.2f;
             var t2 = jump.AddTransition(loco); t2.hasExitTime = true; t2.exitTime = 0.95f; t2.duration = 0.25f;
             var t3 = block.AddTransition(loco); t3.hasExitTime = true; t3.exitTime = 0.95f; t3.duration = 0.3f;
@@ -547,6 +565,8 @@ namespace Craquez.EditorTools
             var t8 = placeBall.AddTransition(loco); t8.hasExitTime = true; t8.exitTime = 0.95f; t8.duration = 0.2f;
             var t9 = missReact.AddTransition(loco); t9.hasExitTime = true; t9.exitTime = 0.95f; t9.duration = 0.25f;
             var t10 = slideSave.AddTransition(getUp); t10.hasExitTime = true; t10.exitTime = 0.92f; t10.duration = 0.2f;
+            var t11 = waitIdle.AddTransition(loco); t11.hasExitTime = true; t11.exitTime = 0.95f; t11.duration = 0.25f;
+            var t12 = punchJump.AddTransition(loco); t12.hasExitTime = true; t12.exitTime = 0.95f; t12.duration = 0.22f;
 
             EnableIK(ac);
             EditorUtility.SetDirty(ac);
