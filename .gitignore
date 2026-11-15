@@ -24,3 +24,6 @@ crashlytics-build.properties
 *.keystore
 *.jks
 /Diagnostico/
+
+__pycache__/
+*.pyc

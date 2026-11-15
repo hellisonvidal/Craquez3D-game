@@ -13,7 +13,7 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 11;
+        public const int Version = 12;
 
         static readonly string[] LoopClips =
         {
@@ -45,6 +45,11 @@ namespace Craquez.EditorTools
                     mi.importAnimation = false;
                     mi.optimizeGameObjects = false;
                     mi.skinWeights = ModelImporterSkinWeights.Standard;
+                    mi.meshCompression = ModelImporterMeshCompression.Off;
+                    mi.importNormals = ModelImporterNormals.Import;
+                    mi.importTangents = ModelImporterTangents.CalculateMikk;
+                    mi.optimizeMeshPolygons = true;
+                    mi.optimizeMeshVertices = true;
                 }
                 else
                 {
@@ -101,9 +106,16 @@ namespace Craquez.EditorTools
             if (!assetPath.StartsWith(Root)) return;
             var ti = (TextureImporter)assetImporter;
             string f = Path.GetFileNameWithoutExtension(assetPath);
-            ti.maxTextureSize = f == "Estadio_Albedo" ? 4096 : 2048;
+            bool isCharTex = f.StartsWith("Jogador_") || f.StartsWith("Goleiro_");
+            ti.maxTextureSize = (f == "Estadio_Albedo" || isCharTex) ? 4096 : 2048;
             ti.wrapMode = TextureWrapMode.Clamp;
 
+            if (isCharTex)
+            {
+                ti.textureCompression = TextureImporterCompression.CompressedHQ;
+                ti.anisoLevel = 8;
+                ti.mipmapEnabled = true;
+            }
             if (f.EndsWith("_Normal"))
             {
                 ti.textureType = TextureImporterType.NormalMap;
@@ -111,7 +123,7 @@ namespace Craquez.EditorTools
             if (f.EndsWith("_MetallicSmoothness"))
             {
                 ti.sRGBTexture = false;
-                ti.maxTextureSize = 1024;
+                ti.maxTextureSize = isCharTex ? 4096 : 1024;
             }
             if (f.StartsWith("Grama") || f.StartsWith("Poca") || f == "Rede" || f == "Nuvens")
             {

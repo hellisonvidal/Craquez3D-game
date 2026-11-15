@@ -2,6 +2,14 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [0.5.1] — 2026-11-14
+
+### Modelos 3D e Texturas PBR em Qualidade Máxima (Meshy Original)
+- **Goleiro (`VuNdbh` — `brazilian_goalkeeper_3d`):** Substituído pelo modelo original de alta fidelidade do Meshy (**102.987 triângulos**, sem o `Decimate` agressivo de 32k faces que destruía a topologia do rosto, cabelo e luvas), acompanhado das texturas PBR nativas em **4096×4096 PNG lossless** (`Goleiro_Albedo.png`, `Goleiro_Normal.png` e `Goleiro_MetallicSmoothness.png`).
+- **Jogador de Linha (`JqcJU3`):** Substituído pelo modelo remeshado original do Meshy com esqueleto completo de **66 ossos** (incluindo todas as falanges dos dedos das duas mãos, eliminando o colapso de pesos em ossos genéricos `Bone_019..036`) e texturas PBR em **PNG lossless** (`Jogador_Albedo.png`, `Jogador_Normal.png` e `Jogador_MetallicSmoothness.png`), removendo a compressão JPEG com perdas.
+- **Alinhamento Limpo de Esqueleto e Normais Originais (`mesh_smooth_type='OFF'`):** Preservação das normais por vértice originais do Meshy e cálculo de tangentes MikkTSpace (`ModelImporterTangents.CalculateMikk`), com `skinWeights = Standard`, `meshCompression = Off` e animações nativas (`Andar`, `Correr`, `Disparada` e conjunto `GK_*`) re-exportadas para os novos esqueletos.
+- **Calibração PBR no URP (`Lit`):** Ajuste do multiplicador `_Smoothness` para `1.0f` nos materiais com mapa `_MetallicGlossMap` (respeitando fielmente o mapa `1 - Roughness` do Meshy sem aspecto emborrachado ou plástico) e aumento do limite de importação para `4096px` com `CompressedHQ` e filtro anisotrópico `8x`.
+
 ## [0.5.0] — 2026-11-14
 
 ### Arquitetura de Personagens (3 Camadas) e Física 3D

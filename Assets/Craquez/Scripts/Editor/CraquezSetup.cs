@@ -323,8 +323,9 @@ namespace Craquez.EditorTools
         static Dictionary<string, Material> CreateMaterials()
         {
             var d = new Dictionary<string, Material>();
-            d["Jogador"] = Lit("Jogador", T("Jogador_Albedo"), T("Jogador_Normal"), T("Jogador_MetallicSmoothness"), Color.white, 0.55f);
-            d["Goleiro"] = Lit("Goleiro", T("Goleiro_Albedo"), T("Goleiro_Normal"), T("Goleiro_MetallicSmoothness"), Color.white, 0.55f);
+            // Smoothness = 1.0f porque o canal Alpha do mapa MetallicSmoothness já contém o inverso exato do Roughness do Meshy (1 - Roughness)
+            d["Jogador"] = Lit("Jogador", T("Jogador_Albedo"), T("Jogador_Normal"), T("Jogador_MetallicSmoothness"), Color.white, 1.0f, 0f, 1.0f);
+            d["Goleiro"] = Lit("Goleiro", T("Goleiro_Albedo"), T("Goleiro_Normal"), T("Goleiro_MetallicSmoothness"), Color.white, 1.0f, 0f, 1.0f);
             d["Bola"] = Lit("Bola", T("Bola_Albedo"), T("Bola_Normal"), T("Bola_MetallicSmoothness"), Color.white, 0.75f);
             d["Estadio"] = Lit("Estadio", T("Estadio_Albedo"), T("Estadio_Normal"), T("Estadio_MetallicSmoothness"), Color.white, 0.4f, 0f, 0.8f);
             d["GramaClara"] = Lit("GramaClara", T("Grama_Albedo"), T("Grama_Normal"), null, new Color(0.92f, 1f, 0.9f), 0.12f, 0f, 0.6f);

@@ -216,7 +216,11 @@ namespace Craquez
                 m.SetFloat("_Smoothness", Mathf.Lerp(0.12f, 0.36f, p.wetness)); // brilho molhado sem "estourar" nos refletores
             }
             foreach (var m in characterMaterials)
-                m.SetFloat("_Smoothness", Mathf.Lerp(0.55f, 0.85f, p.wetness));
+            {
+                if (m == null) continue;
+                bool hasPbrMap = m.HasProperty("_MetallicGlossMap") && m.GetTexture("_MetallicGlossMap") != null;
+                m.SetFloat("_Smoothness", hasPbrMap ? Mathf.Lerp(0.95f, 1.0f, p.wetness) : Mathf.Lerp(0.55f, 0.85f, p.wetness));
+            }
 
             if (puddleField != null)
                 puddleField.Generate(p.puddles, p.soakedAreas, p.puddleDepth, p.puddleSize, p.rippleSpeed, p.ripplesPerSecond, UnityEngine.Random.Range(0, 100000));
