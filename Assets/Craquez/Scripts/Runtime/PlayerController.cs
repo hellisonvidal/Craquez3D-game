@@ -287,6 +287,9 @@ namespace Craquez
             p.z = Mathf.Clamp(p.z, -Arena.FenceZ + 1f, Arena.FenceZ - 1f);
             p.y = 0f;
 
+            // Evita sobreposição com outros jogadores (evita atravessar o goleiro/outro jogador)
+            p = ResolvePlayerCollisions(p);
+
             transform.position = p;
 
             // --- Turn Rate Dinâmico: 540°/s em baixa velocidade/proteção de bola; 300°/s durante Sprint
@@ -923,6 +926,43 @@ namespace Craquez
             v = Mathf.Clamp(v, 6f, 26f);
             Vector3 dir = flat.normalized;
             return dir * (v * Mathf.Cos(th)) + Vector3.up * (v * Mathf.Sin(th));
+        }
+
+        /// <summary>
+        /// Resolve colisão entre jogadores para evitar sobreposição de cápsulas.
+        /// Aplica uma força de repulsão simples quando as cápsulas dos jogadores se intersectam.
+        /// </summary>
+        Vector3 ResolvePlayerCollisions(Vector3 proposedPos)
+        {
+            if (bodyCapsule == null) return proposedPos;
+
+            Collider[] hits = Physics.OverlapCapsule(
+                proposedPos + bodyCapsule.center,
+                proposedPos + bodyCapsule.center + Vector3.up * (bodyCapsule.height - bodyCapsule.radius * 2f),
+                bodyCapsule.radius,
+                1 << Arena.LayerPlayerBody
+            );
+
+            Vector3 result = proposedPos;
+            foreach (var hit in hits)
+            {
+                if (hit == bodyCapsule) continue;
+                if (hit.attachedRigidbody != null && hit.attachedRigidbody.isKinematic)
+                {
+                    // Calcula direção de repulsão
+                    Vector3 dir = (proposedPos - hit.bounds.center);
+                    dir.y = 0f;
+                    if (dir.sqrMagnitude < 1e-4f) dir = transform.right;
+
+                    float overlap = (bodyCapsule.radius + hit.bounds.extents.x) - dir.magnitude;
+                    if (overlap > 0f)
+                    {
+                        dir.Normalize();
+                        result += dir * (overlap + 0.02f); // Pequeno buffer extra
+                    }
+                }
+            }
+            return result;
         }
 
         // ------------------------------------------------------------ IK (Olhar para a bola)
