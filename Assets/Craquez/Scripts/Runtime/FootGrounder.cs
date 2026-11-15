@@ -47,7 +47,7 @@ namespace Craquez
         void LateUpdate()
         {
             if (!ready) return;
-            float target = offset; // desligado (mergulho/salto): mantém a correção atual
+            float target = 0f; // desligado (mergulho/salto/levantar): retorna suavemente para 0 sem flutuar
             if (grounding)
             {
                 float y0 = transform.position.y;
@@ -57,7 +57,7 @@ namespace Craquez
                     Mathf.Min((lToe != null ? lToe.position.y : lFoot.position.y) - y0 - lToeRest,
                               (rToe != null ? rToe.position.y : rFoot.position.y) - y0 - rToeRest));
                 target = offset - c;
-                target = Mathf.Clamp(target, -0.6f, 0.6f);
+                target = Mathf.Clamp(target, -0.35f, 0.35f);
             }
             offset = Mathf.Lerp(offset, target, 1f - Mathf.Exp(-speed * Time.deltaTime));
             model.localPosition = baseLocal + Vector3.up * offset / Mathf.Max(1e-4f, transform.lossyScale.y);

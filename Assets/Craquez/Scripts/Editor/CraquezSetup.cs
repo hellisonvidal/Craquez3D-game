@@ -145,7 +145,7 @@ namespace Craquez.EditorTools
         {
             var sets = new[]
             {
-                new { model = "Jogador", folder = "Jogador", clips = new[] { "Correr", "Andar", "Disparada" } },
+                new { model = "Jogador", folder = "Jogador", clips = new[] { "Idle", "Correr", "Andar", "Disparada" } },
                 new { model = "Goleiro", folder = "Goleiro", clips = new[] { "GK_Pronto", "GK_DeslocarDir", "GK_DeslocarEsq", "GK_Mergulho", "GK_Caido", "GK_Levantar", "GK_Salto", "GK_Defesa" } },
             };
             foreach (var set in sets)
@@ -341,11 +341,11 @@ namespace Craquez.EditorTools
             Keywords(rede, true);
             d["Rede"] = rede;
 
-            var poca = Lit("Poca", null, T("Poca_Normal"), null, new Color(0.16f, 0.2f, 0.24f, 0.55f), 0.97f, 0f, 0.35f);
+            var poca = Lit("Poca", T("Poca_Mascara"), T("Poca_Normal"), null, new Color(0.22f, 0.30f, 0.38f, 0.76f), 0.98f, 0.14f, 0.42f);
             MakeTransparent(poca, true);
             d["Poca"] = poca;
 
-            var encharcado = Lit("GramadoEncharcado", null, T("Poca_Normal"), null, new Color(0.12f, 0.2f, 0.1f, 0.18f), 0.85f, 0f, 0.15f);
+            var encharcado = Lit("GramadoEncharcado", T("Poca_Mascara"), T("Poca_Normal"), null, new Color(0.10f, 0.18f, 0.12f, 0.38f), 0.90f, 0.04f, 0.20f);
             MakeTransparent(encharcado, true);
             d["Encharcado"] = encharcado;
 
@@ -463,11 +463,11 @@ namespace Craquez.EditorTools
             ac.parameters = pars;
             var sm = ac.layers[0].stateMachine;
 
-            // animações próprias do goleiro (geradas em tools/gkanim a partir do esqueleto dele)
+            // animações próprias do goleiro
             var idle = Clip("Goleiro", "GK_Pronto");
             var left = Clip("Goleiro", "GK_DeslocarEsq");
             var right = Clip("Goleiro", "GK_DeslocarDir");
-            float sl = NativeSpeed(left, 2.6f), sr = NativeSpeed(right, 2.6f);
+            float sl = NativeSpeed(left, 1.85f), sr = NativeSpeed(right, 1.85f);
 
             BlendTree bt;
             var loco = ac.CreateBlendTreeInController("Locomocao", out bt, 0);
@@ -477,6 +477,10 @@ namespace Craquez.EditorTools
             bt.AddChild(left, -sl);
             bt.AddChild(idle, 0f);
             bt.AddChild(right, sr);
+            var gkCh = bt.children;
+            gkCh[0].timeScale = 1.25f;
+            gkCh[2].timeScale = 1.25f;
+            bt.children = gkCh;
             sm.defaultState = loco;
 
             // mergulho: a animação base vai para a DIREITA do goleiro; o parâmetro Mirror leva para a esquerda

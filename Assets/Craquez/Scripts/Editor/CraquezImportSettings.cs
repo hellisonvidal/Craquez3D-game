@@ -13,11 +13,17 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 12;
+        public const int Version = 14;
 
         static readonly string[] LoopClips =
         {
             "Idle", "Andar", "Trote", "Correr", "Disparada", "GK_Pronto", "GK_DeslocarEsq", "GK_DeslocarDir", "GK_Caido"
+        };
+
+        // Clipes de ação vertical/solo do goleiro: preservam a altura Y real do salto/mergulho/queda sem achatar nos pés
+        static readonly string[] FreeHeightClips =
+        {
+            "GK_Salto", "GK_Mergulho", "GK_Caido", "GK_Levantar"
         };
 
         public override uint GetVersion() { return Version; }
@@ -80,6 +86,7 @@ namespace Craquez.EditorTools
             var mi = (ModelImporter)assetImporter;
             string file = Path.GetFileNameWithoutExtension(assetPath);
             bool loop = System.Array.IndexOf(LoopClips, file) >= 0;
+            bool freeHeight = System.Array.IndexOf(FreeHeightClips, file) >= 0;
             var clips = mi.defaultClipAnimations;
             if (clips == null || clips.Length == 0) return;
             for (int i = 0; i < clips.Length; i++)
@@ -88,14 +95,15 @@ namespace Craquez.EditorTools
                 c.name = clips.Length == 1 ? file : file + "_" + i;
                 c.loopTime = loop;
                 c.loopPose = loop;
-                // Rotação, altura e deslocamentos horizontais travados (In-Place puro) para evitar desalinhamento com a cápsula
+                // Rotação e deslocamentos horizontais travados (In-Place) para evitar desalinhamento com a cápsula.
+                // Nos clipes de salto/mergulho/queda (FreeHeightClips), preserva a curva vertical real (RootT.y).
                 c.lockRootRotation = true;
                 c.keepOriginalOrientation = true;
                 c.lockRootHeightY = true;
                 c.keepOriginalPositionY = true;
                 c.lockRootPositionXZ = true;
                 c.keepOriginalPositionXZ = false;
-                c.heightFromFeet = true; // altura do corpo calculada a partir dos pés: nada de "flutuar"
+                c.heightFromFeet = !freeHeight;
                 clips[i] = c;
             }
             mi.clipAnimations = clips;
@@ -125,16 +133,23 @@ namespace Craquez.EditorTools
                 ti.sRGBTexture = false;
                 ti.maxTextureSize = isCharTex ? 4096 : 1024;
             }
-            if (f.StartsWith("Grama") || f.StartsWith("Poca") || f == "Rede" || f == "Nuvens")
+            if (f.StartsWith("Grama") || f == "Poca_Normal" || f == "Rede" || f == "Nuvens")
             {
                 ti.wrapMode = TextureWrapMode.Repeat;
                 ti.anisoLevel = 8;
                 ti.mipmapEnabled = true;
             }
-            if (f == "Chuva_Gota" || f == "Respingo" || f == "Rede" || f == "Nuvens" || f == "UI_Circulo" || f == "Anel")
+            if (f == "Poca_Mascara" || f == "Chuva_Gota" || f == "Respingo" || f == "Rede" || f == "Nuvens" || f == "UI_Circulo" || f == "Anel")
             {
                 ti.alphaSource = TextureImporterAlphaSource.FromInput;
                 ti.alphaIsTransparency = true;
+            }
+            if (f == "Poca_Mascara")
+            {
+                ti.wrapMode = TextureWrapMode.Clamp;
+                ti.anisoLevel = 8;
+                ti.mipmapEnabled = true;
+                ti.textureCompression = TextureImporterCompression.CompressedHQ;
             }
             if (f == "UI_Circulo")
             {

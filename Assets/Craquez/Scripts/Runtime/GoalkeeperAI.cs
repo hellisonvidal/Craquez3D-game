@@ -282,16 +282,24 @@ namespace Craquez
             else
                 ActiveQuadrant = QuadranteDefesa.Dive_High;
 
+            // Bola alta com deslocamento lateral moderado (<= 1.35m): usa salto vertical com impulsão (GK_Salto)
+            if (ActiveQuadrant == QuadranteDefesa.Dive_High && absDeltaX <= 1.35f)
+            {
+                float jumpLateral = Mathf.Clamp(deltaX * 0.78f, -1.1f, 1.1f);
+                StartJump(jumpLateral, Mathf.Clamp(timeToImpact, 0.28f, 0.58f), Mathf.Clamp(heightY - 1.85f, 0.08f, 0.48f));
+                return;
+            }
+
             // No voo as mãos alcançam ~0.78m além do centro do quadril; o Motion Warping desloca a cápsula até o alcance físico
             float wantedTravel = Mathf.Clamp(absDeltaX - 0.72f, 0.25f, maxDiveTravel);
             float maxReachableInTime = maxDiveSpeed * Mathf.Max(timeToImpact, 0.18f);
             float travel = Mathf.Min(wantedTravel, maxReachableInTime);
 
             float targetApexY = ActiveQuadrant == QuadranteDefesa.Dive_Low
-                ? Mathf.Clamp(heightY * 0.35f, 0.05f, 0.22f)
+                ? Mathf.Clamp(heightY * 0.25f, 0.02f, 0.16f)
                 : (ActiveQuadrant == QuadranteDefesa.Dive_Mid
-                    ? Mathf.Clamp(heightY - 0.50f, 0.22f, 0.72f)
-                    : Mathf.Clamp(heightY - 0.55f, 0.65f, 1.18f));
+                    ? Mathf.Clamp(heightY - 0.55f, 0.16f, 0.58f)
+                    : Mathf.Clamp(heightY - 0.65f, 0.48f, 0.92f));
 
             StartQuadrantSave(ActiveQuadrant, side, travel, Mathf.Clamp(timeToImpact, 0.24f, 0.65f), targetApexY);
         }

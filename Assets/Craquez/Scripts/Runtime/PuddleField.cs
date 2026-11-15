@@ -34,7 +34,7 @@ namespace Craquez
         ParticleSystem ripples;
         float totalPuddleArea;
         System.Random rng = new System.Random(5);
-        const int ShapeSamples = 24;
+        const int ShapeSamples = 48;
 
         public int Count { get { return puddles.Count; } }
 
@@ -192,22 +192,55 @@ namespace Craquez
             var n = new List<Vector3>();
             var col = new List<Color>();
             var t = new List<int>();
-            v.Add(Vector3.zero); uv.Add(p.center * 0.35f); n.Add(Vector3.up); col.Add(Color.white);
-            for (int i = 0; i < ShapeSamples; i++)
+
+            // Centro (índice 0) + 3 anéis concêntricos para suavizar a transição radial de transparência e normais
+            float[] ringFracs = { 0.38f, 0.72f, 1.0f };
+            v.Add(Vector3.zero);
+            uv.Add(new Vector2(0.5f, 0.5f));
+            n.Add(Vector3.up);
+            col.Add(Color.white);
+
+            for (int rIdx = 0; rIdx < ringFracs.Length; rIdx++)
             {
-                float ang = i * Mathf.PI * 2f / ShapeSamples + p.rotation * Mathf.Deg2Rad;
-                float r = p.radius * p.shape[i];
-                Vector3 pos = new Vector3(Mathf.Cos(ang) * r, 0f, Mathf.Sin(ang) * r);
-                v.Add(pos);
-                uv.Add(new Vector2(p.center.x + pos.x, p.center.y + pos.z) * 0.35f);
-                n.Add(Vector3.up);
-                col.Add(new Color(1f, 1f, 1f, 0f));
+                float frac = ringFracs[rIdx];
+                float uvRad = frac * 0.49f;
+                float alpha = rIdx == 0 ? 1f : (rIdx == 1 ? 0.82f : 0f);
+                for (int i = 0; i < ShapeSamples; i++)
+                {
+                    float baseAng = i * Mathf.PI * 2f / ShapeSamples;
+                    float ang = baseAng + p.rotation * Mathf.Deg2Rad;
+                    float r = p.radius * p.shape[i] * frac;
+                    Vector3 pos = new Vector3(Mathf.Cos(ang) * r, 0f, Mathf.Sin(ang) * r);
+                    v.Add(pos);
+                    // UV radial [0..1] centrado em (0.5, 0.5) para usar a máscara suave Poca_Mascara sem bordas poligonais duras
+                    uv.Add(new Vector2(0.5f + Mathf.Cos(baseAng) * uvRad, 0.5f + Mathf.Sin(baseAng) * uvRad));
+                    n.Add(Vector3.up);
+                    col.Add(new Color(1f, 1f, 1f, alpha));
+                }
             }
+
+            // Triângulos do centro para o anel 0
             for (int i = 0; i < ShapeSamples; i++)
             {
-                int a = 1 + i, b = 1 + (i + 1) % ShapeSamples;
+                int a = 1 + i;
+                int b = 1 + (i + 1) % ShapeSamples;
                 t.Add(0); t.Add(b); t.Add(a);
             }
+            // Triângulos entre os anéis concêntricos
+            for (int rIdx = 0; rIdx < ringFracs.Length - 1; rIdx++)
+            {
+                int baseInner = 1 + rIdx * ShapeSamples;
+                int baseOuter = 1 + (rIdx + 1) * ShapeSamples;
+                for (int i = 0; i < ShapeSamples; i++)
+                {
+                    int next = (i + 1) % ShapeSamples;
+                    int i0 = baseInner + i, i1 = baseInner + next;
+                    int o0 = baseOuter + i, o1 = baseOuter + next;
+                    t.Add(i0); t.Add(i1); t.Add(o1);
+                    t.Add(i0); t.Add(o1); t.Add(o0);
+                }
+            }
+
             var m = new Mesh { name = go.name };
             m.SetVertices(v); m.SetUVs(0, uv); m.SetNormals(n); m.SetColors(col); m.SetTriangles(t, 0);
             m.RecalculateTangents(); m.RecalculateBounds();
@@ -260,7 +293,6 @@ namespace Craquez
                 offA += new Vector2(0.7f, 0.4f) * rippleSpeed * dt;
                 offB += new Vector2(-0.3f, 0.8f) * rippleSpeed * dt;
                 puddleMat.SetTextureOffset("_BumpMap", offA);
-                puddleMat.SetTextureOffset("_BaseMap", offB);
                 if (soakedMat != null) soakedMat.SetTextureOffset("_BumpMap", offB * 0.5f);
             }
             // marcas dos pingos caindo sobre as poças (anéis que se expandem)
