@@ -20,21 +20,28 @@ namespace Craquez
         public Transform cameraTransform;
 
         [Header("Física Cinemática (Inércia Controlada)")]
-        public float jogSpeed = 6.8f;
-        public float sprintSpeed = 10.4f;
-        public float acceleration = 24f;
-        public float deceleration = 28f;
+        [Tooltip("Velocidade de jogging (m/s)")]
+        public float jogSpeed = 6.5f;
+        [Tooltip("Velocidade de sprint (m/s)")]
+        public float sprintSpeed = 10.0f;
+        [Tooltip("Aceleração (m/s²) - comentário original: 18 m/s²")]
+        public float acceleration = 18f;
+        [Tooltip("Desaceleração/frenagem (m/s²) - comentário original: 25 m/s²")]
+        public float deceleration = 25f;
+        [Tooltip("Taxa de rotação em baixa velocidade (graus/s)")]
         public float lowSpeedTurnRate = 540f;
+        [Tooltip("Taxa de rotação durante sprint (graus/s)")]
         public float sprintTurnRate = 300f;
 
         [Header("Domínio e Condução Magnética")]
-        [Tooltip("Raio de domínio (< 0.65m) para condução magnética rumo ao BallControlPoint.")]
-        public float possessionRadius = 0.65f;
+        [Tooltip("Raio de domínio para condução magnética rumo ao BallControlPoint (0.35-0.45m à frente).")]
+        public float possessionRadius = 0.55f;
         [Tooltip("Alcance máximo do pé no frame de impacto do chute.")]
-        public float kickFootReach = 0.92f;
+        public float kickFootReach = 1.05f;
 
         [Header("Chute")]
-        public float chargeTime = 0.95f;
+        [Tooltip("Tempo para carregar o chute totalmente (s)")]
+        public float chargeTime = 0.85f;
 
         public bool InputEnabled { get; set; }
 
@@ -121,8 +128,9 @@ namespace Craquez
 
         /// <summary>
         /// Camada 1 - Root / Capsule Collider (Apenas Locomoção e Corpo-a-Corpo):
-        /// Restrito ao eixo central do tronco (radius = 0.24m) e posto na Layer PlayerBody,
+        /// Restrito ao eixo central do tronco e posto na Layer PlayerBody,
         /// que ignora colisão direta com a Layer Ball (impede a "parede invisível").
+        /// Usa as dimensões do prefab (baseadas na altura real do modelo escalonado).
         /// </summary>
         void ConfigureLayer1Capsule()
         {
@@ -130,9 +138,19 @@ namespace Craquez
             bodyCapsule = GetComponent<CapsuleCollider>();
             if (bodyCapsule == null) bodyCapsule = gameObject.AddComponent<CapsuleCollider>();
             bodyCapsule.direction = 1; // Eixo Y
-            bodyCapsule.radius = 0.24f;
-            bodyCapsule.height = 1.78f;
-            bodyCapsule.center = new Vector3(0f, 0.89f, 0f);
+
+            // Usa as dimensões já configuradas no prefab (baseadas na altura do modelo)
+            // O prefab cria o capsule com height = altura do personagem e center = (0, height/2, 0)
+            // Se por algum motivo não estiver configurado, usa valores padrão proporcionais
+            if (bodyCapsule.height <= 0.1f || bodyCapsule.center.y <= 0.1f)
+            {
+                // Fallback: calcula baseado no FootGrounder
+                var grounder = GetComponent<FootGrounder>();
+                float h = grounder != null ? grounder.height : 1.78f;
+                bodyCapsule.height = h;
+                bodyCapsule.center = new Vector3(0f, h * 0.5f, 0f);
+                bodyCapsule.radius = 0.24f;
+            }
 
             rootBody = GetComponent<Rigidbody>();
             if (rootBody == null) rootBody = gameObject.AddComponent<Rigidbody>();
@@ -268,6 +286,10 @@ namespace Craquez
             p.x = Mathf.Clamp(p.x, -Arena.FenceX + 1f, Arena.FenceX - 1f);
             p.z = Mathf.Clamp(p.z, -Arena.FenceZ + 1f, Arena.FenceZ - 1f);
             p.y = 0f;
+
+            // Evita sobreposição com outros jogadores (evita atravessar o goleiro/outro jogador)
+            p = ResolvePlayerCollisions(p);
+
             transform.position = p;
 
             // --- Turn Rate Dinâmico: 540°/s em baixa velocidade/proteção de bola; 300°/s durante Sprint
@@ -904,6 +926,43 @@ namespace Craquez
             v = Mathf.Clamp(v, 6f, 26f);
             Vector3 dir = flat.normalized;
             return dir * (v * Mathf.Cos(th)) + Vector3.up * (v * Mathf.Sin(th));
+        }
+
+        /// <summary>
+        /// Resolve colisão entre jogadores para evitar sobreposição de cápsulas.
+        /// Aplica uma força de repulsão simples quando as cápsulas dos jogadores se intersectam.
+        /// </summary>
+        Vector3 ResolvePlayerCollisions(Vector3 proposedPos)
+        {
+            if (bodyCapsule == null) return proposedPos;
+
+            Collider[] hits = Physics.OverlapCapsule(
+                proposedPos + bodyCapsule.center,
+                proposedPos + bodyCapsule.center + Vector3.up * (bodyCapsule.height - bodyCapsule.radius * 2f),
+                bodyCapsule.radius,
+                1 << Arena.LayerPlayerBody
+            );
+
+            Vector3 result = proposedPos;
+            foreach (var hit in hits)
+            {
+                if (hit == bodyCapsule) continue;
+                if (hit.attachedRigidbody != null && hit.attachedRigidbody.isKinematic)
+                {
+                    // Calcula direção de repulsão
+                    Vector3 dir = (proposedPos - hit.bounds.center);
+                    dir.y = 0f;
+                    if (dir.sqrMagnitude < 1e-4f) dir = transform.right;
+
+                    float overlap = (bodyCapsule.radius + hit.bounds.extents.x) - dir.magnitude;
+                    if (overlap > 0f)
+                    {
+                        dir.Normalize();
+                        result += dir * (overlap + 0.02f); // Pequeno buffer extra
+                    }
+                }
+            }
+            return result;
         }
 
         // ------------------------------------------------------------ IK (Olhar para a bola)

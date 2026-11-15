@@ -14,10 +14,11 @@ namespace Craquez
         public bool grounding = true;
         [Tooltip("Altura do personagem (m), igual à usada no prefab.")]
         public float height = 1.8f;
-        // medidas dos modelos (tools/blender): tornozelo e dedos acima da sola, em fração da altura
-        const float AnkleRatio = 0.088f, ToeRatio = 0.0265f;
+        // medidas dos modelos Mixamo padrão: tornozelo e dedos acima da sola, em fração da altura
+        // Ajustados para melhor corresponder às proporções reais do rig Mixamo
+        const float AnkleRatio = 0.08f, ToeRatio = 0.024f;
         [Tooltip("Rapidez da correção (1/s).")]
-        public float speed = 14f;
+        public float speed = 16f;
 
         Animator anim;
         Transform model;

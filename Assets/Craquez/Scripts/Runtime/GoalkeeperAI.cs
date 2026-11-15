@@ -133,13 +133,30 @@ namespace Craquez
         /// <summary>
         /// Camada 1 - Root / Capsule Collider:
         /// Ignora colisão física direta com a Bola (Layer: PlayerBody x Layer: Ball) e ajusta sua orientação durante o voo.
+        /// Usa as dimensões do prefab (baseadas na altura real do modelo escalonado).
         /// </summary>
         void ConfigureLayer1Capsule()
         {
             gameObject.layer = Arena.LayerPlayerBody;
             bodyCapsule = GetComponent<CapsuleCollider>();
             if (bodyCapsule == null) bodyCapsule = gameObject.AddComponent<CapsuleCollider>();
-            SetCapsuleStanding(true);
+
+            // Usa as dimensões já configuradas no prefab
+            if (bodyCapsule.height <= 0.1f || bodyCapsule.center.y <= 0.1f)
+            {
+                // Fallback: calcula baseado no FootGrounder
+                var grounder = GetComponent<FootGrounder>();
+                float h = grounder != null ? grounder.height : 1.90f;
+                bodyCapsule.direction = 1;
+                bodyCapsule.height = h;
+                bodyCapsule.center = new Vector3(0f, h * 0.5f, 0f);
+                bodyCapsule.radius = 0.25f;
+            }
+
+            // Guarda as dimensões originais em pé para restaurar depois do mergulho
+            originalCapsuleHeight = bodyCapsule.height;
+            originalCapsuleCenter = bodyCapsule.center;
+            originalCapsuleRadius = bodyCapsule.radius;
 
             rootBody = GetComponent<Rigidbody>();
             if (rootBody == null) rootBody = gameObject.AddComponent<Rigidbody>();
@@ -151,9 +168,14 @@ namespace Craquez
                 Physics.IgnoreCollision(bodyCapsule, ball.Sphere, true);
         }
 
+        float originalCapsuleHeight = 1.90f;
+        float originalCapsuleRadius = 0.25f;
+        Vector3 originalCapsuleCenter = new Vector3(0f, 0.95f, 0f);
+
         /// <summary>
         /// Alterna a cápsula entre vertical (em pé) e horizontalizada durante a ponte (mergulho)
         /// para que o corpo horizontalizado não flutue em pé nem afunde no chão.
+        /// Usa as dimensões originais do prefab como base.
         /// </summary>
         void SetCapsuleStanding(bool standing)
         {
@@ -161,16 +183,17 @@ namespace Craquez
             if (standing)
             {
                 bodyCapsule.direction = 1; // Vertical (Y)
-                bodyCapsule.radius = 0.25f;
-                bodyCapsule.height = 1.90f;
-                bodyCapsule.center = new Vector3(0f, 0.95f, 0f);
+                bodyCapsule.radius = originalCapsuleRadius;
+                bodyCapsule.height = originalCapsuleHeight;
+                bodyCapsule.center = originalCapsuleCenter;
             }
             else
             {
                 bodyCapsule.direction = 0; // Horizontal (X - eixo lateral do mergulho)
-                bodyCapsule.radius = 0.24f;
-                bodyCapsule.height = 1.75f;
-                bodyCapsule.center = new Vector3(0f, 0.45f, 0f);
+                // Cápsula horizontalizada: altura = diâmetro original, centro ajustado para a altura do quadril durante o mergulho
+                bodyCapsule.radius = originalCapsuleRadius * 0.95f;
+                bodyCapsule.height = originalCapsuleHeight * 0.92f; // Ligeiramente menor para não afundar
+                bodyCapsule.center = new Vector3(0f, originalCapsuleCenter.y * 0.48f, 0f); // Centro mais baixo durante o mergulho
             }
         }
 
@@ -462,6 +485,10 @@ namespace Craquez
             p.x = Mathf.Clamp(p.x, g.x - 16.5f, g.x - 0.3f);
             p.z = Mathf.Clamp(p.z, -20f, 20f);
             p.y = 0f;
+
+            // Evita sobreposição com outros jogadores
+            p = ResolvePlayerCollisions(p);
+
             transform.position = p;
 
             if (ball != null)
@@ -621,7 +648,10 @@ namespace Craquez
             Vector3 desired = toTarget.magnitude < 0.08f ? Vector3.zero : Vector3.ClampMagnitude(toTarget * 3.2f, maxSpeed);
             float accel = desired.magnitude < velocity.magnitude ? shuffleDeceleration : shuffleAcceleration;
             velocity = Vector3.MoveTowards(velocity, desired, accel * dt);
-            transform.position += velocity * dt;
+
+            Vector3 p = transform.position + velocity * dt;
+            p = ResolvePlayerCollisions(p);
+            transform.position = p;
 
             // Mantém a rotação encarando a bola sobre o arco
             Vector3 look = bp - transform.position; look.y = 0f;
@@ -1017,6 +1047,43 @@ namespace Craquez
             SetCapsuleStanding(true);
             HoldBallInCatchSocket();
             if (OnSave != null) OnSave(true);
+        }
+
+        /// <summary>
+        /// Resolve colisão entre jogadores para evitar sobreposição de cápsulas.
+        /// Aplica uma força de repulsão simples quando as cápsulas dos jogadores se intersectam.
+        /// </summary>
+        Vector3 ResolvePlayerCollisions(Vector3 proposedPos)
+        {
+            if (bodyCapsule == null) return proposedPos;
+
+            Collider[] hits = Physics.OverlapCapsule(
+                proposedPos + bodyCapsule.center,
+                proposedPos + bodyCapsule.center + Vector3.up * (bodyCapsule.height - bodyCapsule.radius * 2f),
+                bodyCapsule.radius,
+                1 << Arena.LayerPlayerBody
+            );
+
+            Vector3 result = proposedPos;
+            foreach (var hit in hits)
+            {
+                if (hit == bodyCapsule) continue;
+                if (hit.attachedRigidbody != null && hit.attachedRigidbody.isKinematic)
+                {
+                    // Calcula direção de repulsão
+                    Vector3 dir = (proposedPos - hit.bounds.center);
+                    dir.y = 0f;
+                    if (dir.sqrMagnitude < 1e-4f) dir = transform.right;
+
+                    float overlap = (bodyCapsule.radius + hit.bounds.extents.x) - dir.magnitude;
+                    if (overlap > 0f)
+                    {
+                        dir.Normalize();
+                        result += dir * (overlap + 0.02f); // Pequeno buffer extra
+                    }
+                }
+            }
+            return result;
         }
 
         // ------------------------------------------------------------ IK das Luvas e Postura
