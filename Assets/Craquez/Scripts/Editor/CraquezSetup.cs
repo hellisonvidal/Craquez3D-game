@@ -442,10 +442,11 @@ namespace Craquez.EditorTools
             {
                 var st = sm.AddState(n);
                 st.motion = Clip("Jogador", n);
+                st.speed = n == "Drible" ? 1.15f : 1.25f;
                 var tr = st.AddTransition(loco);
                 tr.hasExitTime = true;
                 tr.exitTime = 0.85f;
-                tr.duration = 0.18f;
+                tr.duration = 0.16f;
             }
             EnableIK(ac);
             EditorUtility.SetDirty(ac);
@@ -611,7 +612,7 @@ namespace Craquez.EditorTools
             var rb = root.AddComponent<Rigidbody>();
             rb.isKinematic = true;
             rb.useGravity = false;
-            rb.interpolation = RigidbodyInterpolation.Interpolate;
+            rb.interpolation = RigidbodyInterpolation.None;
             var sockets = root.AddComponent<MixamoBoneSockets>();
             sockets.InitializeSockets();
             root.AddComponent(controller);

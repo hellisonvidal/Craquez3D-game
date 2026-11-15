@@ -38,9 +38,9 @@ namespace Craquez
         public Transform GK_CatchSocket;
 
         [Header("Configuração de Projeção e In-Place Lock")]
-        [Tooltip("Distância base do BallControlPoint à frente do Root (0.35m em baixa velocidade até 0.45m em corrida).")]
-        [Range(0.35f, 0.45f)]
-        public float ballControlDistance = 0.38f;
+        [Tooltip("Distância base do BallControlPoint à frente do Root (0.24m em baixa velocidade até 0.34m em corrida).")]
+        [Range(0.20f, 0.45f)]
+        public float ballControlDistance = 0.26f;
 
         [Tooltip("Trava deslocamentos horizontais residuais (X/Z) do mixamorig:Hips durante locomoção In-Place.")]
         public bool lockHipsHorizontalInPlace = true;
@@ -195,7 +195,7 @@ namespace Craquez
         {
             if (BallControlPoint != null)
             {
-                float d = Mathf.Lerp(0.35f, 0.45f, Mathf.Clamp01(normalizedSpeed01));
+                float d = Mathf.Lerp(0.24f, 0.34f, Mathf.Clamp01(normalizedSpeed01));
                 ballControlDistance = d;
                 BallControlPoint.localPosition = new Vector3(0f, Arena.BallRadius, d);
             }

@@ -138,7 +138,7 @@ namespace Craquez
             if (rootBody == null) rootBody = gameObject.AddComponent<Rigidbody>();
             rootBody.isKinematic = true;
             rootBody.useGravity = false;
-            rootBody.interpolation = RigidbodyInterpolation.Interpolate;
+            rootBody.interpolation = RigidbodyInterpolation.None;
 
             if (ball != null && ball.Sphere != null)
                 Physics.IgnoreCollision(bodyCapsule, ball.Sphere, true);
@@ -393,20 +393,22 @@ namespace Craquez
                               (kickType == TipoChute.Rasteiro ? "ChuteRasteiro" : "ChuteForte"));
             if (anim != null) anim.CrossFadeInFixedTime(activeKickState, 0.07f, 0, 0f);
 
-            // Janela determinística: 0.35 a 0.45 do tempo normalizado da animação (com fallback seguro em segundos)
-            float fallback = kickType == TipoChute.Colocado || kickType == TipoChute.Cavadinha ? 0.22f : 0.25f;
+            // Janela determinística sincronizada com o avanço do pé em cada clipe (speed = 1.25x no Animator)
+            float fallback = kickType == TipoChute.Colocado ? 0.37f : (kickType == TipoChute.Cavadinha ? 0.29f : 0.27f);
             kickFallbackContactAt = Time.time + fallback;
-            lockMoveUntil = Time.time + fallback + 0.32f;
+            lockMoveUntil = Time.time + fallback + 0.28f;
         }
 
         /// <summary>
-        /// Avalia se a animação de chute do Mixamo entrou na janela normalizada de impacto [0.35, 0.45]
+        /// Avalia se a animação de chute do Mixamo entrou na janela normalizada de impacto
         /// (ou atingiu o tempo de segurança) e dispara o contato determinístico.
         /// </summary>
         void CheckKickWindowContact()
         {
             if (!kickPending) return;
 
+            float minNorm = kickType == TipoChute.Colocado ? 0.42f : 0.32f;
+            float maxNorm = minNorm + 0.18f;
             bool inImpactWindow = false;
             if (anim != null && !string.IsNullOrEmpty(activeKickState))
             {
@@ -415,12 +417,12 @@ namespace Craquez
                 if (st.IsName(activeKickState))
                 {
                     float norm = st.normalizedTime % 1f;
-                    if (norm >= 0.35f && norm <= 0.55f) inImpactWindow = true;
+                    if (norm >= minNorm && norm <= maxNorm) inImpactWindow = true;
                 }
                 else if (next.IsName(activeKickState))
                 {
                     float norm = next.normalizedTime % 1f;
-                    if (norm >= 0.35f && norm <= 0.55f) inImpactWindow = true;
+                    if (norm >= minNorm && norm <= maxNorm) inImpactWindow = true;
                 }
             }
 
@@ -616,7 +618,7 @@ namespace Craquez
                     Vector3 nd = Vector3.RotateTowards(fb / bs, wdir, maxTurn * Mathf.Deg2Rad, 0f);
                     fb = nd * bs;
                 }
-                float maxLead = sprintHeld ? 2.6f : 1.55f;
+                float maxLead = sprintHeld ? 1.25f : 0.72f;
                 float ahead = Vector3.Dot(toBallFromRoot, fb.normalized);
                 if (ahead > maxLead)
                 {
@@ -640,12 +642,12 @@ namespace Craquez
             if (!inReach) return;
 
             // --- Condução Magnética Suave quando no raio de domínio (< 0.65m):
-            // Aplica micro-impulsos suaves guiando a bola ao BallControlPoint com rotação visual (spin) compatível
+            // Mantém a bola próxima ao pé (BallControlPoint) com rotação visual (spin) compatível
             if (distToControlPt < possessionRadius && rel.magnitude < 6.5f && !knockQueued)
             {
-                Vector3 magnetPull = toControlPt * (sprintHeld ? 4.2f : 6.5f) * grip;
+                Vector3 magnetPull = toControlPt * (sprintHeld ? 7.5f : 10.5f) * grip;
                 Vector3 baseCarryVel = velocity + magnetPull;
-                float blendRate = (now < nextTouchAt) ? 9.5f : 14f;
+                float blendRate = (now < nextTouchAt) ? 14f : 20f;
                 flatBv = Vector3.MoveTowards(flatBv, new Vector3(baseCarryVel.x, 0f, baseCarryVel.z), blendRate * dt);
                 Compat.SetVelocity(ball.Body, new Vector3(flatBv.x, bv.y, flatBv.z));
                 if (flatBv.sqrMagnitude > 0.04f)
@@ -716,8 +718,8 @@ namespace Craquez
             else
             {
                 float touchDist;
-                if (sprintHeld) { touchDist = Mathf.Lerp(1.05f, 1.95f, Mathf.Clamp01(spd / sprintSpeed)); interval = 0.44f; }
-                else { touchDist = Mathf.Lerp(0.40f, 0.88f, Mathf.Clamp01(spd / jogSpeed)); interval = 0.35f; }
+                if (sprintHeld) { touchDist = Mathf.Lerp(0.55f, 0.95f, Mathf.Clamp01(spd / sprintSpeed)); interval = 0.34f; }
+                else { touchDist = Mathf.Lerp(0.24f, 0.48f, Mathf.Clamp01(spd / jogSpeed)); interval = 0.28f; }
                 if (sharpTurn) { touchDist *= 0.6f; playerSpeed *= 0.78f; }
                 touchDist *= jitter * Mathf.Lerp(1.12f, 1f, grip);
                 interval *= jitter;

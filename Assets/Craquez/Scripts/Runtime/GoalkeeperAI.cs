@@ -144,7 +144,7 @@ namespace Craquez
             if (rootBody == null) rootBody = gameObject.AddComponent<Rigidbody>();
             rootBody.isKinematic = true;
             rootBody.useGravity = false;
-            rootBody.interpolation = RigidbodyInterpolation.Interpolate;
+            rootBody.interpolation = RigidbodyInterpolation.None;
 
             if (ball != null && ball.Sphere != null)
                 Physics.IgnoreCollision(bodyCapsule, ball.Sphere, true);
@@ -529,7 +529,8 @@ namespace Craquez
             if (grounder != null)
                 grounder.grounding = ready || (State == Estado.Defendendo && !diving) || (State == Estado.ComBola && !diving);
 
-            readyWeight = Mathf.MoveTowards(readyWeight, ready ? 0.32f : 0f, dt * (ready ? 2.5f : 6f));
+            // Não força IK estático nos braços durante o posicionamento normal para preservar GK_Pronto/DeslocarEsq/Dir
+            readyWeight = 0f;
 
             // Passadas e respingos do goleiro em poças d'água
             gkSplashTimer -= dt;
