@@ -486,9 +486,6 @@ namespace Craquez
             p.z = Mathf.Clamp(p.z, -20f, 20f);
             p.y = 0f;
 
-            // Evita sobreposição com outros jogadores
-            p = ResolvePlayerCollisions(p);
-
             transform.position = p;
 
             if (ball != null)
@@ -649,9 +646,7 @@ namespace Craquez
             float accel = desired.magnitude < velocity.magnitude ? shuffleDeceleration : shuffleAcceleration;
             velocity = Vector3.MoveTowards(velocity, desired, accel * dt);
 
-            Vector3 p = transform.position + velocity * dt;
-            p = ResolvePlayerCollisions(p);
-            transform.position = p;
+            transform.position += velocity * dt;
 
             // Mantém a rotação encarando a bola sobre o arco
             Vector3 look = bp - transform.position; look.y = 0f;
@@ -1047,43 +1042,6 @@ namespace Craquez
             SetCapsuleStanding(true);
             HoldBallInCatchSocket();
             if (OnSave != null) OnSave(true);
-        }
-
-        /// <summary>
-        /// Resolve colisão entre jogadores para evitar sobreposição de cápsulas.
-        /// Aplica uma força de repulsão simples quando as cápsulas dos jogadores se intersectam.
-        /// </summary>
-        Vector3 ResolvePlayerCollisions(Vector3 proposedPos)
-        {
-            if (bodyCapsule == null) return proposedPos;
-
-            Collider[] hits = Physics.OverlapCapsule(
-                proposedPos + bodyCapsule.center,
-                proposedPos + bodyCapsule.center + Vector3.up * (bodyCapsule.height - bodyCapsule.radius * 2f),
-                bodyCapsule.radius,
-                1 << Arena.LayerPlayerBody
-            );
-
-            Vector3 result = proposedPos;
-            foreach (var hit in hits)
-            {
-                if (hit == bodyCapsule) continue;
-                if (hit.attachedRigidbody != null && hit.attachedRigidbody.isKinematic)
-                {
-                    // Calcula direção de repulsão
-                    Vector3 dir = (proposedPos - hit.bounds.center);
-                    dir.y = 0f;
-                    if (dir.sqrMagnitude < 1e-4f) dir = transform.right;
-
-                    float overlap = (bodyCapsule.radius + hit.bounds.extents.x) - dir.magnitude;
-                    if (overlap > 0f)
-                    {
-                        dir.Normalize();
-                        result += dir * (overlap + 0.02f); // Pequeno buffer extra
-                    }
-                }
-            }
-            return result;
         }
 
         // ------------------------------------------------------------ IK das Luvas e Postura
