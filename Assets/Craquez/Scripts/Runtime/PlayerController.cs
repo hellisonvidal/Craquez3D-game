@@ -20,10 +20,10 @@ namespace Craquez
         public Transform cameraTransform;
 
         [Header("Física Cinemática (Inércia Controlada)")]
-        public float jogSpeed = 5.4f;
-        public float sprintSpeed = 8.1f;
-        public float acceleration = 18f;
-        public float deceleration = 25f;
+        public float jogSpeed = 6.8f;
+        public float sprintSpeed = 10.4f;
+        public float acceleration = 24f;
+        public float deceleration = 28f;
         public float lowSpeedTurnRate = 540f;
         public float sprintTurnRate = 300f;
 

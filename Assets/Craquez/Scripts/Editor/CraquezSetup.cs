@@ -432,9 +432,10 @@ namespace Craquez.EditorTools
             bt.AddChild(run, sRun);
             // sprint: arrancada nativa do Meshy (ou a corrida acelerada, se faltar)
             var sprint = Clip("Jogador", "Disparada");
-            bt.AddChild(sprint != null ? sprint : run, 8f);
+            bt.AddChild(sprint != null ? sprint : run, 10.2f);
             var ch = bt.children;
-            ch[4].timeScale = sprint != null ? 1.05f : 8f / sRun;
+            ch[3].timeScale = 1.18f;
+            ch[4].timeScale = sprint != null ? 1.30f : 10.2f / sRun;
             bt.children = ch;
             sm.defaultState = loco;
 

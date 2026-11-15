@@ -217,13 +217,13 @@ namespace Craquez
             if (!BallPhysics.PredictPlaneCrossing(info.origin, info.velocity, info.spin, wind, planeX, 3.5f, out hit, out t)) return;
             if (Mathf.Abs(hit.z) > Arena.GoalHalfWidth + 2.5f || hit.y > Arena.GoalHeight + 1.5f) return;
 
-            float reaction = Random.Range(0.16f, 0.25f);
-            if (ws != null && ws.P != null) reaction += ws.P.gkReaction;
-            // Em chutes de longa distância, acompanha a bola antes de saltar para o mergulho não sair antes da hora
+            float reaction = Random.Range(0.14f, 0.22f);
+            if (ws != null && ws.P != null) reaction += ws.P.gkReaction * 0.75f;
             float absDx = Mathf.Abs(Vector3.Dot(hit - transform.position, transform.right));
-            float diveLead = Mathf.Clamp(0.24f + absDx * 0.15f, 0.30f, 0.56f);
-            float waitBeforeDive = Mathf.Max(reaction, t - diveLead);
-            reactAt = Time.time + Mathf.Min(waitBeforeDive, Mathf.Max(0.10f, t - 0.18f));
+            float waitBeforeDive = (t > 0.68f && absDx >= 0.80f)
+                ? Mathf.Max(reaction, t - 0.56f)
+                : reaction;
+            reactAt = Time.time + Mathf.Min(waitBeforeDive, Mathf.Max(0.06f, t - 0.14f));
             resolved = false;
         }
 
@@ -256,15 +256,15 @@ namespace Craquez
             float side = Mathf.Sign(deltaX == 0f ? 1f : deltaX);
 
             // --- Seleção Automática de Animação Mixamo por Quadrante:
-            // 1. Perto do corpo (|DeltaX| < 0.6m): GK_Catch (peito/mãos) ou GK_FootSave (rasteira)
-            if (absDeltaX < 0.6f)
+            // 1. Perto do corpo (|DeltaX| < 0.42m): GK_Catch (peito/mãos) ou GK_FootSave (rasteira)
+            if (absDeltaX < 0.42f)
             {
                 if (heightY < 0.42f)
                 {
                     ActiveQuadrant = QuadranteDefesa.GK_FootSave;
                     StartQuadrantSave(ActiveQuadrant, side, Mathf.Clamp(absDeltaX, 0.1f, 0.45f), Mathf.Clamp(timeToImpact, 0.20f, 0.45f), 0f);
                 }
-                else if (heightY <= 1.75f)
+                else if (heightY <= 1.65f)
                 {
                     ActiveQuadrant = QuadranteDefesa.GK_Catch;
                     BeginDefend();
@@ -275,7 +275,7 @@ namespace Craquez
                 else
                 {
                     ActiveQuadrant = QuadranteDefesa.Dive_High;
-                    StartJump(deltaX * 0.65f, Mathf.Clamp(timeToImpact, 0.24f, 0.55f), Mathf.Clamp(heightY - 1.75f, 0.25f, 0.75f));
+                    StartJump(deltaX * 0.65f, Mathf.Clamp(timeToImpact, 0.24f, 0.55f), Mathf.Clamp(heightY - 1.65f, 0.25f, 0.75f));
                 }
                 return;
             }
@@ -739,7 +739,9 @@ namespace Craquez
 
         void FixedUpdate()
         {
-            if (State != Estado.Defendendo || resolved || ball == null || ball.IsHeld)
+            bool activeShot = ball != null && !ball.IsHeld && State != Estado.ComBola && !resolved &&
+                              (State == Estado.Defendendo || shotInFlight || Time.time - ball.LastKickTime < 3.5f || ball.Velocity.x > 1.0f);
+            if (!activeShot)
             {
                 havePrev = false;
                 return;
@@ -763,15 +765,15 @@ namespace Craquez
             float dr = SegDist(rightPalm, a, bp);
             float dGloveMin = Mathf.Min(dMid, Mathf.Min(dl, dr));
 
-            // 2. Tronco/Peito (mixamorig:Spine2 / Hips) e Pés (para GK_FootSave rasteira)
+            // 2. Tronco/Peito (mixamorig:Spine2 / Hips) e Pés (bloqueia chutes diretos no corpo mesmo antes do mergulho)
             float dc = chest != null ? SegDist(chest.position, a, bp) : 99f;
             float dh = hips != null ? SegDist(hips.position, a, bp) : 99f;
             float dFootL = lFoot != null ? SegDist(lFoot.position, a, bp) : 99f;
             float dFootR = rFoot != null ? SegDist(rFoot.position, a, bp) : 99f;
 
-            bool hand = dGloveMin < (handReach + rb);
-            bool body = Mathf.Min(dc, dh) < (0.28f + rb) ||
-                        (ActiveQuadrant == QuadranteDefesa.GK_FootSave && Mathf.Min(dFootL, dFootR) < (0.24f + rb));
+            bool hand = dGloveMin < (handReach + rb + 0.06f);
+            bool body = Mathf.Min(dc, dh) < (0.34f + rb) ||
+                        Mathf.Min(dFootL, dFootR) < (0.26f + rb);
 
             // 3. Verificação contínua no cruzamento do plano frontal do goleiro (previne tunneling em chutes de 30+ m/s a 30 FPS)
             if (!hand && !body && lHand != null && rHand != null)
@@ -783,11 +785,21 @@ namespace Craquez
                     Vector3 crossPt = Vector3.Lerp(a, bp, k);
                     float nearGlove = Mathf.Min(Vector3.Distance(crossPt, glovesMid),
                                       Mathf.Min(Vector3.Distance(crossPt, leftPalm), Vector3.Distance(crossPt, rightPalm)));
-                    if (nearGlove < handReach + rb + 0.18f) hand = true;
+                    if (nearGlove < handReach + rb + 0.22f) hand = true;
+                    else if (chest != null && Vector3.Distance(crossPt, chest.position) < 0.36f + rb) body = true;
                 }
             }
 
-            if (hand || body) Resolve(hand, glovesMid);
+            if (hand || body)
+            {
+                if (State != Estado.Defendendo)
+                {
+                    BeginDefend();
+                    diving = false;
+                    PlayCatchBlock();
+                }
+                Resolve(hand, glovesMid);
+            }
         }
 
         /// <summary>
