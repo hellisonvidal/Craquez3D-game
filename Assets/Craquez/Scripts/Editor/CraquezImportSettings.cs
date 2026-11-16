@@ -13,7 +13,7 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 18;
+        public const int Version = 19;
 
         static readonly string[] LoopClips =
         {
@@ -56,6 +56,7 @@ namespace Craquez.EditorTools
                     mi.importTangents = ModelImporterTangents.CalculateMikk;
                     mi.optimizeMeshPolygons = true;
                     mi.optimizeMeshVertices = true;
+                    mi.isReadable = true; // formato do rosto: a partida lê os vértices da cabeça (FaceShapes)
                 }
                 else
                 {
