@@ -75,7 +75,6 @@ namespace Craquez
         float stateTime;
         bool resolved;
         float ikWeight;
-        float readyWeight;
         float recoverTime = 0.6f;
         Vector3 ikTarget;
 
@@ -87,6 +86,7 @@ namespace Craquez
         float diveSide; // +1 = Direita do goleiro, -1 = Esquerda do goleiro
         float gkSplashTimer;
         bool gkSplashLeft;
+        float lastFootstepTime;
 
         static readonly int LateralHash = Animator.StringToHash("Lateral");
         static readonly int ForwardHash = Animator.StringToHash("Forward");
@@ -366,6 +366,12 @@ namespace Craquez
 
             SetCapsuleStanding(quadrant == QuadranteDefesa.GK_FootSave);
 
+            // Particle: Dive dust
+            if (ParticleEffectsManager.Instance != null)
+            {
+                ParticleEffectsManager.Instance.PlayGoalkeeperDive(diveFrom, transform.right * side, Mathf.Clamp01(travel / maxDiveTravel));
+            }
+
             if (anim != null)
             {
                 anim.SetBool(MirrorHash, side < 0f);
@@ -394,6 +400,13 @@ namespace Craquez
             diveHeight = height;
             diveStart = Time.time;
             SetCapsuleStanding(true);
+
+            // Particle: Jump/Dive dust
+            if (ParticleEffectsManager.Instance != null)
+            {
+                ParticleEffectsManager.Instance.PlayGoalkeeperDive(diveFrom, transform.right * diveSide, Mathf.Clamp01(Mathf.Abs(lateralOffset) / maxDiveTravel));
+            }
+
             if (anim != null)
             {
                 anim.SetBool(MirrorHash, lateralOffset < 0f);
@@ -491,6 +504,28 @@ namespace Craquez
 
             transform.position = p;
 
+            // Footstep sounds/particles for human-controlled goalkeeper
+            float gkSpeed = velocity.magnitude;
+            if (gkSpeed > 1.0f && Time.time - lastFootstepTime > 0.35f)
+            {
+                float stepInterval = gkSpeed > maxShuffleSpeed * 0.8f ? 0.3f : 0.4f;
+                if (Time.time - lastFootstepTime > stepInterval)
+                {
+                    Vector3 footPos = gkSplashLeft
+                        ? (sockets != null ? sockets.LeftFootContactPosition : transform.position - transform.right * 0.14f)
+                        : (sockets != null ? sockets.RightFootContactPosition : transform.position + transform.right * 0.14f);
+
+                    if (ParticleEffectsManager.Instance != null)
+                        ParticleEffectsManager.Instance.PlayFootstepDust(footPos, gkSpeed);
+
+                    if (AudioManager.Instance != null)
+                        AudioManager.Instance.PlayFootstep(footPos, gkSpeed, gkSpeed > maxShuffleSpeed * 0.8f);
+
+                    lastFootstepTime = Time.time;
+                    gkSplashLeft = !gkSplashLeft;
+                }
+            }
+
             if (ball != null)
             {
                 Vector3 look = ball.transform.position - p; look.y = 0f;
@@ -573,7 +608,6 @@ namespace Craquez
                 grounder.grounding = ready || (State == Estado.Defendendo && !diving) || (State == Estado.ComBola && !diving);
 
             // Não força IK estático nos braços durante o posicionamento normal para preservar GK_Pronto/DeslocarEsq/Dir
-            readyWeight = 0f;
 
             // Passadas e respingos do goleiro em poças d'água
             gkSplashTimer -= dt;
@@ -653,6 +687,28 @@ namespace Craquez
             p = ResolvePlayerCollisions(p);
             transform.position = p;
 
+            // Footstep sounds/particles for goalkeeper
+            float gkSpeed = velocity.magnitude;
+            if (gkSpeed > 1.0f && Time.time - lastFootstepTime > 0.35f)
+            {
+                float stepInterval = gkSpeed > maxShuffleSpeed * 0.8f ? 0.3f : 0.4f;
+                if (Time.time - lastFootstepTime > stepInterval)
+                {
+                    Vector3 footPos = gkSplashLeft
+                        ? (sockets != null ? sockets.LeftFootContactPosition : transform.position - transform.right * 0.14f)
+                        : (sockets != null ? sockets.RightFootContactPosition : transform.position + transform.right * 0.14f);
+
+                    if (ParticleEffectsManager.Instance != null)
+                        ParticleEffectsManager.Instance.PlayFootstepDust(footPos, gkSpeed);
+
+                    if (AudioManager.Instance != null)
+                        AudioManager.Instance.PlayFootstep(footPos, gkSpeed, gkSpeed > maxShuffleSpeed * 0.8f);
+
+                    lastFootstepTime = Time.time;
+                    gkSplashLeft = !gkSplashLeft;
+                }
+            }
+
             // Mantém a rotação encarando a bola sobre o arco
             Vector3 look = bp - transform.position; look.y = 0f;
             if (look.sqrMagnitude < 0.01f) look = -Vector3.right;
@@ -670,7 +726,9 @@ namespace Craquez
 
         static PlayerController FindAnyPlayer()
         {
-#if UNITY_2023_1_OR_NEWER
+#if UNITY_6000_0_OR_NEWER
+            return UnityEngine.Object.FindAnyObjectByType<PlayerController>();
+#elif UNITY_2023_1_OR_NEWER
             return UnityEngine.Object.FindFirstObjectByType<PlayerController>();
 #else
             return UnityEngine.Object.FindObjectOfType<PlayerController>();
@@ -886,6 +944,17 @@ namespace Craquez
             {
                 // --- DEFESA FIRME (Catch no GK_CatchSocket)
                 HoldBallInCatchSocket();
+
+                // Particle & Audio: Catch save
+                if (ParticleEffectsManager.Instance != null)
+                {
+                    ParticleEffectsManager.Instance.PlayKickImpact(bp, -v.normalized, Mathf.Clamp01(speed / 30f));
+                }
+                if (AudioManager.Instance != null)
+                {
+                    AudioManager.Instance.PlayGoalkeeperSave(bp, Mathf.Clamp01(speed / 30f));
+                }
+
                 GameSettings.Vibrar();
                 if (OnSave != null) OnSave(true);
                 return;
@@ -922,6 +991,17 @@ namespace Craquez
             Vector3 outSpin = Vector3.Cross(Vector3.up, parryDir) * (outSpeed / Arena.BallRadius) * 0.6f;
 
             ball.Deflect(nv, outSpin);
+
+            // Particle & Audio: Deflect/Parry save
+            if (ParticleEffectsManager.Instance != null)
+            {
+                ParticleEffectsManager.Instance.PlayKickImpact(bp, parryDir, Mathf.Clamp01(outSpeed / 25f));
+            }
+            if (AudioManager.Instance != null)
+            {
+                AudioManager.Instance.PlayGoalkeeperSave(bp, Mathf.Clamp01(outSpeed / 25f));
+            }
+
             if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.Kick(bp, 0.45f);
             GameSettings.Vibrar();
             if (OnSave != null) OnSave(false);
@@ -947,6 +1027,12 @@ namespace Craquez
             }
             State = Estado.ComBola;
             stateTime = 0f;
+
+            // Audio: Catch sound
+            if (AudioManager.Instance != null)
+            {
+                AudioManager.Instance.PlayIFXConfirmation();
+            }
         }
 
         // ------------------------------------------------------------ Reposição de bola (arremesso com as mãos ou chutão)
@@ -1008,7 +1094,14 @@ namespace Craquez
                 {
                     repoReleased = true;
                     Vector3 d = FieldDirection();
+                    Vector3 throwPos = transform.position + transform.forward * 0.5f + Vector3.up * 1.5f;
                     ball.Deflect(d * Random.Range(12f, 16f) + Vector3.up * Random.Range(4.5f, 6.5f), Vector3.zero);
+
+                    // Audio: Throw sound
+                    if (AudioManager.Instance != null)
+                    {
+                        AudioManager.Instance.PlayIFXSelect();
+                    }
                 }
             }
             else
@@ -1026,6 +1119,12 @@ namespace Craquez
                     Vector3 d = FieldDirection();
                     ball.PlaceAt(p);
                     ball.Deflect(d * Random.Range(19f, 24f) + Vector3.up * Random.Range(11f, 14f), Vector3.Cross(d, Vector3.up) * 25f);
+
+                    // Audio: Goal kick sound
+                    if (AudioManager.Instance != null)
+                    {
+                        AudioManager.Instance.PlayKick(p, 0.9f);
+                    }
                     if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.Kick(p, 0.9f);
                 }
             }

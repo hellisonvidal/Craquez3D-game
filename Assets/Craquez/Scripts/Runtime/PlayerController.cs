@@ -96,6 +96,11 @@ namespace Craquez
         float splashTimer;
         bool splashLeftFoot;
 
+        // Particle & Audio integration
+        float lastFootstepTime;
+        float lastSlideTime;
+        Vector3 lastPosition;
+
         static readonly int SpeedHash = Animator.StringToHash("Speed");
         static readonly int DirectionHash = Animator.StringToHash("Direction");
         static readonly int AngleHash = Animator.StringToHash("Angle");
@@ -334,6 +339,31 @@ namespace Craquez
                 pfSurf.FootStep(footPos, baseInt * Mathf.Clamp01(velocity.magnitude / jogSpeed));
                 splashTimer = Mathf.Lerp(0.36f, 0.17f, speedRatio);
             }
+
+            // Particle & Audio: Footstep effects when running
+            float speed = velocity.magnitude;
+            if (speed > 1.5f && Time.time - lastFootstepTime > 0.3f)
+            {
+                bool isSprinting = sprintHeld && speed > jogSpeed;
+                float stepInterval = isSprinting ? 0.25f : 0.35f;
+                if (Time.time - lastFootstepTime > stepInterval)
+                {
+                    Vector3 footPos = splashLeftFoot
+                        ? (sockets != null ? sockets.LeftFootContactPosition : transform.position - transform.right * 0.12f)
+                        : (sockets != null ? sockets.RightFootContactPosition : transform.position + transform.right * 0.12f);
+
+                    // Particle: small dust puff
+                    if (ParticleEffectsManager.Instance != null)
+                        ParticleEffectsManager.Instance.PlayFootstepDust(footPos, speed);
+
+                    // Audio: footstep sound
+                    if (AudioManager.Instance != null)
+                        AudioManager.Instance.PlayFootstep(footPos, speed, isSprinting);
+
+                    lastFootstepTime = Time.time;
+                    splashLeftFoot = !splashLeftFoot;
+                }
+            }
         }
 
         void SyncAnimatorParameters(float dt, Vector3 desiredFace)
@@ -495,6 +525,27 @@ namespace Craquez
             HasPossession = false;
             if (ProceduralAudio.Instance != null)
                 ProceduralAudio.Instance.Kick(bp, Mathf.Clamp01(v.magnitude / 30f));
+
+            // Particle & Audio: Kick effects
+            float kickPowerNormalized = Mathf.Clamp01(v.magnitude / 30f);
+            Vector3 kickDirection = v.normalized;
+
+            // Kick dust at foot position
+            if (ParticleEffectsManager.Instance != null)
+            {
+                ParticleEffectsManager.Instance.PlayKickDust(footContactPos, -kickDirection, kickPowerNormalized);
+                ParticleEffectsManager.Instance.PlayKickImpact(bp, kickDirection, kickPowerNormalized);
+
+                // Grass scorch for very powerful kicks
+                if (kickPowerNormalized > 0.8f && bp.y < 0.5f)
+                    ParticleEffectsManager.Instance.PlayGrassScorch(footContactPos);
+            }
+
+            // Audio: Kick sound with power variation
+            if (AudioManager.Instance != null)
+            {
+                AudioManager.Instance.PlayKick(bp, kickPowerNormalized);
+            }
         }
 
         Vector3 ControlPointWorld()

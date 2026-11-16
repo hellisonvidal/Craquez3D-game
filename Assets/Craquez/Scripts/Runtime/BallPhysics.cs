@@ -47,6 +47,12 @@ namespace Craquez
         float bounceTarget = 0.62f;
         float knuckleSeed;
 
+        // Particle & Audio integration
+        ParticleSystem ballTrail;
+        bool trailActive;
+        float lastImpactTime;
+        float lastBounceTime;
+
         void Awake()
         {
             Arena.ConfigurePhysicsLayers();
@@ -61,6 +67,19 @@ namespace Craquez
             Compat.SetDamping(Body, 0f, 0.02f);
             Sphere.radius = Arena.BallRadius;
             Compat.SetPhysicsMaterial(Sphere, "Bola", 0.45f, 0.55f, bounceTarget, true);
+
+            // Initialize ball trail from ParticleEffectsManager
+            if (ParticleEffectsManager.Instance != null)
+            {
+                ballTrail = ParticleEffectsManager.Instance.GetBallTrailSystem();
+                if (ballTrail != null)
+                {
+                    ballTrail.transform.SetParent(transform);
+                    ballTrail.transform.localPosition = Vector3.zero;
+                    ballTrail.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+                    trailActive = false;
+                }
+            }
         }
 
         public void ApplyWeather(float bounciness)
@@ -110,6 +129,13 @@ namespace Craquez
             Compat.SetVelocity(Body, Vector3.zero);
             Body.angularVelocity = Vector3.zero;
             Body.isKinematic = true;
+
+            // Stop ball trail when held
+            if (ballTrail != null && trailActive)
+            {
+                ballTrail.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+                trailActive = false;
+            }
         }
 
         public void HoldAtSocket(Transform socketTransform)
@@ -122,6 +148,17 @@ namespace Craquez
             if (holder == null) return;
             holder = null;
             Body.isKinematic = false;
+
+            // Start ball trail when released with velocity
+            if (ballTrail != null && !trailActive)
+            {
+                Vector3 v = Compat.GetVelocity(Body);
+                if (v.sqrMagnitude > 0.5f)
+                {
+                    ballTrail.Play();
+                    trailActive = true;
+                }
+            }
         }
 
         void LateUpdate()
@@ -131,6 +168,25 @@ namespace Craquez
                 Vector3 p = holder.TransformPoint(holderOffset);
                 Body.position = p;
                 transform.position = p;
+
+                // Sync ball trail position when held (trail should be stopped but positioned)
+                if (ballTrail != null)
+                {
+                    ballTrail.transform.position = transform.position;
+                }
+            }
+            else if (ballTrail != null && trailActive)
+            {
+                // Sync ball trail position when free and active
+                ballTrail.transform.position = transform.position;
+
+                // Auto-stop trail when ball is nearly stationary
+                Vector3 v = Compat.GetVelocity(Body);
+                if (v.sqrMagnitude < 0.25f)
+                {
+                    ballTrail.Stop(true, ParticleSystemStopBehavior.StopEmitting);
+                    trailActive = false;
+                }
             }
         }
 
@@ -349,6 +405,46 @@ namespace Craquez
             GoalNetPanel panel = c.collider.GetComponent<GoalNetPanel>();
             if (panel != null && panel.net != null) panel.net.Bulge(point, c.relativeVelocity);
             if (OnImpact != null) OnImpact(point, speed, c.collider);
+
+            // Particle & Audio: Impact effects
+            if (Time.time - lastImpactTime > 0.1f) // Throttle impact effects
+            {
+                lastImpactTime = Time.time;
+
+                bool isGround = c.collider.CompareTag("Ground") || c.collider.CompareTag("Pitch");
+                bool isGoalNet = panel != null;
+                bool isPlayer = c.collider.GetComponent<PlayerController>() != null || c.collider.GetComponent<GoalkeeperAI>() != null;
+                bool isPost = c.collider.CompareTag("GoalPost") || c.collider.CompareTag("GoalCrossbar");
+
+                // Particles
+                if (ParticleEffectsManager.Instance != null)
+                {
+                    // Impact particles at collision point
+                    Vector3 impactDir = c.relativeVelocity.normalized;
+                    ParticleEffectsManager.Instance.PlayKickImpact(point, impactDir, Mathf.Clamp01(speed / 25f));
+
+                    // Grass scorch for high-speed ground impacts
+                    if (isGround && speed > 20f && point.y < 0.5f)
+                        ParticleEffectsManager.Instance.PlayGrassScorch(point);
+                }
+
+                // Audio
+                if (AudioManager.Instance != null)
+                {
+                    if (isGoalNet)
+                    {
+                        AudioManager.Instance.PlayNetHit(point, Mathf.Clamp01(speed / 30f));
+                    }
+                    else if (isGround && Grounded)
+                    {
+                        AudioManager.Instance.PlayBallBounce(point, speed);
+                    }
+                    else
+                    {
+                        AudioManager.Instance.PlayImpact(point, Mathf.Clamp01(speed / 25f), isPost);
+                    }
+                }
+            }
         }
     }
 }
