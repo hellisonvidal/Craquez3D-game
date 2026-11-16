@@ -1,0 +1,139 @@
+name: Unity Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    name: Build Unity Project
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    env:
+      UNITY_VERSION: 6000.0.6f1
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+
+    steps:
+      # Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      # Cache Library folder
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ runner.os }}-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json') }}
+          restore-keys: |
+            Library-${{ runner.os }}-
+
+      # Install Unity
+      - name: Install Unity
+        uses: game-ci/unity-installer@v2
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+
+      # Activate Unity license (if available)
+      - name: Activate Unity
+        if: env.UNITY_LICENSE != ''
+        uses: game-ci/unity-activate@v2
+        with:
+          license: ${{ env.UNITY_LICENSE }}
+
+      # Run Unity Editor tests
+      - name: Run Unit Tests
+        uses: game-ci/unity-test-runner@v2
+        with:
+          projectPath: .
+          unityVersion: ${{ env.UNITY_VERSION }}
+          testMode: editmode
+          artifactsPath: artifacts/editmode
+
+      - name: Run Play Mode Tests
+        uses: game-ci/unity-test-runner@v2
+        with:
+          projectPath: .
+          unityVersion: ${{ env.UNITY_VERSION }}
+          testMode: playmode
+          artifactsPath: artifacts/playmode
+
+      # Build for Windows Standalone
+      - name: Build Windows
+        uses: game-ci/unity-builder@v2
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: StandaloneWindows64
+          buildPath: build/Windows
+          customBuildName: Craquez3D
+
+      # Build for Linux Standalone
+      - name: Build Linux
+        uses: game-ci/unity-builder@v2
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+          targetPlatform: StandaloneLinux64
+          buildPath: build/Linux
+          customBuildName: Craquez3D
+
+      # Upload build artifacts
+      - name: Upload Windows Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Craquez3D-Windows
+          path: build/Windows/
+          retention-days: 7
+
+      - name: Upload Linux Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Craquez3D-Linux
+          path: build/Linux/
+          retention-days: 7
+
+      # Upload test results
+      - name: Upload Test Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Test Results
+          path: artifacts/
+          retention-days: 7
+
+  # Release workflow (triggered on version tags)
+  release:
+    name: Create Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows Build
+        uses: actions/download-artifact@v4
+        with:
+          name: Craquez3D-Windows
+          path: release/Windows
+
+      - name: Download Linux Build
+        uses: actions/download-artifact@v4
+        with:
+          name: Craquez3D-Linux
+          path: release/Linux
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            release/Windows/*
+            release/Linux/*
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
