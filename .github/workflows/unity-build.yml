@@ -8,17 +8,14 @@ on:
     branches: [main]
 
 jobs:
-  build:
-    name: Build Unity Project
+  build-linux:
+    name: Build Linux
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
     env:
       UNITY_VERSION: 6000.0.86f1
       UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-      # Docker image tags that exist on Docker Hub
-      DOCKER_IMAGE_UBUNTU: unityci/editor:ubuntu-6000.0.86f1-base-3
-      DOCKER_IMAGE_WINDOWS: unityci/editor:windows-6000.0.86f1-base-3
 
     steps:
       # Checkout code
@@ -37,7 +34,7 @@ jobs:
           restore-keys: |
             Library-${{ runner.os }}-
 
-      # Build and test using Unity Docker image (Ubuntu base for Linux)
+      # Build and test using Unity Docker image (Ubuntu base)
       - name: Run EditMode Tests
         uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
         with:
@@ -66,22 +63,7 @@ jobs:
               -logFile - \
               -quit
 
-      # Build for Windows Standalone (using Windows Docker image)
-      - name: Build Windows
-        uses: docker://unityci/editor:windows-6000.0.86f1-base-3
-        with:
-          args: |
-            /opt/unity/Editor/Unity \
-              -batchmode \
-              -nographics \
-              -projectPath ${{ github.workspace }} \
-              -buildTarget StandaloneWindows64 \
-              -buildPath ${{ github.workspace }}/build/Windows \
-              -customBuildName Craquez3D \
-              -logFile - \
-              -quit
-
-      # Build for Linux Standalone (using Ubuntu Docker image)
+      # Build for Linux Standalone
       - name: Build Linux
         uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
         with:
@@ -96,14 +78,7 @@ jobs:
               -logFile - \
               -quit
 
-      # Upload build artifacts
-      - name: Upload Windows Build
-        uses: actions/upload-artifact@v4
-        with:
-          name: Craquez3D-Windows
-          path: build/Windows/
-          retention-days: 7
-
+      # Upload Linux build artifact
       - name: Upload Linux Build
         uses: actions/upload-artifact@v4
         with:
@@ -120,10 +95,70 @@ jobs:
           path: artifacts/
           retention-days: 7
 
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    env:
+      UNITY_VERSION: 6000.0.86f1
+      UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+
+    steps:
+      # Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+          fetch-depth: 0
+
+      # Cache Library folder
+      - name: Cache Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-${{ runner.os }}-${{ hashFiles('Packages/manifest.json', 'Packages/packages-lock.json') }}
+          restore-keys: |
+            Library-${{ runner.os }}-
+
+      # Install Unity on Windows runner
+      - name: Install Unity
+        uses: game-ci/unity-installer@v4
+        with:
+          unityVersion: ${{ env.UNITY_VERSION }}
+
+      # Activate Unity license (if available)
+      - name: Activate Unity
+        if: env.UNITY_LICENSE != ''
+        uses: game-ci/unity-activate@v4
+        with:
+          license: ${{ env.UNITY_LICENSE }}
+
+      # Build for Windows Standalone (native Windows runner, no Docker)
+      - name: Build Windows
+        run: |
+          & "C:\Program Files\Unity\Hub\Editor\${{ env.UNITY_VERSION }}\Editor\Unity.exe" \
+            -batchmode \
+            -nographics \
+            -projectPath ${{ github.workspace }} \
+            -buildTarget StandaloneWindows64 \
+            -buildPath ${{ github.workspace }}\build\Windows \
+            -customBuildName Craquez3D \
+            -logFile - \
+            -quit
+
+      # Upload Windows build artifact
+      - name: Upload Windows Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Craquez3D-Windows
+          path: build/Windows/
+          retention-days: 7
+
   # Release workflow (triggered on version tags)
   release:
     name: Create Release
-    needs: build
+    needs: [build-linux, build-windows]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
