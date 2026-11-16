@@ -16,6 +16,8 @@ namespace Craquez
     [RequireComponent(typeof(SphereCollider))]
     public class BallPhysics : MonoBehaviour
     {
+        public static BallPhysics Instance { get; private set; }
+
         public const float AirDensity = 1.225f;
         public static readonly float Area = Mathf.PI * Arena.BallRadius * Arena.BallRadius;
         public const float MagnusK = 0.0021f;
@@ -37,6 +39,7 @@ namespace Craquez
         public SphereCollider Sphere { get; private set; }
         public float LastKickTime { get; private set; } = -10f;
         public bool IsHeld { get { return holder != null; } }
+        public Transform Holder { get { return holder; } }
         public Vector3 Velocity { get { return Body.isKinematic ? Vector3.zero : Compat.GetVelocity(Body); } }
         public bool Grounded { get { return transform.position.y <= Arena.BallRadius + 0.025f; } }
         public bool InPuddle { get; private set; }
@@ -55,6 +58,7 @@ namespace Craquez
 
         void Awake()
         {
+            Instance = this;
             Arena.ConfigurePhysicsLayers();
             gameObject.layer = Arena.LayerBall;
             Body = GetComponent<Rigidbody>();
