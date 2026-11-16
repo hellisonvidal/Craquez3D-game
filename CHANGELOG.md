@@ -2,6 +2,12 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [1.1.2] — 2026-11-16
+
+- **Modo 11v11:** Inclui o modo coletivo (`CollectiveMatchMode`, `TeamAI`, `FootballRulesEngine`, `RefereeSystem`, `PlayerAttributes`) e os sistemas de áudio e partículas (`AudioManager`, `ParticleEffectsManager`), que ainda não tinham sido incluídos em um APK.
+- **CI:** O workflow "Unity Build" usava o Unity 6000.0.86f1, mas o projeto está no 6000.6.9f1. Também não ativava a licença e o instalador do Windows dava 404. Agora ele usa o `game-ci/unity-builder`, igual ao workflow Android, e roda em PRs ou manualmente.
+- **Versão:** As tags `v1.1.0` e `v1.1.1` já existiam sem APK, por isso esta versão é a 1.1.2.
+
 ## [0.5.9] — 2026-11-15
 
 - **Goleiro (Locomoção 2D e Novas Animações):** Adicionadas animações `GK_Andar` e `GK_Correr` (de `Craquez-GK.zip`), `GK_Recuar`, `GK_Espera` e `GK_Soco`, com BlendTree 2D (`Lateral` + `Forward`) para avançar/recuar/deslocar naturalmente, e duração sincronizada de mergulho e levantamento.
