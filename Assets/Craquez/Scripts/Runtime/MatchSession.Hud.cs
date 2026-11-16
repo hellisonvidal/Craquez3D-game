@@ -30,6 +30,7 @@ namespace Craquez
             if (GameSettings.NomesJogadores) DrawNameTags(s);
             DrawScoreboard(s);
             DrawControlledCard(s);
+            DrawControlsHint(s);
             if (GameSettings.MiniMapa) DrawMiniMap(s, W, H);
 
             // botões do topo
@@ -160,6 +161,62 @@ namespace Craquez
             UiKit.Text(new Rect(r.x + 20 * s, r.y + 88 * s, 70 * s, 26 * s), "FÔLEGO", new GUIStyle(ui.Tiny) { fontSize = ui.R(15) }, UiKit.TextDim, 0f);
         }
 
+        // ------------------------------------------------------------ comandos na tela
+
+        bool hintHadBall;
+        float hintChanged = -9f;
+
+        /// <summary>Nome do comando conforme o aparelho: botão do controle, tecla ou botão de toque.</summary>
+        static string Key(string action, string tecla, string toque)
+        {
+            if (InputBridge.ControleConectado != TipoControle.Nenhum) return InputBridge.Glyph(action);
+            return Application.isMobilePlatform ? toque : tecla;
+        }
+
+        /// <summary>
+        /// Lista curta dos comandos do momento, embaixo do cartão do jogador: muda (com destaque) quando
+        /// o seu jogador ganha ou perde a bola.
+        /// </summary>
+        void DrawControlsHint(float s)
+        {
+            var h = Human;
+            if (h == null || Phase != Fase.Jogo) return;
+            bool hasBall = Owner == h;
+            if (hasBall != hintHadBall) { hintHadBall = hasBall; hintChanged = Time.time; }
+            float since = Time.time - hintChanged;
+            string[] linhas = hasBall
+                ? new[]
+                {
+                    Key("rasteiro", "Z", "PASSE") + "  passe",
+                    Key("cavadinha", "Q", "LANÇAR") + "  lançamento",
+                    Key("chute", "Espaço", "CHUTE") + "  chute (segure)",
+                    Key("colocado", "E", "COLOCADO") + "  colocado",
+                    Key("drible", "F", "DRIBLE") + "  drible",
+                    Key("arrancada", "X", "ARRANCADA") + "  arrancada",
+                    Key("correr", "Shift", "CORRER") + "  correr",
+                }
+                : new[]
+                {
+                    Key("rasteiro", "Z", "DESARME") + "  desarme",
+                    Key("chute", "Espaço", "CARRINHO") + "  carrinho",
+                    Key("arrancada", "X", "TROCAR") + "  trocar jogador",
+                    Key("correr", "Shift", "CORRER") + "  correr",
+                };
+            Color accent = hasBall ? UiKit.Green : UiKit.Red;
+            float lh = 27 * s, w = 300 * s;
+            Rect r = new Rect(20 * s, 242 * s, w, 46 * s + lh * linhas.Length);
+            // ao trocar, o painel pisca forte e depois fica discreto
+            float pulse = Mathf.Clamp01(1f - since / 1.2f);
+            float alpha = Mathf.Lerp(0.45f, 0.85f, pulse);
+            UiKit.RoundRect(r, UiKit.A(UiKit.Navy, alpha), 12 * s);
+            UiKit.RoundBorder(r, UiKit.A(accent, 0.35f + 0.6f * pulse), 12 * s, (2f + 2f * pulse) * s);
+            UiKit.Text(new Rect(r.x + 14 * s, r.y + 6 * s, w - 28 * s, 34 * s), hasBall ? "COM A BOLA" : "SEM A BOLA", ui.Pill, accent, 1 * s);
+            if (hintStyle == null || hintStyle.fontSize != ui.R(17)) hintStyle = new GUIStyle(ui.Tiny) { fontSize = ui.R(17), alignment = TextAnchor.MiddleLeft };
+            for (int i = 0; i < linhas.Length; i++)
+                UiKit.Text(new Rect(r.x + 16 * s, r.y + 40 * s + i * lh, w - 24 * s, lh), linhas[i], hintStyle, UiKit.A(Color.white, Mathf.Lerp(0.8f, 1f, pulse)), 1 * s);
+        }
+        GUIStyle hintStyle;
+
         // ------------------------------------------------------------ minimapa (centro, embaixo)
 
         void DrawMiniMap(float s, float W, float H)
@@ -167,9 +224,9 @@ namespace Craquez
             float mw = Mathf.Min(W * 0.3f, 460 * s);
             float mh = mw * (Arena.Width / Arena.Length);
             Rect r = new Rect((W - mw) * 0.5f, H - mh - 18 * s, mw, mh);
-            UiKit.RoundRect(new Rect(r.x - 8 * s, r.y - 8 * s, r.width + 16 * s, r.height + 16 * s), UiKit.A(UiKit.Navy, 0.55f), 12 * s);
-            UiKit.Fill(r, new Color(0.12f, 0.42f, 0.18f, 0.55f));
-            Color line = new Color(1f, 1f, 1f, 0.55f);
+            UiKit.RoundRect(new Rect(r.x - 8 * s, r.y - 8 * s, r.width + 16 * s, r.height + 16 * s), UiKit.A(UiKit.Navy, 0.22f), 12 * s);
+            UiKit.Fill(r, new Color(0.12f, 0.42f, 0.18f, 0.22f));
+            Color line = new Color(1f, 1f, 1f, 0.35f);
             float lw = Mathf.Max(1f, 1.5f * s);
             // linhas: contorno, meio de campo, círculo e áreas
             UiKit.Fill(new Rect(r.x, r.y, r.width, lw), line); UiKit.Fill(new Rect(r.x, r.yMax - lw, r.width, lw), line);

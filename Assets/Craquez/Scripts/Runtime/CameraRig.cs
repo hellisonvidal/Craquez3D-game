@@ -90,8 +90,10 @@ namespace Craquez
                     {
                         // transmissão: lateral alta, acompanha a bola pelo campo inteiro
                         float x = Mathf.Clamp(Mathf.Lerp(bp.x, pp.x, 0.15f), -40f, 40f);
-                        pos = new Vector3(x, 21f, -Arena.HalfWidth - 24f);
                         look = new Vector3(Mathf.Clamp(bp.x, -46f, 46f), 0.5f, Mathf.Clamp(bp.z, -24f, 24f) * 0.75f);
+                        // mesmo ângulo de antes, porém ~25% mais perto do lance
+                        Vector3 far = new Vector3(x, 21f, -Arena.HalfWidth - 24f);
+                        pos = look + (far - look) * 0.75f;
                         fov = 36f;
                         break;
                     }

@@ -84,6 +84,9 @@ namespace Craquez
         MatchPlayer keeperReleaser;
         float lastSwitch;
         bool prevLow, prevChip, prevShoot, prevKnock;
+        // comandos apertados um pouco antes de a bola chegar (passe de primeira) continuam valendo
+        float bufLow = -9f, bufChip = -9f;
+        const float InputBuffer = 0.3f;
         float resumeAt = -1f;
         Action afterPause;
         readonly HashSet<MatchPlayer> offsideCandidates = new HashSet<MatchPlayer>();
@@ -429,17 +432,25 @@ namespace Craquez
             }
             if (Phase != Fase.Jogo) return;
 
+            if (lowDown) bufLow = Time.time;
+            if (chipDown) bufChip = Time.time;
             if (Owner == Human)
             {
-                if (lowDown) HumanPass(false);
-                else if (chipDown) HumanPass(true);
+                bool wantLow = Time.time - bufLow < InputBuffer, wantChip = Time.time - bufChip < InputBuffer;
+                if (wantLow || wantChip)
+                {
+                    if (Human.pc.Busy) return;          // espera o domínio terminar e passa logo em seguida
+                    bool lofted = wantChip && (!wantLow || bufChip > bufLow);
+                    bufLow = bufChip = -9f;
+                    HumanPass(lofted);
+                }
                 return;
             }
             // sem a bola: ✕ = desarme, ○ = carrinho, L1 = trocar de jogador
             if (knockDown && Owner != Human) { SwitchToBest(true); return; }
             if (lowDown)
             {
-                if (Owner != null && Owner.time != Human.time && Vector3.Distance(Human.Pos, Owner.Pos) < 2.3f) TryTackle(Human, false);
+                if (Owner != null && Owner.time != Human.time && Vector3.Distance(Human.Pos, Owner.Pos) < 2.8f) TryTackle(Human, false);
             }
             else if (shootDown && !CanHumanShoot(Human))
             {

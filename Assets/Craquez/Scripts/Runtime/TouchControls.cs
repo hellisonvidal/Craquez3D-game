@@ -10,6 +10,7 @@ namespace Craquez
     /// No modo goleiro ficam só MERGULHAR / DEFESA / SALTAR / SAIR.
     /// Ativo automaticamente em celulares; tecla T alterna no editor/PC para testar com o mouse.
     /// </summary>
+    [DefaultExecutionOrder(-200)] // lê o toque antes da partida e do jogador (sem um quadro de atraso)
     public class TouchControls : MonoBehaviour
     {
         public Texture2D circle; // mantido por compatibilidade (o desenho usa UiKit)
@@ -105,7 +106,7 @@ namespace Craquez
                 {
                     if (b.finger != int.MinValue || !Active(b)) continue;
                     float d = Vector2.Distance(p.position, ButtonScreen(b));
-                    if (d < b.radius * Screen.height * 1.35f && d < bestD) { best = b; bestD = d; }
+                    if (d < b.radius * Screen.height * 1.5f && d < bestD) { best = b; bestD = d; }
                 }
                 if (best != null) { best.finger = p.id; best.held = true; continue; }
                 if (stickFinger == int.MinValue && p.position.x < Screen.width * 0.45f && p.position.y < Screen.height * 0.82f)
@@ -124,8 +125,9 @@ namespace Craquez
                 // a base acompanha o dedo quando ele passa do limite (mudanças de direção rápidas)
                 if (d.magnitude > r) { stickOrigin = stickPos - d.normalized * r; d = stickPos - stickOrigin; }
                 float m = d.magnitude / r;
-                const float dead = 0.07f;
-                move = m > dead ? d.normalized * Mathf.Clamp01((m - dead) / (1f - dead - 0.05f)) : Vector2.zero;
+                const float dead = 0.05f;
+                // resposta um pouco mais rápida no começo do curso (curva suave), máximo antes da borda
+                move = m > dead ? d.normalized * Mathf.Pow(Mathf.Clamp01((m - dead) / (0.85f - dead)), 0.8f) : Vector2.zero;
             }
             float dt = Time.unscaledDeltaTime;
             foreach (var b in buttons) b.pressAnim = Mathf.MoveTowards(b.pressAnim, b.held ? 1f : 0f, dt * 12f);
@@ -144,7 +146,7 @@ namespace Craquez
         public bool Covers(Vector2 screenPos)
         {
             if (!visible) return false;
-            foreach (var b in buttons) if (Active(b) && Vector2.Distance(screenPos, ButtonScreen(b)) < b.radius * Screen.height * 1.35f) return true;
+            foreach (var b in buttons) if (Active(b) && Vector2.Distance(screenPos, ButtonScreen(b)) < b.radius * Screen.height * 1.5f) return true;
             return false;
         }
 
