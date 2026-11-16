@@ -136,7 +136,7 @@ namespace Craquez
                     nome = "Atlético Celeste", sigla = "ATC", cor = new Color(0.15f, 0.5f, 0.97f), corSecundaria = new Color(0.94f, 0.95f, 0.97f),
                     indice = 1, attackDir = -1f, formacao = forms[rng.Next(forms.Length)],
                     pressao = 0.45f, linhaDefensiva = 0.45f, largura = 0.9f, verticalidade = 0.45f,
-                    kitA = kitA_Visitante, kitB = kitB_Visitante, kitGoleiro = kitA_GoleiroVisitante, goleiroModeloA = true
+                    kitA = kitA_Visitante, kitB = kitB_Visitante, kitGoleiro = kitA_GoleiroVisitante, goleiroModeloA = false
                 }
             };
             for (int i = 0; i < 2; i++)
@@ -211,8 +211,8 @@ namespace Craquez
 
             for (int i = 0; i < slots.Length; i++)
             {
-                // os dois rostos se alternam na escalação (e o visitante começa pelo outro rosto)
-                bool b = ((i + t.indice) % 2) == 1;
+                // todos com o corpo do jogador e o mesmo uniforme; cada um com pele, cabelo, barba, rosto, altura e peso próprios
+                const bool b = false;
                 var prefab = b && playerPrefabB != null ? playerPrefabB : playerPrefab;
                 Vector3 pos = t.ToWorld(Mathf.Min(slots[i].x * 0.9f, -0.04f), slots[i].z);
                 var go = Instantiate(prefab, pos, Quaternion.LookRotation(t.Forward));
@@ -259,13 +259,13 @@ namespace Craquez
 
         void SpawnReferees()
         {
-            var main = refereePrefabB != null ? refereePrefabB : refereePrefab;
+            var main = refereePrefab != null ? refereePrefab : refereePrefabB;
             if (main == null) return;
             Material ma = KitMaterial(refereePrefab, kitA_Arbitro);
             Material mb = KitMaterial(main, kitB_Arbitro);
             var go = Instantiate(main, new Vector3(-6f, 0f, -12f), Quaternion.LookRotation(Vector3.forward));
             ApplyKit(go, mb);
-            RefereeLook(go, main == refereePrefabB);
+            RefereeLook(go, false);
             spawned.Add(go);
             MainReferee = go.GetComponent<RefereeAgent>();
             if (MainReferee == null) MainReferee = go.AddComponent<RefereeAgent>();
@@ -278,7 +278,7 @@ namespace Craquez
                 float half = i == 0 ? 1f : -1f;
                 var ago = Instantiate(prefab, new Vector3(half * 20f, 0f, -half * (Arena.HalfWidth + 1.4f)), Quaternion.identity);
                 ApplyKit(ago, prefab == refereePrefab ? ma : mb);
-                RefereeLook(ago, prefab != refereePrefab);
+                RefereeLook(ago, false);
                 spawned.Add(ago);
                 var ar = ago.GetComponent<RefereeAgent>();
                 if (ar == null) ar = ago.AddComponent<RefereeAgent>();

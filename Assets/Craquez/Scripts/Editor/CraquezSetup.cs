@@ -72,11 +72,12 @@ namespace Craquez.EditorTools
                 var refCtrl = CreateRefereeController();
                 var playerPrefab = CreateCharacterPrefab("Jogador", "Jogador", PlayerHeight, playerCtrl, mats["Jogador"], typeof(PlayerController));
                 var keeperPrefab = CreateCharacterPrefab("Goleiro", "Goleiro", KeeperHeight, keeperCtrl, mats["Goleiro"], typeof(GoalkeeperAI));
-                // partida 11 x 11: os dois rostos (modelos) servem de jogador de linha, goleiro e árbitro, alternados
-                var playerPrefabB = CreateCharacterPrefab("JogadorB", "Goleiro", 1.80f, playerCtrl, mats["Goleiro"], typeof(PlayerController));
-                var keeperPrefabA = CreateCharacterPrefab("GoleiroA", "Jogador", 1.87f, keeperCtrl, mats["Jogador"], typeof(GoalkeeperAI));
+                // partida 11 x 11: corpo do jogador para a linha e a arbitragem, corpo do goleiro para os dois goleiros
+                // (a variedade vem de pele, cabelo, barba, formato do rosto, altura e peso de cada um)
+                var playerPrefabB = playerPrefab;
+                var keeperPrefabA = keeperPrefab;
                 var refereePrefab = CreateCharacterPrefab("Arbitro", "Jogador", 1.80f, refCtrl, mats["Jogador"], typeof(RefereeAgent));
-                var refereePrefabB = CreateCharacterPrefab("ArbitroB", "Goleiro", 1.80f, refCtrl, mats["Goleiro"], typeof(RefereeAgent));
+                var refereePrefabB = refereePrefab;
                 var ballPrefab = CreateBallPrefab(mats["Bola"]);
 
                 Progress(interactive, "Montando a cena...", 0.75f);
@@ -158,7 +159,9 @@ namespace Craquez.EditorTools
             foreach (var set in sets)
             {
                 Avatar avatar = null;
-                foreach (var o in AssetDatabase.LoadAllAssetsAtPath(Root + "/Models/" + set.model + ".fbx"))
+                // o avatar vem do esqueleto original com que os clipes foram gravados (Animations/<pasta>/Esqueleto.fbx);
+                // o retarget Humanoid leva o movimento para os corpos novos
+                foreach (var o in AssetDatabase.LoadAllAssetsAtPath(Root + "/Animations/" + set.folder + "/Esqueleto.fbx"))
                     if (o is Avatar a && a.isHuman) { avatar = a; break; }
                 if (avatar == null) { Debug.LogWarning("[Craquez 3D] Avatar de " + set.model + " não encontrado"); continue; }
                 foreach (var c in set.clips)
@@ -949,14 +952,15 @@ namespace Craquez.EditorTools
             boot.keeperPrefabA = keeperA;
             boot.refereePrefab = referee;
             boot.refereePrefabB = refereeB;
-            boot.kitA_Casa = T("Jogador_Albedo");
-            boot.kitB_GoleiroCasa = T("Goleiro_Albedo");
-            boot.kitB_Casa = T("Uniformes/B_Casa");
+            // uniformes iguais para o time inteiro: casa azul, visitante branco (tools/make_kits.py)
+            boot.kitA_Casa = T("Uniformes/A_Casa");
+            boot.kitB_Casa = boot.kitA_Casa;
             boot.kitA_Visitante = T("Uniformes/A_Visitante");
-            boot.kitB_Visitante = T("Uniformes/B_Visitante");
-            boot.kitA_GoleiroVisitante = T("Uniformes/A_GoleiroVisitante");
+            boot.kitB_Visitante = boot.kitA_Visitante;
+            boot.kitB_GoleiroCasa = T("Goleiro_Albedo");
+            boot.kitA_GoleiroVisitante = T("Uniformes/B_GoleiroVisitante");
             boot.kitA_Arbitro = T("Uniformes/A_Arbitro");
-            boot.kitB_Arbitro = T("Uniformes/B_Arbitro");
+            boot.kitB_Arbitro = boot.kitA_Arbitro;
             EditorUtility.SetDirty(boot);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene, ScenePath);

@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Video;
@@ -80,6 +81,44 @@ namespace Craquez
             session.Preview();
             if (updater != null) updater.Check();
             Go(Tela.Aviso);
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-autoteste") >= 0) StartCoroutine(AutoTeste());
+        }
+
+        /// <summary>
+        /// Teste automático (build de diagnóstico): entra direto numa partida curta, acelera o tempo,
+        /// conta os erros/exceções do log e fecha o jogo (código 0 = sem erros).
+        /// </summary>
+        IEnumerator AutoTeste()
+        {
+            int erros = 0;
+            Application.logMessageReceived += (msg, stack, type) =>
+            {
+                if (type == LogType.Exception || type == LogType.Error || type == LogType.Assert)
+                {
+                    erros++;
+                    Console.WriteLine("[AUTOTESTE] ERRO: " + msg + " | " + (stack ?? "").Replace("\n", " | "));
+                }
+            };
+            yield return new WaitForSecondsRealtime(2f);
+            GameSettings.DuracaoTempo = 0;
+            for (int rodada = 0; rodada < 2; rodada++)
+            {
+                climaSel = rodada == 0 ? 0 : 2;  // limpo e tempestade
+                StartMatch();
+                Console.WriteLine("[AUTOTESTE] partida " + (rodada + 1) + " iniciada");
+                float fim = Time.realtimeSinceStartup + 150f;
+                while (Time.realtimeSinceStartup < fim)
+                {
+                    if (tela == Tela.Jogando && Time.timeScale > 0f && Time.timeScale < 4f) Time.timeScale = 4f;
+                    yield return null;
+                }
+                Time.timeScale = 1f;
+                Console.WriteLine("[AUTOTESTE] partida " + (rodada + 1) + " placar " + (match != null && match.Times != null ? match.Times[0].gols + "x" + match.Times[1].gols : "?") + " fase " + (match != null ? match.Phase.ToString() : "?"));
+                ExitMatch();
+                yield return new WaitForSecondsRealtime(1f);
+            }
+            Console.WriteLine("[AUTOTESTE] FIM erros=" + erros);
+            Application.Quit(erros > 0 ? 1 : 0);
         }
 
         void OnDestroy()

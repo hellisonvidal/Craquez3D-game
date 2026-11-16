@@ -80,8 +80,8 @@ namespace Craquez
 
         // medidas da cabeça na pose de repouso, em fração da altura do modelo (medidas no Blender)
         struct HeadShape { public float top, fwd, rx, rz; }
-        static readonly HeadShape HeadA = new HeadShape { top = 0.1177f, fwd = 0.0259f, rx = 0.0523f, rz = 0.0675f };
-        static readonly HeadShape HeadB = new HeadShape { top = 0.1378f, fwd = 0.0012f, rx = 0.0478f, rz = 0.0604f };
+        static readonly HeadShape HeadA = new HeadShape { top = 0.1116f, fwd = -0.006f, rx = 0.0497f, rz = 0.0544f };
+        static readonly HeadShape HeadB = new HeadShape { top = 0.1066f, fwd = -0.0127f, rx = 0.0455f, rz = 0.0566f };
 
         public static Aparencia Sortear(Funcao f, bool modelB, int visual, Atributos atr, System.Random rng)
         {
