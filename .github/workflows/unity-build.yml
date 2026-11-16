@@ -34,53 +34,64 @@ jobs:
           restore-keys: |
             Library-${{ runner.os }}-
 
-      # Install Unity using official Docker image
-      - name: Install Unity
-        uses: game-ci/unity-installer@v2
+      # Build and test using Unity Docker image
+      - name: Build and Test
+        uses: docker://unityci/editor:${{ env.UNITY_VERSION }}-base-1
         with:
-          unityVersion: ${{ env.UNITY_VERSION }}
-
-      # Activate Unity license (if available)
-      - name: Activate Unity
-        if: env.UNITY_LICENSE != ''
-        uses: game-ci/unity-activate@v2
-        with:
-          license: ${{ env.UNITY_LICENSE }}
-
-      # Run Unity Editor tests
-      - name: Run Unit Tests
-        uses: game-ci/unity-test-runner@v2
-        with:
-          projectPath: .
-          unityVersion: ${{ env.UNITY_VERSION }}
-          testMode: editmode
-          artifactsPath: artifacts/editmode
+          args: |
+            /opt/unity/Editor/Unity \
+              -batchmode \
+              -nographics \
+              -projectPath ${{ github.workspace }} \
+              -runTests \
+              -testPlatform editmode \
+              -testResults ${{ github.workspace }}/artifacts/editmode/results.xml \
+              -logFile - \
+              -quit
 
       - name: Run Play Mode Tests
-        uses: game-ci/unity-test-runner@v2
+        uses: docker://unityci/editor:${{ env.UNITY_VERSION }}-base-1
         with:
-          projectPath: .
-          unityVersion: ${{ env.UNITY_VERSION }}
-          testMode: playmode
-          artifactsPath: artifacts/playmode
+          args: |
+            /opt/unity/Editor/Unity \
+              -batchmode \
+              -nographics \
+              -projectPath ${{ github.workspace }} \
+              -runTests \
+              -testPlatform playmode \
+              -testResults ${{ github.workspace }}/artifacts/playmode/results.xml \
+              -logFile - \
+              -quit
 
       # Build for Windows Standalone
       - name: Build Windows
-        uses: game-ci/unity-builder@v2
+        uses: docker://unityci/editor:${{ env.UNITY_VERSION }}-base-1
         with:
-          unityVersion: ${{ env.UNITY_VERSION }}
-          targetPlatform: StandaloneWindows64
-          buildPath: build/Windows
-          customBuildName: Craquez3D
+          args: |
+            /opt/unity/Editor/Unity \
+              -batchmode \
+              -nographics \
+              -projectPath ${{ github.workspace }} \
+              -buildTarget StandaloneWindows64 \
+              -buildPath ${{ github.workspace }}/build/Windows \
+              -customBuildName Craquez3D \
+              -logFile - \
+              -quit
 
       # Build for Linux Standalone
       - name: Build Linux
-        uses: game-ci/unity-builder@v2
+        uses: docker://unityci/editor:${{ env.UNITY_VERSION }}-base-1
         with:
-          unityVersion: ${{ env.UNITY_VERSION }}
-          targetPlatform: StandaloneLinux64
-          buildPath: build/Linux
-          customBuildName: Craquez3D
+          args: |
+            /opt/unity/Editor/Unity \
+              -batchmode \
+              -nographics \
+              -projectPath ${{ github.workspace }} \
+              -buildTarget StandaloneLinux64 \
+              -buildPath ${{ github.workspace }}/build/Linux \
+              -customBuildName Craquez3D \
+              -logFile - \
+              -quit
 
       # Upload build artifacts
       - name: Upload Windows Build
