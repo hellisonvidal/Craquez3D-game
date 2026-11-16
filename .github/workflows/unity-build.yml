@@ -181,30 +181,59 @@ jobs:
           restore-keys: |
             Library-${{ runner.os }}-
 
-      # Install Unity on Windows runner
-      - name: Install Unity
-        uses: game-ci/unity-installer@v4
-        with:
-          unityVersion: ${{ env.UNITY_VERSION }}
+      # Install Unity using official installer (no game-ci actions)
+      - name: Download Unity Installer
+        run: |
+          $unityVersion = "${{ env.UNITY_VERSION }}"
+          $url = "https://download.unity3d.com/download_unity/${{ env.UNITY_VERSION }}/Windows64EditorInstaller/UnitySetup64-${{ env.UNITY_VERSION }}.exe"
+          $output = "UnitySetup.exe"
+          Write-Host "Downloading Unity from $url"
+          Invoke-WebRequest -Uri $url -OutFile $output
 
-      # Activate Unity license (if available)
-      - name: Activate Unity
+      - name: Install Unity
+        run: |
+          $unityVersion = "${{ env.UNITY_VERSION }}"
+          $installPath = "C:\Program Files\Unity\Hub\Editor\${{ env.UNITY_VERSION }}"
+          $arguments = "/S /D=$installPath"
+          Write-Host "Installing Unity to $installPath"
+          Start-Process -FilePath "UnitySetup.exe" -ArgumentList $arguments -Wait -NoNewWindow
+
+      # Verify Unity Installation
+      - name: Verify Unity Installation
+        run: |
+          $unityExe = "C:\Program Files\Unity\Hub\Editor\${{ env.UNITY_VERSION }}\Editor\Unity.exe"
+          if (Test-Path $unityExe) {
+            & $unityExe -version
+          } else {
+            Write-Error "Unity not found at $unityExe"
+            exit 1
+          }
+
+      # Activate Unity License
+      - name: Activate Unity License
         if: env.UNITY_LICENSE != ''
-        uses: game-ci/unity-activate@v4
-        with:
-          license: ${{ env.UNITY_LICENSE }}
+        run: |
+          $unityExe = "C:\Program Files\Unity\Hub\Editor\${{ env.UNITY_VERSION }}\Editor\Unity.exe"
+          $licenseFile = "${{ runner.temp }}\unity_license.ulf"
+          Set-Content -Path $licenseFile -Value "${{ secrets.UNITY_LICENSE }}"
+          & $unityExe -batchmode -nographics -username "CI" -password "CI" -serial "${{ secrets.UNITY_LICENSE }}" -logFile - -quit
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Unity license activation failed"
+            exit 1
+          }
 
       # Build for Windows Standalone (native Windows runner, no Docker)
       - name: Build Windows
         run: |
-          & "C:\Program Files\Unity\Hub\Editor\${{ env.UNITY_VERSION }}\Editor\Unity.exe" \
-            -batchmode \
-            -nographics \
-            -projectPath ${{ github.workspace }} \
-            -buildTarget StandaloneWindows64 \
-            -buildPath ${{ github.workspace }}\build\Windows \
-            -customBuildName Craquez3D \
-            -logFile - \
+          $unityExe = "C:\Program Files\Unity\Hub\Editor\${{ env.UNITY_VERSION }}\Editor\Unity.exe"
+          & $unityExe `
+            -batchmode `
+            -nographics `
+            -projectPath ${{ github.workspace }} `
+            -buildTarget StandaloneWindows64 `
+            -buildPath ${{ github.workspace }}\build\Windows `
+            -customBuildName Craquez3D `
+            -logFile - `
             -quit
 
       # Upload Windows build artifact
