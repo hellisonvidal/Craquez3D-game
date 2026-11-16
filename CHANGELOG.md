@@ -5,7 +5,7 @@ Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão d
 ## [1.1.2] — 2026-11-16
 
 - **Modo 11v11:** Inclui o modo coletivo (`CollectiveMatchMode`, `TeamAI`, `FootballRulesEngine`, `RefereeSystem`, `PlayerAttributes`) e os sistemas de áudio e partículas (`AudioManager`, `ParticleEffectsManager`), que ainda não tinham sido incluídos em um APK.
-- **CI:** O workflow "Unity Build" usava o Unity 6000.0.86f1, mas o projeto está no 6000.6.9f1. Também não ativava a licença e o instalador do Windows dava 404. Agora ele usa o `game-ci/unity-builder`, igual ao workflow Android, e roda em PRs ou manualmente.
+- **CI:** Removido o workflow "Unity Build" (`unity-build.yml`), que tentava gerar builds de Windows e Linux e falhava (Unity 6000.0.86f1 em vez de 6000.6.9f1, sem ativação de licença). O jogo é Android: o APK e a Release saem só do workflow "Android: build e Release".
 - **Versão:** As tags `v1.1.0` e `v1.1.1` já existiam sem APK, por isso esta versão é a 1.1.2.
 
 ## [0.5.9] — 2026-11-15
