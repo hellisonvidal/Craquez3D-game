@@ -143,19 +143,21 @@ namespace Craquez
         {
             var h = Human;
             if (h == null) return;
-            Rect r = new Rect(20 * s, 108 * s, 420 * s, 96 * s);
+            Rect r = new Rect(20 * s, 108 * s, 420 * s, 122 * s);
             UiKit.RoundRect(r, UiKit.A(UiKit.Navy, 0.72f), 14 * s);
             UiKit.Fill(new Rect(r.x, r.y + 12 * s, 6 * s, r.height - 24 * s), h.time.cor);
             UiKit.Text(new Rect(r.x + 20 * s, r.y + 6 * s, 80 * s, 50 * s), h.numero.ToString(), new GUIStyle(ui.H1) { alignment = TextAnchor.MiddleLeft }, UiKit.Yellow, 2 * s);
             UiKit.Text(new Rect(r.x + 86 * s, r.y + 6 * s, r.width - 96 * s, 34 * s), h.nome.ToUpper(), ui.H2, Color.white, 1 * s);
             string sub = GeradorJogador.NomeFuncao(h.funcao) + "  •  " + h.men.Perfil(h.funcao) + (h.lesao > 0f ? "  •  contundido" : "");
             UiKit.Text(new Rect(r.x + 86 * s, r.y + 38 * s, r.width - 96 * s, 26 * s), sub, ui.Tiny, UiKit.TextDim, 0f);
+            if (h.aparencia != null)
+                UiKit.Text(new Rect(r.x + 86 * s, r.y + 62 * s, r.width - 96 * s, 24 * s), h.aparencia.Descricao(), new GUIStyle(ui.Tiny) { fontSize = ui.R(16) }, UiKit.A(UiKit.TextDim, 0.85f), 0f);
             // fôlego
-            Rect bar = new Rect(r.x + 86 * s, r.y + 70 * s, r.width - 110 * s, 10 * s);
+            Rect bar = new Rect(r.x + 86 * s, r.y + 96 * s, r.width - 110 * s, 10 * s);
             UiKit.RoundRect(bar, UiKit.A(Color.black, 0.5f), 5 * s);
             Color sc = Color.Lerp(UiKit.Red, UiKit.Green, h.stamina);
             UiKit.RoundRect(new Rect(bar.x, bar.y, Mathf.Max(10 * s, bar.width * h.stamina), bar.height), sc, 5 * s);
-            UiKit.Text(new Rect(r.x + 20 * s, r.y + 62 * s, 70 * s, 26 * s), "FÔLEGO", new GUIStyle(ui.Tiny) { fontSize = ui.R(15) }, UiKit.TextDim, 0f);
+            UiKit.Text(new Rect(r.x + 20 * s, r.y + 88 * s, 70 * s, 26 * s), "FÔLEGO", new GUIStyle(ui.Tiny) { fontSize = ui.R(15) }, UiKit.TextDim, 0f);
         }
 
         // ------------------------------------------------------------ minimapa (centro, embaixo)

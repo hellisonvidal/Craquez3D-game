@@ -13,7 +13,7 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 17;
+        public const int Version = 18;
 
         static readonly string[] LoopClips =
         {
@@ -158,9 +158,10 @@ namespace Craquez.EditorTools
             if (!assetPath.StartsWith(Root)) return;
             var ti = (TextureImporter)assetImporter;
             string f = Path.GetFileNameWithoutExtension(assetPath);
-            bool kit = assetPath.Contains("/Uniformes/");
+            bool visual = assetPath.Contains("/Visuais/");          // pele/cabelo por jogador (1024)
+            bool kit = assetPath.Contains("/Uniformes/") || visual;
             bool isCharTex = f.StartsWith("Jogador_") || f.StartsWith("Goleiro_") || kit;
-            ti.maxTextureSize = kit ? 2048 : ((f == "Estadio_Albedo" || isCharTex) ? 4096 : 2048);
+            ti.maxTextureSize = visual ? 1024 : (kit ? 2048 : ((f == "Estadio_Albedo" || isCharTex) ? 4096 : 2048));
             ti.wrapMode = TextureWrapMode.Clamp;
 
             if (isCharTex)

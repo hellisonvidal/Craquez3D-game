@@ -168,14 +168,18 @@ namespace Craquez
             var slots = Formacoes.Get(t.formacao);
             var nums = Formacoes.Numeros(t.formacao);
             var used = new HashSet<string>();
-            Material matA = KitMaterial(playerPrefab, t.kitA);
-            Material matB = KitMaterial(playerPrefabB, t.kitB);
+            // cada rosto tem 4 combinações de pele/cabelo; embaralhadas para o elenco ficar variado
+            var visA = Shuffled(rng); var visB = Shuffled(rng);
+            int ia = 0, ib = 0;
 
             // goleiro
             var gkPrefab = t.goleiroModeloA ? keeperPrefabA : keeperPrefab;
             if (gkPrefab == null) gkPrefab = keeperPrefab;
             var gkGo = Instantiate(gkPrefab, t.OwnGoal + t.Forward * 1.2f, Quaternion.LookRotation(t.Forward));
             spawned.Add(gkGo);
+            var gkAtr = GeradorJogador.Atributos(Funcao.Zagueiro, rng, nivel);
+            var gkLook = PlayerLook.Sortear(Funcao.Goleiro, !t.goleiroModeloA, 0, gkAtr, rng);
+            PlayerLook.Aplicar(gkGo, gkLook, t.goleiroModeloA ? 1.87f : 1.90f, !t.goleiroModeloA, propMaterial, hairMats);
             var gk = gkGo.GetComponent<GoalkeeperAI>();
             gk.ball = ball;
             gk.side = -t.attackDir;
@@ -192,7 +196,8 @@ namespace Craquez
             gkInfo.numero = 1;
             gkInfo.nome = NomesBR.Gerar(rng, used);
             gkInfo.funcao = Funcao.Goleiro;
-            gkInfo.atr = GeradorJogador.Atributos(Funcao.Zagueiro, rng, nivel);
+            gkInfo.atr = gkAtr;
+            gkInfo.aparencia = gkLook;
             gkInfo.men = GeradorJogador.Mentalidade(Funcao.Zagueiro, rng);
             gkInfo.modeloB = !t.goleiroModeloA;
             gkGo.name = t.sigla + " 1 " + gkInfo.nome;
@@ -208,9 +213,13 @@ namespace Craquez
                 Vector3 pos = t.ToWorld(Mathf.Min(slots[i].x * 0.9f, -0.04f), slots[i].z);
                 var go = Instantiate(prefab, pos, Quaternion.LookRotation(t.Forward));
                 spawned.Add(go);
-                float scale = Random.Range(0.96f, 1.04f);
-                go.transform.localScale = Vector3.one * scale;
-                ApplyKit(go, b ? matB : matA);
+                // aparência própria: pele/cabelo, altura, porte, peso e penteado
+                var atr = GeradorJogador.Atributos(slots[i].funcao, rng, nivel);
+                int visual = b ? visB[ib++ % 4] : visA[ia++ % 4];
+                var look = PlayerLook.Sortear(slots[i].funcao, b, visual, atr, rng);
+                PlayerLook.AjustarAtributos(atr, look);
+                ApplyKit(go, KitMaterial(prefab, PlayerLook.Textura(b, t.indice, visual, b ? t.kitB : t.kitA)));
+                PlayerLook.Aplicar(go, look, b ? 1.80f : 1.78f, b, propMaterial, hairMats);
 
                 var pc = go.GetComponent<PlayerController>();
                 pc.ball = ball;
@@ -227,7 +236,8 @@ namespace Craquez
                 mp.funcao = slots[i].funcao;
                 mp.numero = nums[i];
                 mp.nome = NomesBR.Gerar(rng, used);
-                mp.atr = GeradorJogador.Atributos(mp.funcao, rng, nivel);
+                mp.atr = atr;
+                mp.aparencia = look;
                 mp.men = GeradorJogador.Mentalidade(mp.funcao, rng);
                 mp.modeloB = b;
                 mp.ApplyPhysical();
@@ -250,6 +260,7 @@ namespace Craquez
             Material mb = KitMaterial(main, kitB_Arbitro);
             var go = Instantiate(main, new Vector3(-6f, 0f, -12f), Quaternion.LookRotation(Vector3.forward));
             ApplyKit(go, mb);
+            RefereeLook(go, main == refereePrefabB);
             spawned.Add(go);
             MainReferee = go.GetComponent<RefereeAgent>();
             if (MainReferee == null) MainReferee = go.AddComponent<RefereeAgent>();
@@ -262,6 +273,7 @@ namespace Craquez
                 float half = i == 0 ? 1f : -1f;
                 var ago = Instantiate(prefab, new Vector3(half * 20f, 0f, -half * (Arena.HalfWidth + 1.4f)), Quaternion.identity);
                 ApplyKit(ago, prefab == refereePrefab ? ma : mb);
+                RefereeLook(ago, prefab != refereePrefab);
                 spawned.Add(ago);
                 var ar = ago.GetComponent<RefereeAgent>();
                 if (ar == null) ar = ago.AddComponent<RefereeAgent>();
@@ -270,7 +282,25 @@ namespace Craquez
             }
         }
 
+        void RefereeLook(GameObject go, bool modelB)
+        {
+            var rng = new System.Random(Random.Range(0, int.MaxValue));
+            var atr = GeradorJogador.Atributos(Funcao.Meia, rng, 0.6f);
+            var look = PlayerLook.Sortear(Funcao.Meia, modelB, 0, atr, rng);
+            if (look.penteado == Penteado.BlackPower || look.penteado == Penteado.Moicano) look.penteado = Penteado.Natural;
+            if (look.porte == Porte.Pesado) look.porte = Porte.Normal;
+            PlayerLook.Aplicar(go, look, 1.80f, modelB, propMaterial, hairMats);
+        }
+
         readonly Dictionary<string, Material> kitCache = new Dictionary<string, Material>();
+        readonly Dictionary<Color, Material> hairMats = new Dictionary<Color, Material>();
+
+        static int[] Shuffled(System.Random rng)
+        {
+            var a = new[] { 0, 1, 2, 3 };
+            for (int i = 3; i > 0; i--) { int j = rng.Next(i + 1); int x = a[i]; a[i] = a[j]; a[j] = x; }
+            return a;
+        }
 
         Material KitMaterial(GameObject prefab, Texture2D tex)
         {
@@ -320,6 +350,8 @@ namespace Craquez
             offsideCandidates.Clear();
             foreach (var m in kitCache.Values) { if (weather != null) weather.UnregisterCharacterMaterial(m); Destroy(m); }
             kitCache.Clear();
+            foreach (var m in hairMats.Values) Destroy(m);
+            hairMats.Clear();
             Times = null;
             Owner = null; Human = null; KeeperHolding = null; LastToucher = null; Scorer = null; Restart = null;
             Active = false;

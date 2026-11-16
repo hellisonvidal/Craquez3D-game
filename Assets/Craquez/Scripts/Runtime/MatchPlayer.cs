@@ -25,6 +25,7 @@ namespace Craquez
         public Atributos atr;
         public Mentalidade men;
         public bool modeloB;
+        public Aparencia aparencia;
 
         [Range(0f, 1f)] public float stamina = 1f;
         [Range(0f, 1f)] public float lesao;   // contusão: deixa o jogador mais lento até o fim
@@ -60,10 +61,11 @@ namespace Craquez
         {
             if (pc == null) return;
             float fatigue = Mathf.Lerp(0.8f, 1f, Mathf.Clamp01(stamina / 0.6f));
-            pc.speedScale = (0.86f + 0.24f * atr.velocidade) * fatigue * (1f - lesao * 0.28f);
-            pc.accelScale = (0.82f + 0.32f * atr.aceleracao) * Mathf.Lerp(0.85f, 1f, stamina);
+            float body = aparencia == null ? 1f : (aparencia.porte == Porte.Pesado ? 0.97f : (aparencia.porte == Porte.Magro ? 1.01f : 1f));
+            pc.speedScale = (0.86f + 0.24f * atr.velocidade) * fatigue * (1f - lesao * 0.28f) * body;
+            pc.accelScale = (0.82f + 0.32f * atr.aceleracao) * Mathf.Lerp(0.85f, 1f, stamina) * body;
             pc.accuracyScale = Mathf.Lerp(1.45f, 0.72f, atr.finalizacao) * (1f + (1f - stamina) * 0.35f) * (time != null ? time.habilidade : 1f);
-            pc.bodyMass = 66f + atr.forca * 22f;
+            pc.bodyMass = aparencia != null ? aparencia.peso * (0.9f + atr.forca * 0.2f) : 66f + atr.forca * 22f;
         }
 
         void UpdateStamina(float dt)

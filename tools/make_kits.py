@@ -82,20 +82,82 @@ def model_b(img, base, accent, white=None):
     if white is not None: out = paint(out, wht, white, shade_of(v, wht))
     return out
 
+# ---------------------------------------------------------------- aparências (pele e cabelo)
+
+LOOKS = {
+    # modelo A (original: pele clara, cabelo castanho escuro)
+    'A': [None,
+          ((0.74, 0.53, 0.38), (0.05, 0.04, 0.035)),   # moreno, cabelo preto
+          ((0.33, 0.215, 0.155), (0.035, 0.03, 0.028)), # negro, cabelo preto
+          ((0.95, 0.80, 0.68), (0.78, 0.62, 0.32))],   # claro, loiro
+    # modelo B (original: pele parda, cabelo preto)
+    'B': [None,
+          ((0.27, 0.175, 0.125), (0.03, 0.03, 0.03)),  # pele bem escura
+          ((0.93, 0.77, 0.65), (0.42, 0.26, 0.14)),    # claro, castanho
+          ((0.80, 0.60, 0.45), (0.55, 0.16, 0.08))],   # moreno claro, ruivo/acaju
+}
+
+def recolor(img, mask, target, by_luma=False):
+    """Leva a região à cor alvo preservando as variações relativas (lábios, sombras, fios)."""
+    m = mask > 0.5
+    if not m.any():
+        return img
+    if by_luma:
+        lum = img.mean(-1)
+        ratio = np.clip(lum / (np.median(lum[m]) + 1e-3), 0.2, 2.6)[..., None]
+    else:
+        med = np.median(img[m], axis=0) + 1e-3
+        ratio = np.clip(img / med[None, None, :], 0.2, 2.2)
+    new = np.clip(np.array(target, np.float32)[None, None, :] * ratio, 0, 1)
+    return img * (1 - mask[..., None]) + new * mask[..., None]
+
+def look(img, model, idx):
+    spec = LOOKS[model][idx]
+    if spec is None:
+        return img
+    skin_t, hair_t = spec
+    h, s, v = rgb2hsv(img)
+    r = img.shape[0] / 1024.0
+    warm = ((h < 60) | (h >= 300)).astype(np.float32)
+    skin0 = skin_mask(h, s, v)
+    # rosto inteiro: tons quentes claros perto da pele também (bochechas pálidas, nariz, orelhas)
+    skin = np.maximum(skin0, smooth(density(skin0, 6 * r), 0.35, 0.6) * warm * smooth(v, 0.3, 0.42) * (1 - smooth(s, 0.62, 0.75)))
+    hair0 = warm * smooth(s, 0.15, 0.22) * (1 - smooth(v, 0.3, 0.45)) * (1 - skin)
+    near = smooth(density(hair0, 11 * r), 0.1, 0.22)
+    # fios pretos no meio do cabelo (não o tecido azulado do uniforme nem o fundo do atlas)
+    hair = np.maximum(hair0, near * warm * smooth(s, 0.06, 0.12) * (1 - smooth(v, 0.35, 0.5)) * smooth(v, 0.03, 0.06))
+    hair *= 1 - skin
+    out = recolor(img, skin, skin_t)
+    out = recolor(out, hair, hair_t, by_luma=True)
+    return out
+
 def save(img, name):
     Image.fromarray((np.clip(img, 0, 1) * 255 + 0.5).astype(np.uint8)).save(OUT + name + '.jpg', quality=93, subsampling=0)
     print('ok', name)
 
 A = load('Jogador_Albedo.png')
 B = load('Goleiro_Albedo.png')
+kits = {}
 
 # Craquez FC (casa): preto com detalhes vermelhos  -> modelo A já é assim; B recolorido
-save(model_b(B, (0.07, 0.07, 0.08), (0.86, 0.1, 0.1)), 'B_Casa')
+kits['B_Casa'] = model_b(B, (0.07, 0.07, 0.08), (0.86, 0.1, 0.1)); save(kits['B_Casa'], 'B_Casa')
 # Atlético Celeste (visitante): branco com azul-celeste
-save(model_a(A, (0.92, 0.93, 0.95), (0.12, 0.48, 0.95), white=(0.1, 0.25, 0.6)), 'A_Visitante')
-save(model_b(B, (0.92, 0.93, 0.95), (0.12, 0.48, 0.95)), 'B_Visitante')
+kits['A_Visitante'] = model_a(A, (0.92, 0.93, 0.95), (0.12, 0.48, 0.95), white=(0.1, 0.25, 0.6)); save(kits['A_Visitante'], 'A_Visitante')
+kits['B_Visitante'] = model_b(B, (0.92, 0.93, 0.95), (0.12, 0.48, 0.95)); save(kits['B_Visitante'], 'B_Visitante')
 # Goleiros: casa = verde original (modelo B); visitante = laranja com preto (modelo A)
 save(model_a(A, (1.0, 0.5, 0.08), (0.08, 0.08, 0.08), white=(0.1, 0.1, 0.1)), 'A_GoleiroVisitante')
 # Arbitragem: amarelo-limão com preto
 save(model_a(A, (0.86, 0.95, 0.18), (0.06, 0.06, 0.06), white=(0.06, 0.06, 0.06)), 'A_Arbitro')
 save(model_b(B, (0.86, 0.95, 0.18), (0.06, 0.06, 0.06)), 'B_Arbitro')
+
+# aparências por jogador (1024 px, carregadas pela partida via Resources/Visuais): {modelo}_{time}_{n}
+kits['A_Casa'] = A
+VIS = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'Assets', 'Craquez', 'Resources', 'Visuais') + '/'
+if len(sys.argv) > 4: VIS = sys.argv[4]
+os.makedirs(VIS, exist_ok=True)
+for key, base in kits.items():
+    model = key[0]
+    small = np.asarray(Image.fromarray((np.clip(base, 0, 1) * 255).astype(np.uint8)).resize((1024, 1024), Image.LANCZOS)).astype(np.float32) / 255
+    for i in range(1, 4):
+        Image.fromarray((np.clip(look(small, model, i), 0, 1) * 255 + 0.5).astype(np.uint8)).save(VIS + '%s_%d.jpg' % (key, i), quality=90)
+        print('ok visual', key, i)
