@@ -76,6 +76,7 @@ namespace Craquez
         public IList<RefereeAgent> Referees { get { return referees; } }
 
         int userTeam;
+        Transform savedRigPlayer, savedRigKeeper;
         int kickoffTeamFirstHalf;
         float phaseTime;
         float seenKick = -10f;
@@ -102,6 +103,8 @@ namespace Craquez
         public void Begin(Clima clima, int userTeamIndex, int halfMinutes, int dificuldade)
         {
             if (Active) Teardown();
+            savedRigPlayer = cameraRig.player;
+            savedRigKeeper = cameraRig.keeper;
             Active = true;
             userTeam = userTeamIndex;
             seenKick = ball.LastKickTime;
@@ -303,7 +306,9 @@ namespace Craquez
             {
                 cameraRig.povHead = null;
                 cameraRig.matchMode = false;
-                cameraRig.player = null;
+                cameraRig.attackDir = 1f;
+                cameraRig.player = savedRigPlayer;
+                cameraRig.keeper = savedRigKeeper;
             }
             foreach (var go in spawned) if (go != null) Destroy(go);
             spawned.Clear();

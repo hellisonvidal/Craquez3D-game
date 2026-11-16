@@ -16,6 +16,13 @@ namespace Craquez
         public GameObject keeperPrefab;
         public GameObject ballPrefab;
 
+        [Header("Partida 11 x 11")]
+        public GameObject playerPrefabB;
+        public GameObject keeperPrefabA;
+        public GameObject refereePrefab;
+        public GameObject refereePrefabB;
+        public Texture2D kitA_Casa, kitB_Casa, kitB_GoleiroCasa, kitA_Visitante, kitB_Visitante, kitA_GoleiroVisitante, kitA_Arbitro, kitB_Arbitro;
+
         [Header("Materiais")]
         public Material grassLight;
         public Material grassDark;
@@ -149,9 +156,29 @@ namespace Craquez
             session.weather = weather;
             session.touch = touch;
 
+            var match = ui.AddComponent<MatchSession>();
+            match.ball = ball;
+            match.cameraRig = rig;
+            match.weather = weather;
+            match.touch = touch;
+            match.mainCamera = mainCamera;
+            match.playerPrefab = playerPrefab;
+            match.playerPrefabB = playerPrefabB != null ? playerPrefabB : playerPrefab;
+            match.keeperPrefab = keeperPrefab;
+            match.keeperPrefabA = keeperPrefabA != null ? keeperPrefabA : keeperPrefab;
+            match.refereePrefab = refereePrefab;
+            match.refereePrefabB = refereePrefabB != null ? refereePrefabB : refereePrefab;
+            match.kitA_Casa = kitA_Casa; match.kitB_Casa = kitB_Casa; match.kitB_GoleiroCasa = kitB_GoleiroCasa;
+            match.kitA_Visitante = kitA_Visitante; match.kitB_Visitante = kitB_Visitante; match.kitA_GoleiroVisitante = kitA_GoleiroVisitante;
+            match.kitA_Arbitro = kitA_Arbitro; match.kitB_Arbitro = kitB_Arbitro;
+            match.propMaterial = post;
+            match.trainingObjects.Add(playerGo);
+            match.trainingObjects.Add(keeperGo);
+
             var updater = ui.AddComponent<AppUpdater>();
             var flow = ui.AddComponent<AppFlow>();
             flow.session = session;
+            flow.match = match;
             flow.updater = updater;
             flow.introClip = introClip;
             flow.logo = logo;

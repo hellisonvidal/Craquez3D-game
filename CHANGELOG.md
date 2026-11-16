@@ -2,6 +2,21 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [1.2.0] — 2026-11-16
+
+- **Partida 11 x 11 (modo novo):** Craquez FC x Atlético Celeste, com escolha do seu time, clima, duração (2 x 2 a 2 x 12 min), dificuldade e câmera. Tem dois tempos com troca de lado no intervalo, placar, relógio, estatísticas no fim e a opção de jogar de novo.
+- **Elencos:** 22 jogadores e 2 goleiros alternando os dois rostos do jogo, com uniformes por time (gerados por `tools/make_kits.py`, preservando pele, cabelo e rosto), altura variada, nome e número.
+- **Inteligência:** cada jogador tem atributos e mentalidade próprios (ofensividade, criatividade, disciplina, agressividade, espírito de equipe, frieza, liderança). Com a bola, ele escolhe entre finalizar, passar, lançar, cruzar, conduzir, driblar e afastar. Sem a bola, dá opção de passe, infiltra sem ficar impedido, pressiona, fecha linhas de passe, marca e recompõe. Na comemoração, os mais solidários correm para abraçar o autor do gol.
+- **Regras:** saída de bola, lateral, escanteio, tiro de meta, falta (com barreira), pênalti, impedimento, vantagem, cartões amarelo e vermelho (expulsão) e atendimento médico.
+- **Arbitragem:** árbitro no sistema diagonal e dois assistentes em laterais opostas, cada um alinhado ao penúltimo defensor da sua metade, com bandeira, cartões e apito.
+- **Física dos jogadores:** trombadas com troca de quantidade de movimento conforme massa e velocidade, desequilíbrio, quedas, contusões (o jogador fica mais lento), carrinho, bote, divididas, domínio que pode escapar com a bola rápida e escorregões no gramado molhado.
+- **Animações gratuitas:** Universal Animation Library 1 e 2 da Quaternius (licença CC0): quedas, levantar, atingido, empurrado, carrinho, arremesso lateral, comemorações, reclamação e locomoção e gestos dos árbitros.
+- **HUD:** nomes fixos sobre os jogadores, cartão do jogador controlado (função, perfil e fôlego) e minimapa no centro, embaixo. Nomes e minimapa podem ser desligados em Configurações ou na Pausa.
+- **Câmera:** nova **visão do jogador** (primeira pessoa, sem ver a própria cabeça), além de TV, atrás do jogador, aérea e dinâmica.
+- **Chuva e tempestade:** a chuva vem em ondas de intensidade, o gramado encharca com o tempo, há névoa de respingos rente ao chão, rastro d'água da bola, gotas na lente da câmera, raios visíveis no céu e torcida e apito sintetizados.
+- **Controles da partida:** com a bola, ✕ = passe, △ = lançamento, ○/□ = chute. Sem a bola, ✕ = desarme, ○ = carrinho e L1 = trocar de jogador. Os botões de toque mudam de nome conforme a situação.
+- O esqueleto antigo e não utilizado do modo 11 x 11 (`TeamAI`, `CollectiveMatchMode`, `FootballRulesEngine`, `RefereeSystem`, `PlayerAttributes`) foi substituído por esta implementação.
+
 ## [1.1.2] — 2026-11-16
 
 - **Modo 11v11:** Inclui o modo coletivo (`CollectiveMatchMode`, `TeamAI`, `FootballRulesEngine`, `RefereeSystem`, `PlayerAttributes`) e os sistemas de áudio e partículas (`AudioManager`, `ParticleEffectsManager`), que ainda não tinham sido incluídos em um APK.

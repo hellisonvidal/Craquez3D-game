@@ -15,10 +15,13 @@ namespace Craquez
         public Texture2D circle; // mantido por compatibilidade (o desenho usa UiKit)
         public bool visible;
         public bool goalkeeperMode;
+        [Tooltip("Partida 11 x 11: rótulos de ataque (com a bola) e de defesa (sem a bola).")]
+        public bool matchMode;
+        public System.Func<bool> matchHasBall;
 
         class Button
         {
-            public string label, gkLabel;
+            public string label, gkLabel, atkLabel, defLabel;
             public Vector2 center; // em alturas de tela, a partir do canto inferior direito
             public float radius;   // fração da altura da tela
             public int finger = int.MinValue;
@@ -30,13 +33,13 @@ namespace Craquez
 
         readonly List<PointerPoint> pointers = new List<PointerPoint>();
         readonly HashSet<int> seen = new HashSet<int>();
-        readonly Button shoot = new Button { label = "CHUTE", gkLabel = "MERGULHAR", center = new Vector2(0.17f, 0.2f), radius = 0.105f, color = UiKit.Red };
-        readonly Button finesse = new Button { label = "COLOCADO", gkLabel = "DEFESA", center = new Vector2(0.39f, 0.13f), radius = 0.07f, color = UiKit.Blue };
-        readonly Button low = new Button { label = "RASTEIRO", gkLabel = "", center = new Vector2(0.38f, 0.32f), radius = 0.066f, color = new Color(0.55f, 0.35f, 0.95f), attackerOnly = true };
-        readonly Button chip = new Button { label = "CAVADINHA", gkLabel = "SALTAR", center = new Vector2(0.2f, 0.44f), radius = 0.066f, color = UiKit.Yellow };
-        readonly Button sprint = new Button { label = "CORRER", gkLabel = "SAIR", center = new Vector2(0.6f, 0.11f), radius = 0.075f, color = UiKit.Green };
-        readonly Button skill = new Button { label = "DRIBLE", gkLabel = "", center = new Vector2(0.58f, 0.3f), radius = 0.062f, color = new Color(1f, 0.55f, 0.15f), attackerOnly = true };
-        readonly Button knock = new Button { label = "ARRANCADA", gkLabel = "", center = new Vector2(0.43f, 0.5f), radius = 0.058f, color = new Color(0.2f, 0.8f, 0.85f), attackerOnly = true };
+        readonly Button shoot = new Button { label = "CHUTE", gkLabel = "MERGULHAR", atkLabel = "CHUTE", defLabel = "CARRINHO", center = new Vector2(0.17f, 0.2f), radius = 0.105f, color = UiKit.Red };
+        readonly Button finesse = new Button { label = "COLOCADO", gkLabel = "DEFESA", atkLabel = "COLOCADO", defLabel = "", center = new Vector2(0.39f, 0.13f), radius = 0.07f, color = UiKit.Blue };
+        readonly Button low = new Button { label = "RASTEIRO", gkLabel = "", atkLabel = "PASSE", defLabel = "DESARME", center = new Vector2(0.38f, 0.32f), radius = 0.066f, color = new Color(0.55f, 0.35f, 0.95f), attackerOnly = true };
+        readonly Button chip = new Button { label = "CAVADINHA", gkLabel = "SALTAR", atkLabel = "LANÇAR", defLabel = "", center = new Vector2(0.2f, 0.44f), radius = 0.066f, color = UiKit.Yellow };
+        readonly Button sprint = new Button { label = "CORRER", gkLabel = "SAIR", atkLabel = "CORRER", defLabel = "CORRER", center = new Vector2(0.6f, 0.11f), radius = 0.075f, color = UiKit.Green };
+        readonly Button skill = new Button { label = "DRIBLE", gkLabel = "", atkLabel = "DRIBLE", defLabel = "", center = new Vector2(0.58f, 0.3f), radius = 0.062f, color = new Color(1f, 0.55f, 0.15f), attackerOnly = true };
+        readonly Button knock = new Button { label = "ARRANCADA", gkLabel = "", atkLabel = "ARRANCADA", defLabel = "TROCAR", center = new Vector2(0.43f, 0.5f), radius = 0.058f, color = new Color(0.2f, 0.8f, 0.85f), attackerOnly = true };
         Button[] buttons;
 
         int stickFinger = int.MinValue;
@@ -59,7 +62,17 @@ namespace Craquez
             InputBridge.VirtualLow = InputBridge.VirtualSkill = InputBridge.VirtualKnock = false;
         }
 
-        bool Active(Button b) { return !(goalkeeperMode && b.attackerOnly); }
+        bool Active(Button b)
+        {
+            if (matchMode) return !string.IsNullOrEmpty(Label(b));
+            return !(goalkeeperMode && b.attackerOnly);
+        }
+
+        string Label(Button b)
+        {
+            if (matchMode) return matchHasBall != null && matchHasBall() ? b.atkLabel : b.defLabel;
+            return goalkeeperMode ? b.gkLabel : b.label;
+        }
 
         Vector2 ButtonScreen(Button b)
         {
@@ -176,7 +189,7 @@ namespace Craquez
                 UiKit.Disc(g, r, fill);
                 UiKit.Disc(g - new Vector2(0f, r * 0.25f), r * 0.6f, new Color(1f, 1f, 1f, 0.08f + 0.06f * b.pressAnim)); // brilho
                 UiKit.RingAt(g, r, new Color(1f, 1f, 1f, 0.55f + 0.4f * b.pressAnim));
-                string text = goalkeeperMode ? b.gkLabel : b.label;
+                string text = Label(b);
                 var st = labelStyle;
                 int keep = st.fontSize;
                 if (b == shoot) st.fontSize = Mathf.RoundToInt(keep * 1.25f);
