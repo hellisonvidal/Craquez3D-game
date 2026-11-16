@@ -49,6 +49,36 @@ jobs:
           mkdir -p ${{ github.workspace }}/artifacts/playmode
           mkdir -p ${{ github.workspace }}/build/Linux
 
+      # Debug: Verify Unity environment and license
+      - name: Debug Unity Startup
+        uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
+        env:
+          HOME: ${{ env.UNITY_HOME }}
+          XDG_CACHE_HOME: ${{ env.UNITY_CACHE_DIR }}
+          XDG_CONFIG_HOME: ${{ env.UNITY_CONFIG_DIR }}
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+        with:
+          args: |
+            echo "=== Unity Environment Debug ==="
+            echo "HOME=$HOME"
+            echo "XDG_CACHE_HOME=$XDG_CACHE_HOME"
+            echo "XDG_CONFIG_HOME=$XDG_CONFIG_HOME"
+            echo "UNITY_HOME=$UNITY_HOME"
+            echo "UNITY_CACHE_DIR=$UNITY_CACHE_DIR"
+            echo "UNITY_CONFIG_DIR=$UNITY_CONFIG_DIR"
+            echo "UNITY_LICENSE length: ${#UNITY_LICENSE}"
+            echo "=== Directory Permissions ==="
+            ls -la $HOME
+            ls -la $XDG_CACHE_HOME
+            ls -la $XDG_CONFIG_HOME
+            echo "=== Unity Version ==="
+            /opt/unity/Editor/Unity -version
+            echo "=== License Test (no project) ==="
+            /opt/unity/Editor/Unity -batchmode -nographics -quit
+            echo "=== License Test (with project) ==="
+            /opt/unity/Editor/Unity -batchmode -nographics -projectPath ${{ github.workspace }} -quit
+            echo "=== Debug Complete ==="
+
       # Build and test using Unity Docker image (Ubuntu base)
       - name: Run EditMode Tests
         uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
