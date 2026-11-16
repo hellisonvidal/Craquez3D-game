@@ -16,6 +16,10 @@ jobs:
     env:
       UNITY_VERSION: 6000.0.86f1
       UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      # Use workspace as HOME (writable location)
+      UNITY_HOME: ${{ github.workspace }}/.unity_home
+      XDG_CACHE_HOME: ${{ github.workspace }}/.cache
+      XDG_CONFIG_HOME: ${{ github.workspace }}/.config
 
     steps:
       # Checkout code
@@ -34,12 +38,12 @@ jobs:
           restore-keys: |
             Library-${{ runner.os }}-
 
-      # Setup Unity environment (fix HOME/cache directories)
+      # Setup Unity environment (create writable directories)
       - name: Setup Unity Environment
         run: |
-          mkdir -p /github/home/.local/share/unity3d
-          mkdir -p /github/home/.cache/unity3d
-          mkdir -p /github/home/.config/unity3d
+          mkdir -p ${{ env.UNITY_HOME }}/.local/share/unity3d
+          mkdir -p ${{ env.XDG_CACHE_HOME }/unity3d
+          mkdir -p ${{ env.XDG_CONFIG_HOME }}/unity3d
           mkdir -p ${{ github.workspace }}/artifacts/editmode
           mkdir -p ${{ github.workspace }}/artifacts/playmode
           mkdir -p ${{ github.workspace }}/build/Linux
@@ -48,9 +52,9 @@ jobs:
       - name: Run EditMode Tests
         uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
         env:
-          HOME: /github/home
-          XDG_CACHE_HOME: /github/home/.cache
-          XDG_CONFIG_HOME: /github/home/.config
+          HOME: ${{ env.UNITY_HOME }}
+          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
+          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         with:
           args: |
@@ -67,9 +71,9 @@ jobs:
       - name: Run Play Mode Tests
         uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
         env:
-          HOME: /github/home
-          XDG_CACHE_HOME: /github/home/.cache
-          XDG_CONFIG_HOME: /github/home/.config
+          HOME: ${{ env.UNITY_HOME }}
+          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
+          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         with:
           args: |
@@ -87,9 +91,9 @@ jobs:
       - name: Build Linux
         uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
         env:
-          HOME: /github/home
-          XDG_CACHE_HOME: /github/home/.cache
-          XDG_CONFIG_HOME: /github/home/.config
+          HOME: ${{ env.UNITY_HOME }}
+          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
+          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         with:
           args: |
