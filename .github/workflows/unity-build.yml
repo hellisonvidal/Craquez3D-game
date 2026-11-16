@@ -18,8 +18,9 @@ jobs:
       UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
       # Use workspace as HOME (writable location)
       UNITY_HOME: ${{ github.workspace }}/.unity_home
-      XDG_CACHE_HOME: ${{ github.workspace }}/.cache
-      XDG_CONFIG_HOME: ${{ github.workspace }}/.config
+      UNITY_CACHE_DIR: ${{ github.workspace }}/.cache/unity3d
+      UNITY_CONFIG_DIR: ${{ github.workspace }}/.config/unity3d
+      UNITY_LOCAL_DIR: ${{ github.workspace }}/.local/share/unity3d
 
     steps:
       # Checkout code
@@ -41,9 +42,9 @@ jobs:
       # Setup Unity environment (create writable directories)
       - name: Setup Unity Environment
         run: |
-          mkdir -p ${{ env.UNITY_HOME }}/.local/share/unity3d
-          mkdir -p ${{ env.XDG_CACHE_HOME }/unity3d
-          mkdir -p ${{ env.XDG_CONFIG_HOME }}/unity3d
+          mkdir -p ${{ env.UNITY_LOCAL_DIR }}
+          mkdir -p ${{ env.UNITY_CACHE_DIR }}
+          mkdir -p ${{ env.UNITY_CONFIG_DIR }}
           mkdir -p ${{ github.workspace }}/artifacts/editmode
           mkdir -p ${{ github.workspace }}/artifacts/playmode
           mkdir -p ${{ github.workspace }}/build/Linux
@@ -53,8 +54,8 @@ jobs:
         uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
         env:
           HOME: ${{ env.UNITY_HOME }}
-          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
-          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
+          XDG_CACHE_HOME: ${{ env.UNITY_CACHE_DIR }}
+          XDG_CONFIG_HOME: ${{ env.UNITY_CONFIG_DIR }}
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         with:
           args: |
@@ -72,8 +73,8 @@ jobs:
         uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
         env:
           HOME: ${{ env.UNITY_HOME }}
-          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
-          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
+          XDG_CACHE_HOME: ${{ env.UNITY_CACHE_DIR }}
+          XDG_CONFIG_HOME: ${{ env.UNITY_CONFIG_DIR }}
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         with:
           args: |
@@ -92,8 +93,8 @@ jobs:
         uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
         env:
           HOME: ${{ env.UNITY_HOME }}
-          XDG_CACHE_HOME: ${{ env.XDG_CACHE_HOME }}
-          XDG_CONFIG_HOME: ${{ env.XDG_CONFIG_HOME }}
+          XDG_CACHE_HOME: ${{ env.UNITY_CACHE_DIR }}
+          XDG_CONFIG_HOME: ${{ env.UNITY_CONFIG_DIR }}
           UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         with:
           args: |
