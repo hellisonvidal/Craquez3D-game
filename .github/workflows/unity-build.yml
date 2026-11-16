@@ -34,7 +34,7 @@ jobs:
           restore-keys: |
             Library-${{ runner.os }}-
 
-      # Install Unity
+      # Install Unity using official Docker image
       - name: Install Unity
         uses: game-ci/unity-installer@v2
         with:
