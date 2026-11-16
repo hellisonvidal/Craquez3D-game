@@ -180,6 +180,7 @@ namespace Craquez
             var gkAtr = GeradorJogador.Atributos(Funcao.Zagueiro, rng, nivel);
             var gkLook = PlayerLook.Sortear(Funcao.Goleiro, !t.goleiroModeloA, 0, gkAtr, rng);
             PlayerLook.Aplicar(gkGo, gkLook, t.goleiroModeloA ? 1.87f : 1.90f, !t.goleiroModeloA, propMaterial, hairMats);
+            gkLook.rosto = FaceShapes.Aplicar(gkGo, rng);
             var gk = gkGo.GetComponent<GoalkeeperAI>();
             gk.ball = ball;
             gk.side = -t.attackDir;
@@ -215,11 +216,12 @@ namespace Craquez
                 spawned.Add(go);
                 // aparência própria: pele/cabelo, altura, porte, peso e penteado
                 var atr = GeradorJogador.Atributos(slots[i].funcao, rng, nivel);
-                int visual = b ? visB[ib++ % 4] : visA[ia++ % 4];
+                int visual = b ? visB[ib++ % PlayerLook.Visuais] : visA[ia++ % PlayerLook.Visuais];
                 var look = PlayerLook.Sortear(slots[i].funcao, b, visual, atr, rng);
                 PlayerLook.AjustarAtributos(atr, look);
                 ApplyKit(go, KitMaterial(prefab, PlayerLook.Textura(b, t.indice, visual, b ? t.kitB : t.kitA)));
                 PlayerLook.Aplicar(go, look, b ? 1.80f : 1.78f, b, propMaterial, hairMats);
+                look.rosto = FaceShapes.Aplicar(go, rng);
 
                 var pc = go.GetComponent<PlayerController>();
                 pc.ball = ball;
@@ -297,8 +299,9 @@ namespace Craquez
 
         static int[] Shuffled(System.Random rng)
         {
-            var a = new[] { 0, 1, 2, 3 };
-            for (int i = 3; i > 0; i--) { int j = rng.Next(i + 1); int x = a[i]; a[i] = a[j]; a[j] = x; }
+            var a = new int[PlayerLook.Visuais];
+            for (int i = 0; i < a.Length; i++) a[i] = i;
+            for (int i = a.Length - 1; i > 0; i--) { int j = rng.Next(i + 1); int x = a[i]; a[i] = a[j]; a[j] = x; }
             return a;
         }
 
@@ -350,6 +353,7 @@ namespace Craquez
             offsideCandidates.Clear();
             foreach (var m in kitCache.Values) { if (weather != null) weather.UnregisterCharacterMaterial(m); Destroy(m); }
             kitCache.Clear();
+            FaceShapes.Limpar();
             foreach (var m in hairMats.Values) Destroy(m);
             hairMats.Clear();
             Times = null;

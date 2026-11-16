@@ -16,6 +16,8 @@ namespace Craquez
         public float peso;          // kg
         public Penteado penteado;
         public Color corCabelo;
+        public string barba;
+        public string rosto;        // formato do rosto (FaceShapes)
 
         public string Descricao()
         {
@@ -58,10 +60,23 @@ namespace Craquez
     public static class PlayerLook
     {
         // cor do cabelo de cada visual (mesma ordem de tools/make_kits.py)
-        static readonly Color[] HairA = { new Color(0.16f, 0.11f, 0.08f), new Color(0.05f, 0.04f, 0.035f), new Color(0.035f, 0.03f, 0.028f), new Color(0.78f, 0.62f, 0.32f) };
-        static readonly Color[] HairB = { new Color(0.045f, 0.04f, 0.04f), new Color(0.03f, 0.03f, 0.03f), new Color(0.42f, 0.26f, 0.14f), new Color(0.55f, 0.16f, 0.08f) };
+        public const int Visuais = 8;
+        static readonly Color[] HairA =
+        {
+            new Color(0.16f, 0.11f, 0.08f), new Color(0.05f, 0.04f, 0.035f), new Color(0.035f, 0.03f, 0.028f), new Color(0.78f, 0.62f, 0.32f),
+            new Color(0.2f, 0.13f, 0.08f), new Color(0.05f, 0.04f, 0.035f), new Color(0.035f, 0.03f, 0.028f), new Color(0.55f, 0.16f, 0.08f)
+        };
+        static readonly Color[] HairB =
+        {
+            new Color(0.045f, 0.04f, 0.04f), new Color(0.03f, 0.03f, 0.03f), new Color(0.42f, 0.26f, 0.14f), new Color(0.55f, 0.16f, 0.08f),
+            new Color(0.045f, 0.04f, 0.04f), new Color(0.03f, 0.03f, 0.03f), new Color(0.78f, 0.62f, 0.32f), new Color(0.045f, 0.04f, 0.04f)
+        };
+        // barba de cada visual (mesma ordem de tools/make_kits.py)
+        static readonly string[] BeardA = { "barba cheia", "barba cheia", "cavanhaque", "sem barba", "sem barba", "bigode", "sem barba", "barba por fazer" };
+        static readonly string[] BeardB = { "barba cheia", "barba cheia", "sem barba", "cavanhaque", "sem barba", "bigode", "barba por fazer", "cavanhaque" };
+        public static string Barba(bool modelB, int visual) { return (modelB ? BeardB : BeardA)[Mathf.Clamp(visual, 0, Visuais - 1)]; }
         // visuais de pele escura (o black power aparece mais neles)
-        static bool DarkSkin(bool modelB, int visual) { return modelB ? visual == 0 || visual == 1 : visual == 2; }
+        static bool DarkSkin(bool modelB, int visual) { return modelB ? (visual == 0 || visual == 1 || visual == 4 || visual == 5 || visual == 7) : (visual == 2 || visual == 6); }
 
         // medidas da cabeça na pose de repouso, em fração da altura do modelo (medidas no Blender)
         struct HeadShape { public float top, fwd, rx, rz; }
@@ -97,7 +112,8 @@ namespace Craquez
             else if (ph < (dark ? 0.82 : 0.68)) a.penteado = Penteado.Moicano;
             else if (ph < (dark ? 0.9 : 0.84)) a.penteado = Penteado.Coque;
             else a.penteado = Penteado.Faixa;
-            a.corCabelo = (modelB ? HairB : HairA)[Mathf.Clamp(visual, 0, 3)];
+            a.corCabelo = (modelB ? HairB : HairA)[Mathf.Clamp(visual, 0, Visuais - 1)];
+            a.barba = Barba(modelB, visual);
             return a;
         }
 
