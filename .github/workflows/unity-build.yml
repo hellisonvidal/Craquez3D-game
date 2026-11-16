@@ -14,8 +14,11 @@ jobs:
     timeout-minutes: 60
 
     env:
-      UNITY_VERSION: 6000.0.6f1
+      UNITY_VERSION: 6000.0.86f1
       UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+      # Docker image tags that exist on Docker Hub
+      DOCKER_IMAGE_UBUNTU: unityci/editor:ubuntu-6000.0.86f1-base-3
+      DOCKER_IMAGE_WINDOWS: unityci/editor:windows-6000.0.86f1-base-3
 
     steps:
       # Checkout code
@@ -34,9 +37,9 @@ jobs:
           restore-keys: |
             Library-${{ runner.os }}-
 
-      # Build and test using Unity Docker image
-      - name: Build and Test
-        uses: docker://unityci/editor:${{ env.UNITY_VERSION }}-base-1
+      # Build and test using Unity Docker image (Ubuntu base for Linux)
+      - name: Run EditMode Tests
+        uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
         with:
           args: |
             /opt/unity/Editor/Unity \
@@ -50,7 +53,7 @@ jobs:
               -quit
 
       - name: Run Play Mode Tests
-        uses: docker://unityci/editor:${{ env.UNITY_VERSION }}-base-1
+        uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
         with:
           args: |
             /opt/unity/Editor/Unity \
@@ -63,9 +66,9 @@ jobs:
               -logFile - \
               -quit
 
-      # Build for Windows Standalone
+      # Build for Windows Standalone (using Windows Docker image)
       - name: Build Windows
-        uses: docker://unityci/editor:${{ env.UNITY_VERSION }}-base-1
+        uses: docker://unityci/editor:windows-6000.0.86f1-base-3
         with:
           args: |
             /opt/unity/Editor/Unity \
@@ -78,9 +81,9 @@ jobs:
               -logFile - \
               -quit
 
-      # Build for Linux Standalone
+      # Build for Linux Standalone (using Ubuntu Docker image)
       - name: Build Linux
-        uses: docker://unityci/editor:${{ env.UNITY_VERSION }}-base-1
+        uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
         with:
           args: |
             /opt/unity/Editor/Unity \
