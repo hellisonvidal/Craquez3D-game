@@ -34,9 +34,24 @@ jobs:
           restore-keys: |
             Library-${{ runner.os }}-
 
+      # Setup Unity environment (fix HOME/cache directories)
+      - name: Setup Unity Environment
+        run: |
+          mkdir -p /github/home/.local/share/unity3d
+          mkdir -p /github/home/.cache/unity3d
+          mkdir -p /github/home/.config/unity3d
+          mkdir -p ${{ github.workspace }}/artifacts/editmode
+          mkdir -p ${{ github.workspace }}/artifacts/playmode
+          mkdir -p ${{ github.workspace }}/build/Linux
+
       # Build and test using Unity Docker image (Ubuntu base)
       - name: Run EditMode Tests
         uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
+        env:
+          HOME: /github/home
+          XDG_CACHE_HOME: /github/home/.cache
+          XDG_CONFIG_HOME: /github/home/.config
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         with:
           args: |
             /opt/unity/Editor/Unity \
@@ -51,6 +66,11 @@ jobs:
 
       - name: Run Play Mode Tests
         uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
+        env:
+          HOME: /github/home
+          XDG_CACHE_HOME: /github/home/.cache
+          XDG_CONFIG_HOME: /github/home/.config
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         with:
           args: |
             /opt/unity/Editor/Unity \
@@ -66,6 +86,11 @@ jobs:
       # Build for Linux Standalone
       - name: Build Linux
         uses: docker://unityci/editor:ubuntu-6000.0.86f1-base-3
+        env:
+          HOME: /github/home
+          XDG_CACHE_HOME: /github/home/.cache
+          XDG_CONFIG_HOME: /github/home/.config
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
         with:
           args: |
             /opt/unity/Editor/Unity \
