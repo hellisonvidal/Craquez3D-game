@@ -72,7 +72,7 @@ A Unity com URP entrega iluminação PBR, sombras, pós-processamento e boa perf
 **Controles**
 | Ação | Toque | Teclado | PlayStation | Xbox |
 |---|---|---|---|---|
-| Mover | analógico (aparece onde o dedo encosta) | WASD / setas | analógico / direcional | analógico / direcional |
+| Mover | analógico flutuante, fixo ou ancorado (arraste até a borda para correr) | WASD / setas | analógico / direcional | analógico / direcional |
 | Correr | CORRER | Shift | R2 | RT |
 | Chute forte (segure p/ força) | CHUTE | Espaço | ○ *(ou □)* | B *(ou X)* |
 | Chute colocado (curva) | COLOCADO | E | □ *(ou ○)* | X *(ou B)* |

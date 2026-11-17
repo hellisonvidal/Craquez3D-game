@@ -546,7 +546,7 @@ namespace Craquez.EditorTools
                 float ts = Mathf.Max(1f, ch[i].timeScale);
                 float thr = native * ts;
                 float minThr = prev + (i == 1 ? 0.6f : 0.8f);
-                if (thr < minThr) { ts = Mathf.Clamp(minThr / native, 0.7f, 2.2f); thr = native * ts; }
+                if (thr < minThr) { ts = Mathf.Clamp(minThr / native, 0.7f, 1.5f); thr = native * ts; }
                 thr = Mathf.Max(thr, minThr); // limiares sempre crescentes (o blend 1D exige)
                 ch[i].timeScale = ts;
                 ch[i].threshold = thr;
