@@ -350,7 +350,7 @@ namespace Craquez
             {
                 case Tela.Principal:
                     if (match != null)
-                        items.Add(new Item { label = "PARTIDA 11 x 11", desc = "Jogo completo com árbitro, regras, clima e IA tática • escolha seu time", activate = () => Go(Tela.Partida) });
+                        items.Add(new Item { label = "JOGO-TREINO", desc = "11 contra 11: jogo completo com árbitro, regras, clima e IA tática • escolha seu time", activate = () => Go(Tela.Partida) });
                     items.Add(new Item { label = "ARENA DE TREINO", desc = "Finalização contra o goleiro • escolha o clima e quem você controla", activate = () => Go(Tela.Arena) });
                     items.Add(new Item { label = "CONFIGURAÇÕES", desc = "Controles, câmera, gráficos, som e atualizações", activate = () => { configBack = Tela.Principal; Go(Tela.Config); } });
                     items.Add(new Item { label = "SAIR DO JOGO", desc = "Fechar o Craquez 3D", activate = Application.Quit });
@@ -386,7 +386,7 @@ namespace Craquez
                     });
                     items.Add(new Item { label = "Mini mapa", tipo = Tipo.Alternar, on = () => GameSettings.MiniMapa, change = d => GameSettings.MiniMapa = !GameSettings.MiniMapa });
                     items.Add(new Item { label = "Nomes dos jogadores", tipo = Tipo.Alternar, on = () => GameSettings.NomesJogadores, change = d => GameSettings.NomesJogadores = !GameSettings.NomesJogadores });
-                    items.Add(new Item { label = "INICIAR PARTIDA", tipo = Tipo.Botao, activate = StartMatch });
+                    items.Add(new Item { label = "INICIAR JOGO-TREINO", tipo = Tipo.Botao, activate = StartMatch });
                     items.Add(new Item { label = "VOLTAR", tipo = Tipo.Botao, activate = () => Go(Tela.Principal) });
                     break;
 
@@ -412,7 +412,7 @@ namespace Craquez
                         value = () => CameraRig.Nome(CameraRig.ModosAtacante[Mathf.Clamp(GameSettings.CameraPadrao, 0, CameraRig.ModosAtacante.Length - 1)]),
                         change = d => GameSettings.CameraPadrao = (GameSettings.CameraPadrao + d + CameraRig.ModosAtacante.Length) % CameraRig.ModosAtacante.Length
                     });
-                    items.Add(new Item { section = "PARTIDA", label = "Mini mapa", tipo = Tipo.Alternar, on = () => GameSettings.MiniMapa, change = d => GameSettings.MiniMapa = !GameSettings.MiniMapa });
+                    items.Add(new Item { section = "JOGO-TREINO", label = "Mini mapa", tipo = Tipo.Alternar, on = () => GameSettings.MiniMapa, change = d => GameSettings.MiniMapa = !GameSettings.MiniMapa });
                     items.Add(new Item { label = "Nomes dos jogadores", tipo = Tipo.Alternar, on = () => GameSettings.NomesJogadores, change = d => GameSettings.NomesJogadores = !GameSettings.NomesJogadores });
                     items.Add(new Item
                     {
@@ -761,7 +761,7 @@ namespace Craquez
             Backdrop(W, H, W * 0.75f);
             float x0 = 70 * S;
             float intro = UiKit.EaseOut(telaTime / 0.4f);
-            UiKit.Text(new Rect(x0, 34 * S, W, 80 * S), "PARTIDA 11 x 11", ui.Title, new Color(1f, 1f, 1f, intro), 3 * S);
+            UiKit.Text(new Rect(x0, 34 * S, W, 80 * S), "JOGO-TREINO  •  11 x 11", ui.Title, new Color(1f, 1f, 1f, intro), 3 * S);
             UiKit.Text(new Rect(x0, 104 * S, W, 40 * S), "Craquez FC x Atlético Celeste • árbitro e dois assistentes • regras completas", ui.Body, UiKit.A(UiKit.TextDim, intro), 0f);
             float colW = Mathf.Min(W - x0 * 2f, 900 * S);
             float rowH = 74 * S, gap = 10 * S;
@@ -772,14 +772,14 @@ namespace Craquez
                 bool focus = i == sel && !usingPointer;
                 if (it.tipo == Tipo.Botao)
                 {
-                    bool start = it.label == "INICIAR PARTIDA";
+                    bool start = it.label == "INICIAR JOGO-TREINO";
                     float bw = start ? 520 * S : 260 * S, bh = start ? 92 * S : 76 * S;
                     Rect b = start ? new Rect(x0, Mathf.Min(y + 10 * S, H - bh - 90 * S), bw, bh)
                                    : new Rect(x0 + 544 * S, Mathf.Min(y - 92 * S + 8 * S, H - bh - 98 * S), bw, bh);
                     UiKit.ShadowRect(b, 14 * S, 0.5f);
                     UiKit.RoundRect(b, start ? UiKit.Red : UiKit.A(UiKit.NavyLight, 0.95f), bh * 0.5f);
                     if (focus) UiKit.RoundBorder(b, UiKit.Yellow, bh * 0.5f, 4 * S);
-                    UiKit.Text(b, start ? "INICIAR PARTIDA  ›" : "VOLTAR", new GUIStyle(start ? ui.H1 : ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 2 * S);
+                    UiKit.Text(b, start ? "INICIAR JOGO-TREINO  ›" : "VOLTAR", new GUIStyle(start ? ui.H1 : ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 2 * S);
                     if (ui.Hit(b)) { sel = i; Activate(it); }
                     if (start) y += bh + 20 * S;
                     continue;

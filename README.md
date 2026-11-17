@@ -26,7 +26,7 @@ A Unity com URP entrega iluminação PBR, sombras, pós-processamento e boa perf
 
 ## O que tem no jogo
 
-**Partida 11 x 11** (menu principal → PARTIDA 11 x 11)
+**Jogo-treino 11 x 11** (menu principal → JOGO-TREINO)
 - Craquez FC x Atlético Celeste: escolha seu time, o clima, a duração, a dificuldade e a câmera.
 - 22 jogadores alternando os dois rostos do jogo, cada um com nome, número, atributos e **mentalidade própria** (ofensividade, criatividade, disciplina, agressividade, espírito de equipe, frieza e liderança), visão tática e jogo coletivo.
 - Árbitro e dois assistentes em laterais opostas. Regras completas: lateral, escanteio, tiro de meta, falta com barreira, pênalti, impedimento, vantagem, cartões e atendimento médico.
