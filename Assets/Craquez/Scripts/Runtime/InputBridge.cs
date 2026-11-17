@@ -26,6 +26,7 @@ namespace Craquez
         // Valores escritos pelos controles de toque a cada quadro.
         public static Vector2 VirtualMove;
         public static bool VirtualSprint, VirtualShoot, VirtualFinesse, VirtualChip, VirtualLow, VirtualSkill, VirtualKnock;
+        public static bool VirtualPass, VirtualThroughBall, VirtualCross;
 
         // ------------------------------------------------------------ gamepad
 
@@ -88,6 +89,9 @@ namespace Craquez
                 case "rasteiro": return ps ? "✕" : "A";
                 case "drible": return ps ? "R1" : "RB";
                 case "arrancada": return ps ? "L1" : "LB";
+                case "passe": return ps ? "R1" : "RB";
+                case "profundidade": return ps ? "L1" : "LB";
+                case "cruzamento": return ps ? "R1+L1" : "RB+LB";
                 case "confirmar": return ps ? "✕" : "A";
                 case "voltar": return ps ? "○" : "B";
                 case "camera": return ps ? "R3" : "RS";
@@ -210,6 +214,54 @@ namespace Craquez
                 if (Pad != null && Pad.buttonSouth.isPressed) v = true;
 #elif ENABLE_LEGACY_INPUT_MANAGER
                 if (Input.GetKey(KeyCode.Z) || Input.GetKey(KeyCode.JoystickButton0)) v = true;
+#endif
+                return v;
+            }
+        }
+
+        /// <summary>Passe curto: tecla C. Gamepad: R1/RB (toque rápido).</summary>
+        public static bool Pass
+        {
+            get
+            {
+                bool v = VirtualPass;
+#if ENABLE_INPUT_SYSTEM
+                if (Keyboard.current != null && Keyboard.current.cKey.isPressed) v = true;
+                if (Pad != null && Pad.rightShoulder.isPressed) v = true;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+                if (Input.GetKey(KeyCode.C) || Input.GetKey(KeyCode.JoystickButton5)) v = true;
+#endif
+                return v;
+            }
+        }
+
+        /// <summary>Passe em profundidade / passe longo: tecla V. Gamepad: L1/LB (toque rápido).</summary>
+        public static bool ThroughBall
+        {
+            get
+            {
+                bool v = VirtualThroughBall;
+#if ENABLE_INPUT_SYSTEM
+                if (Keyboard.current != null && Keyboard.current.vKey.isPressed) v = true;
+                if (Pad != null && Pad.leftShoulder.isPressed) v = true;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+                if (Input.GetKey(KeyCode.V) || Input.GetKey(KeyCode.JoystickButton4)) v = true;
+#endif
+                return v;
+            }
+        }
+
+        /// <summary>Cruzamento / passe alto: tecla B. Gamepad: R1/RB + L1/LB simultâneos.</summary>
+        public static bool Cross
+        {
+            get
+            {
+                bool v = VirtualCross;
+#if ENABLE_INPUT_SYSTEM
+                if (Keyboard.current != null && Keyboard.current.bKey.isPressed) v = true;
+                if (Pad != null && Pad.rightShoulder.isPressed && Pad.leftShoulder.isPressed) v = true;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+                if (Input.GetKey(KeyCode.B) || (Input.GetKey(KeyCode.JoystickButton5) && Input.GetKey(KeyCode.JoystickButton4))) v = true;
 #endif
                 return v;
             }

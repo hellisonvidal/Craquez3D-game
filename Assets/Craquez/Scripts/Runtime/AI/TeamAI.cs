@@ -477,6 +477,9 @@ namespace Craquez
                 pc.aiFinesse = ShouldFinesse(pid, attrs, mentality);
                 pc.aiChip = ShouldChip(pid, attrs, mentality);
                 pc.aiLow = ShouldLowShot(pid, attrs, mentality);
+                pc.aiPass = ShouldPass(pid, attrs, mentality);
+                pc.aiThroughBall = ShouldThroughBall(pid, attrs, mentality);
+                pc.aiCross = ShouldCross(pid, attrs, mentality);
                 pc.aiAimWorld = GetAimTarget(pid, attrs, mentality);
             }
         }
@@ -799,6 +802,146 @@ namespace Craquez
         bool ShouldLowShot(int playerId, PlayerAttributes attrs, PlayerMentality mentality)
         {
             return (attrs.traits & PlayerTrait.Poacher) != 0;
+        }
+
+        bool ShouldPass(int playerId, PlayerAttributes attrs, PlayerMentality mentality)
+        {
+            var pc = _playerControllers[playerId];
+            if (pc == null || _ball == null || !pc.HasPossession) return false;
+
+            // Pass if teammate is in good position and not too much pressure
+            // High passing attribute increases pass frequency
+            if (attrs.passing < 60) return false;
+
+            // Check for nearby teammates
+            foreach (int teammateId in _playersOnField)
+            {
+                if (teammateId == playerId) continue;
+                if (!_playerControllers.ContainsKey(teammateId)) continue;
+                var teammate = _playerControllers[teammateId];
+                if (teammate == null) continue;
+
+                float dist = Vector3.Distance(pc.transform.position, teammate.transform.position);
+                if (dist < 25f && dist > 3f)
+                {
+                    // Teammate in passing range
+                    Vector3 toTeammate = teammate.transform.position - pc.transform.position;
+                    Vector3 toGoal = GetOpponentGoal() - pc.transform.position;
+                    toTeammate.y = 0f; toGoal.y = 0f;
+
+                    // Prefer forward/forward-side passes
+                    if (Vector3.Dot(toTeammate.normalized, toGoal.normalized) > 0.3f)
+                    {
+                        // Check if passing lane is open (no opponents in between)
+                        if (IsPassingLaneOpen(pc.transform.position, teammate.transform.position))
+                        {
+                            // Higher passing attribute = more likely to pass
+                            float passChance = Mathf.Lerp(0.15f, 0.5f, attrs.passing / 99f);
+                            passChance *= mentality.creativeFreedom;
+                            return UnityEngine.Random.value < passChance;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        bool ShouldThroughBall(int playerId, PlayerAttributes attrs, PlayerMentality mentality)
+        {
+            var pc = _playerControllers[playerId];
+            if (pc == null || _ball == null || !pc.HasPossession) return false;
+
+            // Through ball requires good vision and passing
+            if (attrs.passing < 70 || attrs.vision < 65) return false;
+
+            // Look for forward runs
+            foreach (int teammateId in _playersOnField)
+            {
+                if (teammateId == playerId) continue;
+                if (!_playerControllers.ContainsKey(teammateId)) continue;
+                var teammate = _playerControllers[teammateId];
+                if (teammate == null) continue;
+
+                float dist = Vector3.Distance(pc.transform.position, teammate.transform.position);
+                if (dist < 35f && dist > 10f)
+                {
+                    Vector3 toTeammate = teammate.transform.position - pc.transform.position;
+                    Vector3 teammateVel = teammate.Velocity;
+                    teammateVel.y = 0f;
+
+                    // Teammate making forward run
+                    if (teammateVel.magnitude > 3f)
+                    {
+                        Vector3 toGoal = GetOpponentGoal() - pc.transform.position;
+                        toGoal.y = 0f;
+                        if (Vector3.Dot(toTeammate.normalized, toGoal.normalized) > 0.5f &&
+                            Vector3.Dot(teammateVel.normalized, toGoal.normalized) > 0.5f)
+                        {
+                            if (IsPassingLaneOpen(pc.transform.position, teammate.transform.position + teammateVel * 1.5f))
+                            {
+                                float throughBallChance = Mathf.Lerp(0.05f, 0.25f, (attrs.passing + attrs.vision) / 198f);
+                                throughBallChance *= mentality.throughBallFrequency;
+                                return UnityEngine.Random.value < throughBallChance;
+                            }
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        bool ShouldCross(int playerId, PlayerAttributes attrs, PlayerMentality mentality)
+        {
+            var pc = _playerControllers[playerId];
+            if (pc == null || _ball == null || !pc.HasPossession) return false;
+
+            // Cross from wide positions
+            Vector3 pos = pc.transform.position;
+            bool isWide = Mathf.Abs(pos.z) > Arena.FenceZ * 0.6f;
+            bool isInFinalThird = (teamId == 0 ? pos.x > Arena.HalfLength * 0.3f : pos.x < -Arena.HalfLength * 0.3f);
+
+            if (!isWide || !isInFinalThird) return false;
+
+            // Need good crossing attribute
+            if (attrs.crossing < 65) return false;
+
+            // Check for teammates in box
+            int teammatesInBox = 0;
+            foreach (int teammateId in _playersOnField)
+            {
+                if (teammateId == playerId) continue;
+                if (!_playerControllers.ContainsKey(teammateId)) continue;
+                var teammate = _playerControllers[teammateId];
+                if (teammate == null) continue;
+
+                Vector3 tPos = teammate.transform.position;
+                bool inBox = (teamId == 0 ? tPos.x > Arena.HalfLength - 18f : tPos.x < -Arena.HalfLength + 18f) &&
+                             Mathf.Abs(tPos.z) < Arena.GoalHalfWidth * 2f;
+                if (inBox) teammatesInBox++;
+            }
+
+            if (teammatesInBox == 0) return false;
+
+            float crossChance = Mathf.Lerp(0.1f, 0.4f, attrs.crossing / 99f);
+            crossChance *= mentality.crossingFrequency;
+            return UnityEngine.Random.value < crossChance;
+        }
+
+        bool IsPassingLaneOpen(Vector3 from, Vector3 to)
+        {
+            // Check if any opponent is in the passing lane
+            if (_ball == null) return true;
+
+            Vector3 laneDir = (to - from).normalized;
+            float laneDist = Vector3.Distance(from, to);
+            float laneWidth = 1.5f; // Width of passing lane
+
+            foreach (int oppId in _playersOnField)
+            {
+                // This would need opponent team's players - simplified for now
+                // In a real implementation, we'd check the opposing team's players
+            }
+            return true; // Simplified - assume open for now
         }
 
         Vector3 GetAimTarget(int playerId, PlayerAttributes attrs, PlayerMentality mentality)

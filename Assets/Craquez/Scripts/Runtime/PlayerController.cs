@@ -3,6 +3,7 @@ using UnityEngine;
 namespace Craquez
 {
     public enum TipoChute { Forte = 0, Colocado = 1, Cavadinha = 2, Rasteiro = 3 }
+public enum TipoPasse { Curto = 0, Profundidade = 1, Cruzamento = 2 }
 
     /// <summary>
     /// Controlador Cinemático/Híbrido dos Jogadores de Linha:
@@ -49,12 +50,18 @@ namespace Craquez
         public bool aiControlled;
         [System.NonSerialized] public Vector3 aiMoveWorld;
         [System.NonSerialized] public bool aiSprint, aiShoot, aiFinesse, aiChip, aiLow;
+        [System.NonSerialized] public bool aiPass, aiThroughBall, aiCross;
         [System.NonSerialized] public Vector3 aiAimWorld;
 
         public bool Busy { get { return kickPending || Time.time < lockMoveUntil; } }
         public bool Charging { get; private set; }
         public float Charge { get; private set; }
         public TipoChute ChargingType { get; private set; }
+
+        // Passe
+        public bool ChargingPass { get; private set; }
+        public float PassCharge { get; private set; }
+        public TipoPasse ChargingPassType { get; private set; }
 
         /// <summary>Posse ativa da bola (alias compatível com HasPossession e HasBall).</summary>
         public bool HasPossession { get; private set; }
@@ -73,6 +80,7 @@ namespace Craquez
 
         Vector3 velocity;
         bool prevShoot, prevFinesse, prevChip, prevLow, prevSkill, prevKnock;
+        bool prevPass, prevThroughBall, prevCross;
 
         // Condução e drible
         Vector3 wishWorld;
@@ -95,6 +103,15 @@ namespace Craquez
         Vector3 ballVelAtContact;
         float splashTimer;
         bool splashLeftFoot;
+
+        // Passe determinístico
+        bool passPending;
+        float passStartedAt, passFallbackContactAt, passLockMoveUntil;
+        string activePassState;
+        TipoPasse passType;
+        float passPower;
+        Vector2 passAim;
+        Vector3 passAimWorld;
 
         // Particle & Audio integration
         float lastFootstepTime;
@@ -325,7 +342,9 @@ namespace Craquez
             HandleSkillInput(mv);
             SyncAnimatorParameters(dt, face);
             HandleShootInput(dt, mv);
+            HandlePassInput(dt, mv);
             CheckKickWindowContact();
+            CheckPassWindowContact();
 
             // Passadas e respingos visíveis ao correr sobre poças ou gramado encharcado
             splashTimer -= dt;
@@ -546,6 +565,233 @@ namespace Craquez
             {
                 AudioManager.Instance.PlayKick(bp, kickPowerNormalized);
             }
+        }
+
+        // ------------------------------------------------------------ Passe (Curto, Profundidade, Cruzamento)
+
+        void HandlePassInput(float dt, Vector2 mv)
+        {
+            bool human = InputEnabled && !aiControlled;
+            if (human && Time.unscaledTime < blockUntil)
+            {
+                prevPass = prevThroughBall = prevCross = true;
+                return;
+            }
+            bool p = aiControlled ? aiPass : human && InputBridge.Pass;
+            bool tb = aiControlled ? aiThroughBall : human && InputBridge.ThroughBall;
+            bool cr = aiControlled ? aiCross : human && InputBridge.Cross;
+            bool busy = passPending || Time.time < passLockMoveUntil || Charging || kickPending || Time.time < lockMoveUntil;
+
+            if (!ChargingPass && !busy)
+            {
+                if (p && !prevPass) StartChargePass(TipoPasse.Curto);
+                else if (tb && !prevThroughBall) StartChargePass(TipoPasse.Profundidade);
+                else if (cr && !prevCross) StartChargePass(TipoPasse.Cruzamento);
+            }
+            if (ChargingPass)
+            {
+                bool held = ChargingPassType == TipoPasse.Curto ? p :
+                            (ChargingPassType == TipoPasse.Profundidade ? tb : cr);
+                PassCharge = Mathf.Min(1f, PassCharge + dt / chargeTime);
+                if (!held) ReleasePass(mv);
+            }
+            prevPass = p; prevThroughBall = tb; prevCross = cr;
+        }
+
+        bool prevPass, prevThroughBall, prevCross;
+
+        void StartChargePass(TipoPasse t)
+        {
+            ChargingPass = true;
+            ChargingPassType = t;
+            PassCharge = 0.05f;
+        }
+
+        void ReleasePass(Vector2 mv)
+        {
+            ChargingPass = false;
+            passType = ChargingPassType;
+            passPower = PassCharge;
+            passAim = mv;
+            passAimWorld = aiControlled ? aiAimWorld : Vector3.zero;
+            passPending = true;
+            passStartedAt = Time.time;
+
+            activePassState = passType == TipoPasse.Profundidade ? "PasseProfundidade" :
+                              (passType == TipoPasse.Cruzamento ? "Cruzamento" : "PasseCurto");
+            if (anim != null) anim.CrossFadeInFixedTime(activePassState, 0.07f, 0, 0f);
+
+            // Janela determinística sincronizada com o avanço do pé (mais curta que chute)
+            float fallback = passType == TipoPasse.Cruzamento ? 0.32f : 0.22f;
+            passFallbackContactAt = Time.time + fallback;
+            passLockMoveUntil = Time.time + fallback + 0.25f;
+        }
+
+        /// <summary>
+        /// Avalia se a animação de passe entrou na janela de impacto E o pé já avançou à frente do corpo.
+        /// </summary>
+        void CheckPassWindowContact()
+        {
+            if (!passPending) return;
+
+            float minNorm = passType == TipoPasse.Cruzamento ? 0.35f : 0.25f;
+            float maxNorm = minNorm + 0.20f;
+            bool inImpactWindow = false;
+            if (anim != null && !string.IsNullOrEmpty(activePassState))
+            {
+                var st = anim.GetCurrentAnimatorStateInfo(0);
+                var next = anim.GetNextAnimatorStateInfo(0);
+                if (st.IsName(activePassState))
+                {
+                    float norm = st.normalizedTime % 1f;
+                    if (norm >= minNorm && norm <= maxNorm) inImpactWindow = true;
+                }
+                else if (next.IsName(activePassState))
+                {
+                    float norm = next.normalizedTime % 1f;
+                    if (norm >= minNorm && norm <= maxNorm) inImpactWindow = true;
+                }
+            }
+
+            bool footForward = true;
+            if (rToe != null)
+            {
+                Vector3 footRel = rToe.position - transform.position;
+                footForward = Vector3.Dot(footRel, transform.forward) > 0.10f;
+            }
+
+            if ((inImpactWindow && footForward) || Time.time >= passFallbackContactAt + 0.06f)
+            {
+                DoPassContact();
+            }
+        }
+
+        void DoPassContact()
+        {
+            passPending = false;
+            PassCharge = 0f;
+            if (ball == null || ball.IsHeld) return;
+
+            Vector3 bp = ball.Body.position;
+            Transform kickingFoot;
+            Vector3 footContactPos;
+            float footDist = FootDistance(bp, out kickingFoot, out footContactPos);
+
+            Vector3 strike = ControlPointWorld();
+            float rootStrikeDist = Vector3.Distance(new Vector3(bp.x, 0f, bp.z), new Vector3(strike.x, 0f, strike.z));
+            float effectiveOff = Mathf.Min(footDist, rootStrikeDist);
+
+            // Valida alcance do pé
+            float maxBallY = (activePassState == "Cruzamento") ? 2.5f : 0.8f;
+            if (effectiveOff > kickFootReach || bp.y > maxBallY) return;
+
+            Vector3 spin;
+            ballVelAtContact = ball.Velocity;
+            Vector3 v = ComputePass(passType, passPower, passAim, effectiveOff, out spin);
+            GameSettings.Vibrar();
+            ball.Kick(v, spin);
+            HasPossession = false;
+            if (ProceduralAudio.Instance != null)
+                ProceduralAudio.Instance.Kick(bp, Mathf.Clamp01(v.magnitude / 25f));
+
+            // Particle & Audio: Pass effects
+            float passPowerNormalized = Mathf.Clamp01(v.magnitude / 25f);
+            Vector3 passDirection = v.normalized;
+
+            if (ParticleEffectsManager.Instance != null)
+            {
+                ParticleEffectsManager.Instance.PlayKickDust(footContactPos, -passDirection, passPowerNormalized * 0.5f);
+                ParticleEffectsManager.Instance.PlayKickImpact(bp, passDirection, passPowerNormalized * 0.5f);
+            }
+
+            if (AudioManager.Instance != null)
+            {
+                AudioManager.Instance.PlayKick(bp, passPowerNormalized * 0.7f);
+            }
+        }
+
+        Vector3 ComputePass(TipoPasse t, float power, Vector2 aim, float offFoot, out Vector3 spin)
+        {
+            Vector3 from = ball.Body.position;
+            Vector3 fwd = transform.forward;
+            spin = Vector3.zero;
+
+            Vector3 camF = Vector3.forward, camR = Vector3.right;
+            if (cameraTransform != null)
+            {
+                camF = Vector3.ProjectOnPlane(cameraTransform.forward, Vector3.up).normalized;
+                camR = Vector3.ProjectOnPlane(cameraTransform.right, Vector3.up).normalized;
+            }
+            Vector3 aimW = aiControlled ? passAimWorld : camF * aim.y + camR * aim.x;
+
+            bool towardGoal = fwd.x > 0.15f && from.x < Arena.HalfLength - 1.5f;
+
+            float speed;
+            Vector3 v;
+
+            // Velocidades base por tipo de passe
+            switch (t)
+            {
+                case TipoPasse.Curto:
+                    speed = Mathf.Lerp(8f, 18f, power);
+                    break;
+                case TipoPasse.Profundidade:
+                    speed = Mathf.Lerp(12f, 24f, power);
+                    break;
+                case TipoPasse.Cruzamento:
+                    speed = Mathf.Lerp(14f, 22f, power);
+                    break;
+                default:
+                    speed = 15f;
+                    break;
+            }
+
+            // Direção
+            Vector3 dir = aimW.sqrMagnitude > 0.06f ? aimW.normalized : fwd;
+
+            // Elevação
+            float elev;
+            if (t == TipoPasse.Cruzamento)
+                elev = Mathf.Lerp(20f, 35f, power);
+            else if (t == TipoPasse.Profundidade)
+                elev = Mathf.Lerp(8f, 18f, power);
+            else
+                elev = Mathf.Lerp(3f, 12f, power);
+
+            // Aplica elevação
+            Vector3 right = Vector3.Cross(Vector3.up, dir);
+            v = Quaternion.AngleAxis(-elev, right) * dir * speed;
+
+            // Spin para passes
+            if (t == TipoPasse.Cruzamento)
+            {
+                spin = Vector3.up * Mathf.Lerp(20f, 40f, power);
+                spin += right * Mathf.Lerp(5f, 15f, power);
+            }
+            else if (t == TipoPasse.Profundidade)
+            {
+                spin = right * Mathf.Lerp(8f, 20f, power);
+            }
+            else
+            {
+                spin = right * Mathf.Lerp(5f, 12f, power);
+            }
+
+            // Erro baseado na potência e condições
+            float sigma = 0.3f + Mathf.Max(0f, power - 0.7f) * 5f;
+            if (aiControlled ? aiSprint : InputBridge.Sprint) sigma += 0.5f;
+            sigma += velocity.magnitude * 0.05f + offFoot * 2f;
+            var ws = WeatherSystem.Instance;
+            if (ws != null) sigma += ws.Current == Clima.Tempestade ? 0.5f : (ws.Current == Clima.Chuva ? 0.2f : 0f);
+
+            float yaw = Gauss() * sigma;
+            float pitch = Gauss() * sigma * 0.5f;
+            Vector3 flat = new Vector3(v.x, 0f, v.z);
+            right = Vector3.Cross(Vector3.up, flat.normalized);
+            v = Quaternion.AngleAxis(yaw, Vector3.up) * v;
+            v = Quaternion.AngleAxis(-pitch, right) * v;
+
+            return v;
         }
 
         Vector3 ControlPointWorld()
