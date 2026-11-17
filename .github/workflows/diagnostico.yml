@@ -15,8 +15,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Library
-          key: Library-Diag-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: Library-Diag-
+          key: Library-Diag-v2-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-Diag-v2-
       - name: Unity (diagnóstico)
         uses: game-ci/unity-builder@v4
         env:
@@ -51,8 +51,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Library
-          key: Library-Linux-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: Library-Linux-
+          key: Library-Linux-v2-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-Linux-v2-
       - name: Unity (build Linux de teste)
         uses: game-ci/unity-builder@v4
         env:

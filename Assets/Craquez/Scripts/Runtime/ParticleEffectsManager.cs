@@ -125,11 +125,12 @@ namespace Craquez
             fx[key] = f;
         }
 
-        /// <summary>0 = seco, 1 = encharcado: a poeira diminui até sumir com o gramado molhado.</summary>
+        /// <summary>Chance de sair poeira: some com o gramado encharcado e diminui na qualidade gráfica baixa.</summary>
         static float DustFactor()
         {
             var w = WeatherSystem.Instance;
-            return w != null ? Mathf.Clamp01(1f - w.Wetness * 1.6f) : 1f;
+            float dry = w != null ? Mathf.Clamp01(1f - w.Wetness * 1.6f) : 1f;
+            return dry * GameSettings.Particulas; // qualidade gráfica: menos poeira no celular fraco
         }
 
         /// <param name="chance">0..1: com o gramado molhado a poeira sai menos vezes (e some quando encharcado).</param>
@@ -194,7 +195,7 @@ namespace Craquez
         /// <summary>Pequena poeira na passada (só correndo; só perto da câmera para poupar o celular).</summary>
         public void PlayFootstepDust(Vector3 position, float speed)
         {
-            if (speed < 4f) return;
+            if (speed < 4f || GameSettings.Qualidade == QualidadeGrafica.Baixa) return;
             var cam = Camera.main;
             if (cam != null && (cam.transform.position - position).sqrMagnitude > 35f * 35f) return;
             Vector3 p = position; p.y = 0.03f;
