@@ -81,7 +81,22 @@ bpy.ops.pose.select_all(action='SELECT')
 bpy.ops.pose.armature_apply(selected=False)
 bpy.ops.object.mode_set(mode='EDIT')
 for b in arm.data.edit_bones: b.inherit_scale = 'FULL'
+# o quadril ficou no lugar e as pernas cresceram para baixo: sobe esqueleto e malha juntos até os pés voltarem
+# à origem (o Humanoid da Unity assume pés na origem no repouso; senão o corpo flutua nas animações)
+from mathutils import Vector
+mw = body.matrix_world
+dz = -min((mw @ v.co).z for v in body.data.vertices)
+aw, awi = arm.matrix_world, arm.matrix_world.inverted()
+# calcula tudo antes (em ossos conectados, mover a cauda do pai já move a cabeça do filho)
+alvo = {b.name: (awi @ ((aw @ b.head) + Vector((0, 0, dz))), awi @ ((aw @ b.tail) + Vector((0, 0, dz)))) for b in arm.data.edit_bones}
+for _ in range(2):  # segunda passada corrige o que a primeira mexeu pelas conexões
+    for b in arm.data.edit_bones:
+        b.head, b.tail = alvo[b.name]
 bpy.ops.object.mode_set(mode='OBJECT')
+mwi = mw.inverted()
+for v in body.data.vertices:
+    v.co = mwi @ ((mw @ v.co) + Vector((0, 0, dz)))
+print('PES NA ORIGEM: subiu %.3f m' % dz)
 mod = body.modifiers.new('Armature', 'ARMATURE'); mod.object = arm
 if body.parent != arm:
     body.parent = arm
@@ -89,7 +104,7 @@ if body.parent != arm:
 zs = [(body.matrix_world @ v.co).z for v in body.data.vertices]
 H2 = max(zs) - min(zs)
 bpy.context.view_layer.update()
-print('RESULTADO altura %.3f  quadril %.3f joelho %.3f ombro %.3f' % (H2, (z('LeftUpLeg') - min(zs)) / H2, (z('LeftLeg') - min(zs)) / H2, (z('LeftArm') - min(zs)) / H2))
+print('RESULTADO altura %.3f (pés em %.3f)  quadril %.3f joelho %.3f ombro %.3f' % (H2, min(zs), (z('LeftUpLeg') - min(zs)) / H2, (z('LeftLeg') - min(zs)) / H2, (z('LeftArm') - min(zs)) / H2))
 
 for m in body.data.materials:
     if m is not None and '.' in m.name: m.name = m.name.split('.')[0]   # mantém o nome do material original
