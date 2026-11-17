@@ -278,7 +278,7 @@ namespace Craquez
             }
 
             if (touch != null && touch.enabled) touch.Draw();
-            if (touch == null || !touch.visible)
+            if (touch == null || !touch.Showing)
             {
                 Rect hr = new Rect(20 * s, H - 64 * s, W - 40 * s, 50 * s);
                 UiKit.RoundRect(hr, UiKit.A(UiKit.Navy, 0.55f), 25 * s);

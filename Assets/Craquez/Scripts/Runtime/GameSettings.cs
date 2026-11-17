@@ -15,13 +15,38 @@ namespace Craquez
 
     public enum PapelControle { Atacante = 0, Goleiro = 1 }
 
+    /// <summary>Analógico de toque: flutuante (nasce onde o dedo encosta), fixo (sempre no mesmo canto) ou ancorado (nasce onde o dedo encosta e não sai do lugar).</summary>
+    public enum ModoJoystick { Flutuante = 0, Fixo = 1, Ancorado = 2 }
+
     /// <summary>Configurações do jogador, salvas no aparelho (PlayerPrefs).</summary>
     public static class GameSettings
     {
         const string KLayout = "craquez.layout", KCam = "craquez.camera", KQual = "craquez.qualidade",
                      KVol = "craquez.volume", KPapel = "craquez.papel", KVib = "craquez.vibracao", KInv = "craquez.inverterX",
                      KMapa = "craquez.minimapa", KNomes = "craquez.nomes", KTempo = "craquez.tempo", KDif = "craquez.dificuldade",
-                     KCamPartida = "craquez.cameraPartida", KTime = "craquez.timeUsuario";
+                     KCamPartida = "craquez.cameraPartida", KTime = "craquez.timeUsuario",
+                     KJoy = "craquez.joystick", KTam = "craquez.tamanhoControles", KCorrerAnalog = "craquez.correrAnalogico";
+
+        public static ModoJoystick Joystick
+        {
+            get { return (ModoJoystick)Mathf.Clamp(PlayerPrefs.GetInt(KJoy, 0), 0, 2); }
+            set { PlayerPrefs.SetInt(KJoy, (int)value); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>Tamanho dos controles de toque: 0 = pequeno, 1 = médio, 2 = grande.</summary>
+        public static int TamanhoControles
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt(KTam, 1), 0, 2); }
+            set { PlayerPrefs.SetInt(KTam, Mathf.Clamp(value, 0, 2)); PlayerPrefs.Save(); }
+        }
+        public static float EscalaControles { get { return TamanhoControles == 0 ? 0.85f : (TamanhoControles == 2 ? 1.17f : 1f); } }
+
+        /// <summary>Arrastar o analógico até a borda externa também corre (sprint).</summary>
+        public static bool CorrerNoAnalogico
+        {
+            get { return PlayerPrefs.GetInt(KCorrerAnalog, 1) == 1; }
+            set { PlayerPrefs.SetInt(KCorrerAnalog, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
 
         /// <summary>Partida: duração de cada tempo (minutos reais).</summary>
         public static readonly int[] DuracoesTempo = { 2, 3, 5, 8, 12 };

@@ -148,25 +148,39 @@ namespace Craquez
         /// </summary>
         public static void Aplicar(GameObject go, Aparencia a, float prefabHeight, bool modelB, Material propBase, Dictionary<Color, Material> hairMats)
         {
-            float k = a.altura / prefabHeight;
+            // Escala SEMPRE uniforme na raiz: antes a largura (porte) ia só em X/Z do corpo inteiro e os ossos que giram
+            // (braços, pernas, tronco inclinado) eram esticados ou achatados conforme o ângulo, deformando a postura.
+            // O porte agora alarga só o tronco (escala uniforme da coluna), com cabeça e braços compensados.
             float w = a.Largura;
-            go.transform.localScale = new Vector3(k * w, k, k * w);
+            float torso = 1f + (w - 1f) * 0.6f;           // ±8% no tronco já mostra magro/forte/pesado
+            const float torsoShare = 0.28f;               // fração da altura entre a coluna e o pescoço
+            float k = a.altura / prefabHeight / (1f + torsoShare * (torso - 1f));
+            go.transform.localScale = Vector3.one * k;
             var anim = go.GetComponentInChildren<Animator>();
             if (anim == null || !anim.isHuman) return;
             Transform head = anim.GetBoneTransform(HumanBodyBones.Head);
+            Transform spine = anim.GetBoneTransform(HumanBodyBones.Spine);
+            if (spine != null && Mathf.Abs(torso - 1f) > 0.005f)
+            {
+                spine.localScale = spine.localScale * torso;
+                float inv = 1f / torso;
+                foreach (var hb in new[] { HumanBodyBones.LeftUpperArm, HumanBodyBones.RightUpperArm })
+                {
+                    var arm = anim.GetBoneTransform(hb);
+                    if (arm != null) arm.localScale = arm.localScale * inv; // braços com o comprimento normal
+                }
+                if (head != null) head.localScale = head.localScale * inv; // cabeça proporcional
+            }
             if (head == null) return;
-            // cabeça proporcional: corpos mais largos não ganham cabeça "inchada"
-            float comp = 1f / Mathf.Sqrt(w);
-            head.localScale = head.localScale * comp;
             if (a.penteado == Penteado.Natural || propBase == null) return;
 
             HeadShape hs = modelB ? HeadB : HeadA;
-            float H = a.altura * comp;
+            float H = a.altura; // cabeça mantém o tamanho normal (compensada acima)
             float s = H / 1.8f;
             Transform root = go.transform;
             Vector3 up = root.up, fwd = root.forward, right = root.right;
             Vector3 crown = head.position + up * hs.top * H + fwd * hs.fwd * H;
-            float rx = hs.rx * H * w, rz = hs.rz * H * w;
+            float rx = hs.rx * H, rz = hs.rz * H;
 
             Material mat;
             Color c = a.penteado == Penteado.Faixa ? new Color(0.95f, 0.95f, 0.95f) : a.corCabelo;

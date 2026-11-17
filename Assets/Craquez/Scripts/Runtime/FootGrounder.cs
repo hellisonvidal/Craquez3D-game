@@ -57,22 +57,31 @@ namespace Craquez
             if (rToe == null) rToeRest = ToeRatio * height;
         }
 
+        float lowest = 0f;  // menor altura do apoio nos últimos instantes (sem a correção), sobe devagar
+
         void LateUpdate()
         {
             if (!ready) return;
             float target = 0f; // desligado (mergulho/salto/levantar): retorna suavemente para 0 sem flutuar
+            float dt = Mathf.Max(Time.deltaTime, 1e-4f);
             if (grounding)
             {
                 float y0 = transform.position.y;
-                // quanto o ponto de apoio mais baixo está acima (ou abaixo) do chão, já descontada a correção atual
+                // quanto o ponto de apoio mais baixo está acima (+) ou abaixo (-) do chão, já descontada a correção atual
                 float c = Mathf.Min(
                     Mathf.Min(lFoot.position.y - y0 - lFootRest, rFoot.position.y - y0 - rFootRest),
                     Mathf.Min((lToe != null ? lToe.position.y : lFoot.position.y) - y0 - lToeRest,
                               (rToe != null ? rToe.position.y : rFoot.position.y) - y0 - rToeRest));
-                target = offset - c;
-                target = Mathf.Clamp(target, -0.35f, 0.35f);
+                float raw = c - offset;
+                // Antes a correção seguia o pé mais baixo a cada quadro: na fase aérea da corrida (os dois pés no ar)
+                // o corpo era puxado para baixo e o jogador "afundava" e balançava. Agora: afundou -> sobe na hora;
+                // flutuou -> só desce se continuar flutuando (a referência sobe 0,25 m/s, bem mais devagar que uma passada).
+                lowest = Mathf.Min(raw, lowest + 0.25f * dt);
+                target = Mathf.Clamp(-lowest, -0.12f, 0.3f);
             }
-            offset = Mathf.Lerp(offset, target, 1f - Mathf.Exp(-speed * Time.deltaTime));
+            else lowest = 0f;
+            float k = target > offset ? 22f : speed; // subir (sair do chão) é imediato; descer, suave
+            offset = Mathf.Lerp(offset, target, 1f - Mathf.Exp(-k * dt));
             model.localPosition = baseLocal + Vector3.up * offset / Mathf.Max(1e-4f, transform.lossyScale.y);
         }
     }

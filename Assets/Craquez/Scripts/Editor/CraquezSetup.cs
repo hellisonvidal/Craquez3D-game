@@ -6,6 +6,8 @@ using UnityEditor.Animations;
 using UnityEditor.Build;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Animations;
+using UnityEngine.Playables;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Video;
@@ -77,6 +79,10 @@ namespace Craquez.EditorTools
                 var playerPrefabB = playerPrefab;
                 var keeperPrefabA = keeperPrefab;
                 var refereePrefab = CreateCharacterPrefab("Arbitro", "Jogador", 1.80f, refCtrl, mats["Jogador"], typeof(RefereeAgent));
+                // limiares do blend de locomoção = velocidade real da passada de cada clipe (pés sem deslizar)
+                Progress(interactive, "Calibrando a locomoção...", 0.7f);
+                CalibrateLocomotion(playerCtrl, playerPrefab);
+                CalibrateLocomotion(refCtrl, refereePrefab);
                 var refereePrefabB = refereePrefab;
                 var ballPrefab = CreateBallPrefab(mats["Bola"]);
 
@@ -452,6 +458,120 @@ namespace Craquez.EditorTools
             Vector3 v = c.averageSpeed;
             float s = new Vector2(v.x, v.z).magnitude;
             return s > 0.2f ? s : fallback;
+        }
+
+        /// <summary>
+        /// Velocidade no chão que um clipe "no lugar" representa: enquanto o pé está apoiado ele corre para trás
+        /// (em relação ao corpo) na mesma velocidade em que o corpo avançaria. Mede no prefab real (retarget Humanoid)
+        /// e devolve m/s, ou -1 se não der para medir. As animações são importadas sem deslocamento da raiz,
+        /// então clip.averageSpeed é sempre 0 e não serve para isso.
+        /// </summary>
+        static float MeasureGroundSpeed(GameObject prefab, AnimationClip clip)
+        {
+            if (prefab == null || clip == null || clip.length < 0.05f) return -1f;
+            var go = (GameObject)UnityEngine.Object.Instantiate(prefab);
+            try
+            {
+                go.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+                var anim = go.GetComponentInChildren<Animator>();
+                if (anim == null || !anim.isHuman) return -1f;
+                var feet = new[] { anim.GetBoneTransform(HumanBodyBones.LeftFoot), anim.GetBoneTransform(HumanBodyBones.RightFoot) };
+                if (feet[0] == null || feet[1] == null) return -1f;
+                var graph = PlayableGraph.Create("calibrar");
+                const int N = 120;
+                var z = new float[2, N + 1];
+                var y = new float[2, N + 1];
+                try
+                {
+                    graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
+                    var output = AnimationPlayableOutput.Create(graph, "o", anim);
+                    var cp = AnimationClipPlayable.Create(graph, clip);
+                    cp.SetApplyFootIK(false);
+                    output.SetSourcePlayable(cp);
+                    graph.Play();
+                    for (int k = 0; k <= N; k++)
+                    {
+                        cp.SetTime(clip.length * k / N);
+                        graph.Evaluate(0f);
+                        for (int f = 0; f < 2; f++)
+                        {
+                            Vector3 p = go.transform.InverseTransformPoint(feet[f].position);
+                            z[f, k] = p.z; y[f, k] = p.y;
+                        }
+                    }
+                }
+                finally { graph.Destroy(); }
+                float dt = clip.length / N;
+                var v = new List<float>();
+                for (int f = 0; f < 2; f++)
+                {
+                    float minY = float.MaxValue;
+                    for (int k = 0; k <= N; k++) minY = Mathf.Min(minY, y[f, k]);
+                    for (int k = 0; k < N; k++)
+                        if (y[f, k] < minY + 0.03f && y[f, k + 1] < minY + 0.03f)
+                        {
+                            float s = (z[f, k] - z[f, k + 1]) / dt; // pé apoiado correndo para trás
+                            if (s > 0.05f) v.Add(s);
+                        }
+                }
+                if (v.Count < 4) return -1f;
+                v.Sort();
+                return v[v.Count / 2];
+            }
+            finally { UnityEngine.Object.DestroyImmediate(go); }
+        }
+
+        /// <summary>
+        /// Recalibra o blend 1D "Locomocao": cada clipe passa a valer na velocidade da própria passada
+        /// (ajustando o ritmo quando é preciso separar dois clipes parecidos) e o jogador recebe a
+        /// velocidade do último clipe para acelerar a animação acima dela.
+        /// </summary>
+        static void CalibrateLocomotion(AnimatorController ac, GameObject prefab)
+        {
+            if (ac == null || prefab == null) return;
+            BlendTree bt = null;
+            foreach (var st in ac.layers[0].stateMachine.states)
+                if (st.state.name == "Locomocao") bt = st.state.motion as BlendTree;
+            if (bt == null || bt.blendType != BlendTreeType.Simple1D) return;
+            var ch = bt.children;
+            float prev = 0f;
+            var log = new System.Text.StringBuilder("[Craquez 3D] Locomoção " + ac.name + ":");
+            for (int i = 1; i < ch.Length; i++)
+            {
+                var clip = ch[i].motion as AnimationClip;
+                float native = MeasureGroundSpeed(prefab, clip);
+                float old = ch[i].threshold;
+                if (native <= 0.2f) { native = old / Mathf.Max(0.1f, ch[i].timeScale); log.Append(" ").Append(clip != null ? clip.name : "?").Append("=sem medida"); }
+                // ritmo original do clipe; acelera só o necessário para ficar acima do anterior
+                float ts = Mathf.Max(1f, ch[i].timeScale);
+                float thr = native * ts;
+                float minThr = prev + (i == 1 ? 0.6f : 0.8f);
+                if (thr < minThr) { ts = Mathf.Clamp(minThr / native, 0.7f, 1.5f); thr = native * ts; }
+                thr = Mathf.Max(thr, minThr); // limiares sempre crescentes (o blend 1D exige)
+                ch[i].timeScale = ts;
+                ch[i].threshold = thr;
+                prev = thr;
+                log.Append(" ").Append(clip != null ? clip.name : "?").Append(" passada ").Append(native.ToString("0.00")).Append(" m/s x").Append(ts.ToString("0.00")).Append(" -> ").Append(thr.ToString("0.00"));
+            }
+            bt.children = ch;
+            EditorUtility.SetDirty(bt);
+            EditorUtility.SetDirty(ac);
+            Debug.Log(log.ToString());
+
+            var pc = prefab.GetComponent<PlayerController>();
+            if (pc != null)
+            {
+                pc.locoTopSpeed = prev;
+                EditorUtility.SetDirty(prefab);
+                PrefabUtility.SavePrefabAsset(prefab);
+            }
+            var ra = prefab.GetComponent<RefereeAgent>();
+            if (ra != null)
+            {
+                ra.locoTopSpeed = prev;
+                EditorUtility.SetDirty(prefab);
+                PrefabUtility.SavePrefabAsset(prefab);
+            }
         }
 
         static AnimatorController NewController(string name)

@@ -8,6 +8,8 @@ namespace Craquez
     /// analógico flutuante à esquerda (aparece onde o dedo encosta) e botões à direita em dois arcos:
     /// CHUTE (grande) com COLOCADO, CAVADINHA e RASTEIRO em volta; CORRER, DRIBLE e ARRANCADA no arco externo.
     /// No modo goleiro ficam só MERGULHAR / DEFESA / SALTAR / SAIR.
+    /// Analógico flutuante, fixo ou ancorado (Configurações), corrida ao arrastar até a borda e tamanho ajustável.
+    /// Some sozinho quando um joystick físico (Bluetooth/USB) é usado e volta ao tocar na tela.
     /// Ativo automaticamente em celulares; tecla T alterna no editor/PC para testar com o mouse.
     /// </summary>
     [DefaultExecutionOrder(-200)] // lê o toque antes da partida e do jogador (sem um quadro de atraso)
@@ -45,6 +47,11 @@ namespace Craquez
 
         int stickFinger = int.MinValue;
         Vector2 stickOrigin, stickPos;
+        bool stickSprint;     // analógico arrastado até a borda externa: corre
+        bool padHidden;       // um controle físico está sendo usado: os botões de toque saem da tela
+        float Scale { get { return GameSettings.EscalaControles; } }
+        Vector2 StickHome { get { float H = Screen.height; return new Vector2(H * 0.26f * Scale, H * 0.24f * Scale); } }
+        public bool Showing { get { return visible && !padHidden; } }
         GUIStyle labelStyle;
         int styleH;
 
@@ -77,11 +84,13 @@ namespace Craquez
 
         Vector2 ButtonScreen(Button b)
         {
-            float h = Screen.height;
+            float h = Screen.height * Scale;
             return new Vector2(Screen.width - b.center.x * h, b.center.y * h);
         }
 
-        float StickRadius { get { return Screen.height * 0.12f; } }
+        float ButtonRadius(Button b) { return b.radius * Screen.height * Scale; }
+
+        float StickRadius { get { return Screen.height * 0.12f * Scale; } }
 
         void Update()
         {
@@ -89,6 +98,10 @@ namespace Craquez
             if (!visible) { ClearVirtual(); stickFinger = int.MinValue; return; }
 
             InputBridge.GetPointers(pointers);
+            // joystick físico (Bluetooth/USB): esconde os botões de toque; um toque na tela traz de volta
+            if (InputBridge.GamepadActive) padHidden = true;
+            if (pointers.Count > 0) padHidden = false;
+            if (padHidden) { ClearVirtual(); stickFinger = int.MinValue; foreach (var b in buttons) b.finger = int.MinValue; return; }
             bool stickAlive = false;
             foreach (var b in buttons) b.held = false;
             seen.Clear();
@@ -106,24 +119,38 @@ namespace Craquez
                 {
                     if (b.finger != int.MinValue || !Active(b)) continue;
                     float d = Vector2.Distance(p.position, ButtonScreen(b));
-                    if (d < b.radius * Screen.height * 1.5f && d < bestD) { best = b; bestD = d; }
+                    if (d < ButtonRadius(b) * 1.5f && d < bestD) { best = b; bestD = d; }
                 }
                 if (best != null) { best.finger = p.id; best.held = true; continue; }
                 if (stickFinger == int.MinValue && p.position.x < Screen.width * 0.45f && p.position.y < Screen.height * 0.82f)
                 {
-                    stickFinger = p.id; stickOrigin = p.position; stickPos = p.position; stickAlive = true;
+                    stickFinger = p.id; stickPos = p.position; stickAlive = true; stickSprint = false;
+                    // fixo: a base fica sempre no canto; flutuante/ancorado: nasce onde o dedo encostou
+                    stickOrigin = GameSettings.Joystick == ModoJoystick.Fixo ? StickHome : p.position;
                 }
             }
             foreach (var b in buttons) if (b.finger != int.MinValue && !seen.Contains(b.finger)) b.finger = int.MinValue;
-            if (!stickAlive) stickFinger = int.MinValue;
+            if (!stickAlive) { stickFinger = int.MinValue; stickSprint = false; }
 
             Vector2 move = Vector2.zero;
             if (stickFinger != int.MinValue)
             {
                 Vector2 d = stickPos - stickOrigin;
                 float r = StickRadius;
-                // a base acompanha o dedo quando ele passa do limite (mudanças de direção rápidas)
-                if (d.magnitude > r) { stickOrigin = stickPos - d.normalized * r; d = stickPos - stickOrigin; }
+                float raw = d.magnitude / r;
+                // arrastar além da borda (anel externo) liga a corrida; ela segue enquanto o analógico estiver quase no máximo
+                if (GameSettings.CorrerNoAnalogico)
+                {
+                    if (raw > 1.12f) stickSprint = true;
+                    else if (raw < 0.8f) stickSprint = false;
+                }
+                else stickSprint = false;
+                if (d.magnitude > r)
+                {
+                    // flutuante: a base acompanha o dedo (mudanças de direção rápidas); fixo/ancorado: a base fica e o pino para na borda
+                    if (GameSettings.Joystick == ModoJoystick.Flutuante) { stickOrigin = stickPos - d.normalized * r; d = stickPos - stickOrigin; }
+                    else d = d.normalized * r;
+                }
                 float m = d.magnitude / r;
                 const float dead = 0.05f;
                 // resposta um pouco mais rápida no começo do curso (curva suave), máximo antes da borda
@@ -136,7 +163,7 @@ namespace Craquez
             InputBridge.VirtualShoot = shoot.held;
             InputBridge.VirtualFinesse = finesse.held;
             InputBridge.VirtualChip = chip.held;
-            InputBridge.VirtualSprint = sprint.held;
+            InputBridge.VirtualSprint = sprint.held || stickSprint;
             InputBridge.VirtualLow = low.held && Active(low);
             InputBridge.VirtualSkill = skill.held && Active(skill);
             InputBridge.VirtualKnock = knock.held && Active(knock);
@@ -145,14 +172,14 @@ namespace Craquez
         /// <summary>Retorna true se o ponto (tela, origem embaixo) está sobre um controle de toque.</summary>
         public bool Covers(Vector2 screenPos)
         {
-            if (!visible) return false;
-            foreach (var b in buttons) if (Active(b) && Vector2.Distance(screenPos, ButtonScreen(b)) < b.radius * Screen.height * 1.5f) return true;
+            if (!Showing) return false;
+            foreach (var b in buttons) if (Active(b) && Vector2.Distance(screenPos, ButtonScreen(b)) < ButtonRadius(b) * 1.5f) return true;
             return false;
         }
 
         public void Draw()
         {
-            if (!visible) return;
+            if (!Showing) return;
             float H = Screen.height;
             if (labelStyle == null || styleH != Screen.height)
             {
@@ -170,13 +197,20 @@ namespace Craquez
 
             // analógico
             float R = StickRadius;
-            Vector2 o = stickFinger != int.MinValue ? stickOrigin : new Vector2(H * 0.26f, H * 0.24f);
-            Vector2 k = stickFinger != int.MinValue ? stickPos : o;
+            Vector2 o = stickFinger != int.MinValue ? stickOrigin : StickHome;
+            Vector2 k = o;
+            if (stickFinger != int.MinValue)
+            {
+                Vector2 dk = stickPos - o;
+                k = o + Vector2.ClampMagnitude(dk, R); // o pino não sai da base
+            }
             Vector2 og = new Vector2(o.x, H - o.y), kg = new Vector2(k.x, H - k.y);
             float act = stickFinger != int.MinValue ? 1f : 0.55f;
             UiKit.Disc(og, R, new Color(0.02f, 0.05f, 0.14f, 0.35f * act));
             UiKit.RingAt(og, R, new Color(1f, 1f, 1f, 0.35f * act));
             UiKit.RingAt(og, R * 0.62f, new Color(1f, 1f, 1f, 0.12f * act));
+            if (GameSettings.CorrerNoAnalogico)
+                UiKit.RingAt(og, R * 1.12f, stickSprint ? UiKit.A(UiKit.Green, 0.95f) : new Color(1f, 1f, 1f, 0.1f * act)); // zona de corrida
             UiKit.Disc(kg, R * 0.42f, new Color(1f, 1f, 1f, 0.75f * act));
             UiKit.RingAt(kg, R * 0.42f, UiKit.A(UiKit.Cyan, 0.9f * act));
 
@@ -185,7 +219,7 @@ namespace Craquez
                 if (!Active(b)) continue;
                 Vector2 c = ButtonScreen(b);
                 Vector2 g = new Vector2(c.x, H - c.y);
-                float r = b.radius * H * (1f - 0.08f * b.pressAnim);
+                float r = ButtonRadius(b) * (1f - 0.08f * b.pressAnim);
                 UiKit.Disc(g + new Vector2(0f, r * 0.08f), r * 1.04f, new Color(0f, 0f, 0f, 0.3f));
                 Color fill = Color.Lerp(UiKit.A(b.color, 0.42f), UiKit.A(b.color, 0.9f), b.pressAnim);
                 UiKit.Disc(g, r, fill);

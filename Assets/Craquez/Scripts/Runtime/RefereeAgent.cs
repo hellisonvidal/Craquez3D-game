@@ -28,6 +28,8 @@ namespace Craquez
         Material yellowMat, redMat;
         float diagonalSide = 1f;
         static readonly int SpeedHash = Animator.StringToHash("Speed");
+        [Tooltip("Velocidade (m/s) do clipe mais rápido da locomoção (calibrada no setup).")]
+        public float locoTopSpeed = 6.8f;
 
         public void Setup(MatchSession m, Papel p, float halfSide, Material propMaterial)
         {
@@ -118,12 +120,13 @@ namespace Craquez
             p.y = 0f;
             transform.position = p;
 
-            // corre de frente quando vai longe; senão vira para o lance (assistente corre de lado)
-            Vector3 face = velocity.magnitude > 3f && papel == Papel.Principal ? velocity : look - transform.position;
+            // corre de frente quando se desloca (só há clipes de corrida para a frente: de lado os pés deslizariam);
+            // parado ou devagar, vira para o lance
+            Vector3 face = velocity.magnitude > 2.2f ? velocity : look - transform.position;
             face.y = 0f;
             if (face.sqrMagnitude > 0.01f)
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(face), 360f * dt);
-            if (anim != null) anim.SetFloat(SpeedHash, velocity.magnitude, 0.1f, dt);
+            if (anim != null) LocomotionAnim.Drive(anim, SpeedHash, velocity.magnitude, transform.localScale.y, locoTopSpeed, dt, 0.1f);
 
             if (flag != null) flag.gameObject.SetActive(true);
             if (flagUntil > 0f && Time.time >= flagUntil)

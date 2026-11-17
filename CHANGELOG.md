@@ -2,6 +2,18 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [1.3.0] — 2026-11-17
+
+- **Jogo-treino:** o modo 11 x 11 passa a se chamar Jogo-treino (menu principal, tela de escolha e configurações).
+- **Postura:** o ajuste dos pés no chão puxava o corpo para baixo sempre que os dois pés ficavam no ar (fase aérea da corrida): o jogador afundava até 35 cm e balançava. Agora só corrige o afundamento na hora e a flutuação sustentada, bem devagar.
+- **Corpo sem deformar:** o porte (magro, forte, pesado) escalava o corpo inteiro só na largura; braços e pernas esticavam ou achatavam conforme giravam. Agora a escala é sempre uniforme, o porte alarga só o tronco e cabeça e braços mantêm a proporção.
+- **Pés sem deslizar:** as animações são importadas "no lugar", então a velocidade de cada uma era 0 e o blend de locomoção usava valores fixos de chute. O setup agora mede a passada real de cada clipe (pé apoiado) e calibra o blend; a altura de cada jogador também entra na conta, e acima do clipe mais rápido a animação acelera até 1,5x.
+- **Árbitros:** os assistentes corriam de frente para o lance mesmo indo para o lado (pés deslizando). Agora correm na direção do movimento e só viram para o lance quando estão parados ou devagar.
+- **Física dos jogadores:** velocidades realistas (corrida ~4,7–6,1 m/s; sprint ~7,7–9,9 m/s; antes o sprint chegava a 11 m/s), aceleração que diminui perto da velocidade máxima (antes 18 m/s² constantes) e frenagem de 14 m/s². No alambrado o jogador para de verdade (antes ficava "correndo parado" contra a grade).
+- **Controles de toque:** analógico flutuante, fixo ou ancorado; arrastar o analógico até a borda externa corre (anel verde); tamanho dos botões pequeno, médio ou grande (Configurações > Toque).
+- **Joysticks físicos:** ao usar um controle Bluetooth/USB os botões de toque saem da tela; um toque na tela traz de volta.
+- **Configurações:** linhas mais compactas e o Jogo-treino na segunda coluna, para caber as opções novas.
+
 ## [1.2.1] — 2026-11-17
 
 - **Texturas dos uniformes:** o uniforme do goleiro visitante (laranja) e o da arbitragem (amarelo) tinham o verde/vermelho original sobrando fora das ilhas da UV (20% e 5% da textura), que vazava como filetes nas costuras pelos mipmaps; a gola do goleiro visitante também ficava verde. `tools/make_kits.py` agora recolore até o pescoço e preenche o espaço entre as ilhas com a cor vizinha; as duas texturas foram regeneradas.

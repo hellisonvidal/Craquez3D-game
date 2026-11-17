@@ -22,14 +22,16 @@ namespace Craquez
         public Transform cameraTransform;
 
         [Header("Física Cinemática (Inércia Controlada)")]
-        [Tooltip("Velocidade de jogging (m/s)")]
-        public float jogSpeed = 6.5f;
-        [Tooltip("Velocidade de sprint (m/s)")]
-        public float sprintSpeed = 10.0f;
-        [Tooltip("Aceleração (m/s²) - comentário original: 18 m/s²")]
-        public float acceleration = 18f;
-        [Tooltip("Desaceleração/frenagem (m/s²) - comentário original: 25 m/s²")]
-        public float deceleration = 25f;
+        [Tooltip("Velocidade de corrida sem sprint (m/s). Com os atributos fica entre ~4,7 e ~6,1 m/s.")]
+        public float jogSpeed = 5.5f;
+        [Tooltip("Velocidade de sprint (m/s). Com os atributos: ~7,7 a ~9,9 m/s (antes chegava a 11 m/s, acima de qualquer velocista).")]
+        public float sprintSpeed = 9.0f;
+        [Tooltip("Aceleração saindo do parado (m/s²); cai conforme o jogador se aproxima da velocidade máxima.")]
+        public float acceleration = 12f;
+        [Tooltip("Velocidade (m/s) do clipe mais rápido da locomoção, medida no setup: acima dela a animação acelera.")]
+        public float locoTopSpeed = 10.2f;
+        [Tooltip("Desaceleração/frenagem (m/s²): um atleta para de um sprint em ~1 s.")]
+        public float deceleration = 14f;
         [Tooltip("Taxa de rotação em baixa velocidade (graus/s)")]
         public float lowSpeedTurnRate = 540f;
         [Tooltip("Taxa de rotação durante sprint (graus/s)")]
@@ -340,7 +342,10 @@ namespace Craquez
             float targetSpeed = target.magnitude;
             bool isBraking = targetSpeed < currentSpeed - 0.05f ||
                              (currentSpeed > 0.5f && targetSpeed > 0.05f && Vector3.Dot(velocity.normalized, target.normalized) < 0.15f);
-            float accelRate = (isBraking ? deceleration : acceleration * accelScale) * grip;
+            // aceleração humana: forte saindo do parado e menor perto da velocidade máxima (antes era constante)
+            float topSpeed = Mathf.Max(0.5f, sprintSpeed * speedScale);
+            float accelCurve = Mathf.Lerp(1f, 0.3f, Mathf.Clamp01(currentSpeed / topSpeed));
+            float accelRate = (isBraking ? deceleration : acceleration * accelScale * accelCurve) * grip;
 
             if (currentSpeed > 1.2f && target.sqrMagnitude > 0.01f)
             {
@@ -354,8 +359,9 @@ namespace Craquez
             if (!Sliding && !fallen) velocity = Vector3.MoveTowards(velocity, target, accelRate * dt);
 
             Vector3 p = transform.position + velocity * dt;
-            p.x = Mathf.Clamp(p.x, -Arena.FenceX + 1f, Arena.FenceX - 1f);
-            p.z = Mathf.Clamp(p.z, -Arena.FenceZ + 1f, Arena.FenceZ - 1f);
+            // alambrado: além de limitar a posição, zera a velocidade contra a grade (antes o jogador "corria parado")
+            if (Mathf.Abs(p.x) > Arena.FenceX - 1f) { p.x = Mathf.Sign(p.x) * (Arena.FenceX - 1f); if (velocity.x * p.x > 0f) velocity.x = 0f; }
+            if (Mathf.Abs(p.z) > Arena.FenceZ - 1f) { p.z = Mathf.Sign(p.z) * (Arena.FenceZ - 1f); if (velocity.z * p.z > 0f) velocity.z = 0f; }
             p.y = 0f;
 
             // Evita sobreposição com outros jogadores (evita atravessar o goleiro/outro jogador)
@@ -444,7 +450,7 @@ namespace Craquez
         {
             if (anim == null) return;
             float spd = velocity.magnitude;
-            anim.SetFloat(SpeedHash, spd, 0.06f, dt);
+            LocomotionAnim.Drive(anim, SpeedHash, spd, transform.localScale.y, locoTopSpeed, dt, 0.06f);
 
             Vector3 moveDir = spd > 0.1f ? velocity / spd : ( desiredFace.sqrMagnitude > 1e-4f ? desiredFace.normalized : transform.forward );
             float signedAngle = Vector3.SignedAngle(transform.forward, moveDir, Vector3.up);
