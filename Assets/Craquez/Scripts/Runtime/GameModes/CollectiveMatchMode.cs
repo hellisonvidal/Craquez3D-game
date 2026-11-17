@@ -110,6 +110,17 @@ namespace Craquez
             public FootballRulesEngine.Formation preferredFormation = FootballRulesEngine.Formation.FourFourTwo;
             public FootballRulesEngine.TeamMentality mentality = FootballRulesEngine.TeamMentality.Balanced;
             public List<PlayerData> squad = new List<PlayerData>(); // 23 players (11 starters + 12 subs)
+
+            // Home/Away Kits
+            public Color homeKitPrimary = Color.white;
+            public Color homeKitSecondary = Color.blue;
+            public Color homeKitNumber = Color.black;
+            public Color awayKitPrimary = Color.blue;
+            public Color awayKitSecondary = Color.white;
+            public Color awayKitNumber = Color.white;
+            public Color thirdKitPrimary = Color.red;
+            public Color thirdKitSecondary = Color.black;
+            public Color thirdKitNumber = Color.white;
         }
 
         [Serializable]
@@ -292,7 +303,18 @@ namespace Craquez
                 shortName = shortName,
                 primaryColor = primary,
                 secondaryColor = secondary,
-                squad = new List<PlayerData>()
+                squad = new List<PlayerData>(),
+
+                // Generate random kit colors based on primary/secondary
+                homeKitPrimary = primary,
+                homeKitSecondary = secondary,
+                homeKitNumber = GetContrastingColor(primary),
+                awayKitPrimary = Color.white,
+                awayKitSecondary = primary,
+                awayKitNumber = GetContrastingColor(Color.white),
+                thirdKitPrimary = GetThirdKitColor(primary),
+                thirdKitSecondary = GetThirdKitColor(secondary),
+                thirdKitNumber = GetContrastingColor(GetThirdKitColor(primary))
             };
 
             // Generate 23 players (11 starters + 12 subs)
@@ -333,6 +355,23 @@ namespace Craquez
             }
 
             return data;
+        }
+
+        // Helper methods for kit color generation
+        static Color GetContrastingColor(Color baseColor)
+        {
+            // Return black for light colors, white for dark colors
+            float luminance = 0.299f * baseColor.r + 0.587f * baseColor.g + 0.114f * baseColor.b;
+            return luminance > 0.5f ? Color.black : Color.white;
+        }
+
+        static Color GetThirdKitColor(Color baseColor)
+        {
+            // Generate a complementary/contrasting color for third kit
+            float h, s, v;
+            Color.RGBToHSV(baseColor, out h, out s, out v);
+            float newH = (h + 0.5f) % 1f; // Opposite hue
+            return Color.HSVToRGB(newH, s * 0.8f, v);
         }
 
         // =====================================================================

@@ -210,7 +210,37 @@ namespace Craquez
             // Add some random traits
             AddRandomTraits(attrs, position);
 
+            // Generate random appearance
+            GenerateRandomAppearance(attrs);
+
             return attrs;
+        }
+
+        static void GenerateRandomAppearance(PlayerAttributes attrs)
+        {
+            // Skin tone: 0-5 (light to dark)
+            attrs.skinToneIndex = UnityEngine.Random.Range(0, 6);
+
+            // Hair style: 0-8 (bald, short, medium, long, afro, dreadlocks, mohawk, curly, ponytail)
+            attrs.hairStyleIndex = UnityEngine.Random.Range(0, 9);
+
+            // Hair color: 0-7 (black, dark brown, brown, light brown, blonde, red, gray, white)
+            attrs.hairColorIndex = UnityEngine.Random.Range(0, 8);
+
+            // Face type: 0-5 (different face shapes/features)
+            attrs.faceTypeIndex = UnityEngine.Random.Range(0, 6);
+
+            // Beard: 0-1 (no beard, beard)
+            attrs.hasBeard = UnityEngine.Random.value < 0.3f;
+
+            // Sleeve length: 0-1 (short, long)
+            attrs.sleeveLength = UnityEngine.Random.Range(0, 2);
+
+            // Sock height: 0-2 (low, high, knee)
+            attrs.sockHeight = UnityEngine.Random.Range(0, 3);
+
+            // Boot color: 0-7 (black, white, red, blue, yellow, green, orange, pink)
+            attrs.bootColorIndex = UnityEngine.Random.Range(0, 8);
         }
 
         static void AddRandomTraits(PlayerAttributes attrs, PlayerPosition position)
