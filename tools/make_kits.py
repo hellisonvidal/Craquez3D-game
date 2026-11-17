@@ -225,25 +225,40 @@ A = load(os.path.join(SRC, 'Jogador_Albedo.png'))
 B = load(os.path.join(SRC, 'Goleiro_Albedo.png'))
 labA, posA = regions('Jogador', SIZE)
 labB, posB = regions('Goleiro', SIZE)
+validA = ~np.isnan(posA[..., 0])
+validB = ~np.isnan(posB[..., 0])
 
-kits = {
-    'A_Casa': compose_kit(A, load(os.path.join(SRC, 'Kit_Casa.png')), posA, labA),
-    'A_Visitante': compose_kit(A, load(os.path.join(SRC, 'Kit_Visitante.png')), posA, labA),
-}
-for k, im in kits.items():
-    save(im, os.path.join(OUT, k + '.jpg'))
+# sem Kit_Casa/Kit_Visitante (gerados no Blender) refaz só goleiro visitante e arbitragem
+HAS_KITS = os.path.exists(os.path.join(SRC, 'Kit_Casa.png')) and os.path.exists(os.path.join(SRC, 'Kit_Visitante.png'))
+kits = {}
+if HAS_KITS:
+    kits = {
+        'A_Casa': compose_kit(A, load(os.path.join(SRC, 'Kit_Casa.png')), posA, labA),
+        'A_Visitante': compose_kit(A, load(os.path.join(SRC, 'Kit_Visitante.png')), posA, labA),
+    }
+    for k, im in kits.items():
+        save(im, os.path.join(OUT, k + '.jpg'))
+else:
+    print('Kit_Casa.png/Kit_Visitante.png ausentes em', SRC, '- gerando só B_GoleiroVisitante e A_Arbitro')
 
-# goleiro visitante: o verde do goleiro vira laranja (luvas, pele e cabelo ficam)
+# goleiro visitante: o verde do goleiro vira laranja (luvas, pele e cabelo ficam).
+# Inclui gola e ombros (até a altura do pescoço, fora do rosto) e preenche o espaço fora das ilhas da UV
+# com a cor da ilha vizinha: antes o verde original sobrava ali e vazava nas costuras pelos mipmaps.
 hB, sB, vB = rgb2hsv(B)
 zB = np.nan_to_num(posB[..., 2], nan=9)
-green = smooth(hB, 85, 100) * (1 - smooth(hB, 175, 190)) * smooth(sB, 0.18, 0.28) * (zB < -0.06)
-save(recolor_hue(B, blur(green, 1), 26, 1.25, 1.12), os.path.join(OUT, 'B_GoleiroVisitante.jpg'))
+green = smooth(hB, 85, 100) * (1 - smooth(hB, 175, 190)) * smooth(sB, 0.18, 0.28) * (zB < -0.02) * ~np.isin(labB, [1, 2, 3])
+mB = green * validB
+mB = np.maximum(mB, blur(mB, 1))  # suaviza só para fora: a borda da ilha não fica meio verde
+save(fill_gaps(recolor_hue(B, mB, 26, 1.25, 1.12), validB), os.path.join(OUT, 'B_GoleiroVisitante.jpg'))
 
 # arbitragem: o uniforme original do jogador (preto e vermelho) com o vermelho trocado por amarelo-limão
+# (mesmo preenchimento fora das ilhas: sem filetes vermelhos nas costuras)
 hA, sA, vA = rgb2hsv(A)
 zA = np.nan_to_num(posA[..., 2], nan=9)
-red = (smooth(hA, 325, 338) + (1 - smooth(hA, 8, 14))).clip(0, 1) * smooth(sA, 0.55, 0.66) * smooth(vA, 0.12, 0.2) * (zA < -0.072) * (1 - skin_mask(hA, sA, vA))
-save(recolor_hue(A, blur(red, 1), 62, 1.0, 1.25), os.path.join(OUT, 'A_Arbitro.jpg'))
+red = (smooth(hA, 325, 338) + (1 - smooth(hA, 8, 14))).clip(0, 1) * smooth(sA, 0.55, 0.66) * smooth(vA, 0.12, 0.2) * (zA < -0.02) * ~np.isin(labA, [1, 2, 3]) * (1 - skin_mask(hA, sA, vA))
+mA = red * validA
+mA = np.maximum(mA, blur(mA, 1))
+save(fill_gaps(recolor_hue(A, mA, 62, 1.0, 1.25), validA), os.path.join(OUT, 'A_Arbitro.jpg'))
 
 # aparências por jogador (1024): {modelo}_{time}_{n}
 lab1, pos1 = regions('Jogador', 1024)

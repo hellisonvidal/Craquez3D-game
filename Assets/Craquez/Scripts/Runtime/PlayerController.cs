@@ -1286,6 +1286,8 @@ namespace Craquez
             velocity = slideDir * Mathf.Clamp(velocity.magnitude + 2f, 6.5f, 9.5f);
             transform.rotation = Quaternion.LookRotation(slideDir);
             Play("CarrinhoInicio", 0.08f, "Carrinho");
+            if (ParticleEffectsManager.Instance != null)
+                ParticleEffectsManager.Instance.PlaySlideDust(transform.position, slideDir, velocity.magnitude);
             return true;
         }
 
