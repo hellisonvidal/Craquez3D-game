@@ -21,6 +21,11 @@ namespace Craquez
         public int maxSubstitutions = 5;
         public bool useVAR = true;
 
+        [Header("Prefabs")]
+        public GameObject playerPrefab;
+        public GameObject keeperPrefab;
+        public GameObject ballPrefab;
+
         [Header("Times")]
         public TeamData homeTeamData;
         public TeamData awayTeamData;
@@ -445,42 +450,41 @@ namespace Craquez
 
         GameObject CreatePlayerObject(PlayerData pd, int teamId, TeamData teamData)
         {
-            // Create player from prefab or default
-            var playerObj = new GameObject($"Player_{pd.shirtNumber}_{pd.playerName}");
-            playerObj.transform.SetParent(transform);
+            // Use appropriate prefab based on position
+            GameObject prefab = pd.position == PlayerPosition.GK ? keeperPrefab : playerPrefab;
 
-            // Add PlayerController
-            var pc = playerObj.AddComponent<PlayerController>();
-            pc.InputEnabled = false; // AI controlled
-
-            // Add MixamoBoneSockets
-            var sockets = playerObj.AddComponent<MixamoBoneSockets>();
-            sockets.InitializeSockets();
-
-            // Add FootGrounder
-            var grounder = playerObj.AddComponent<FootGrounder>();
-
-            // Add CapsuleCollider
-            var capsule = playerObj.GetComponent<CapsuleCollider>();
-            if (capsule == null) capsule = playerObj.AddComponent<CapsuleCollider>();
-            capsule.direction = 1;
-            capsule.height = 1.8f;
-            capsule.center = new Vector3(0f, 0.9f, 0f);
-            capsule.radius = 0.24f;
-
-            // Add Rigidbody
-            var rb = playerObj.GetComponent<Rigidbody>();
-            if (rb == null) rb = playerObj.AddComponent<Rigidbody>();
-            rb.isKinematic = true;
-            rb.useGravity = false;
-
-            // Set layer
-            playerObj.layer = Arena.LayerPlayerBody;
+            if (prefab == null)
+            {
+                Debug.LogError($"[CollectiveMatchMode] Prefab não configurado para {pd.position}");
+                return null;
+            }
 
             // Position on field
             Vector3 pos = GetFormationPosition(pd.position, teamId, starterIndices.IndexOf(_homePlayers.Count + _awayPlayers.Count));
-            playerObj.transform.position = pos;
-            playerObj.transform.rotation = teamId == 0 ? Quaternion.LookRotation(Vector3.right) : Quaternion.LookRotation(Vector3.left);
+            Quaternion rot = teamId == 0 ? Quaternion.LookRotation(Vector3.right) : Quaternion.LookRotation(Vector3.left);
+
+            // Instantiate from prefab
+            var playerObj = Instantiate(prefab, pos, rot);
+            playerObj.name = $"Player_{pd.shirtNumber}_{pd.playerName}";
+            playerObj.transform.SetParent(transform);
+
+            // Configure for AI control
+            var pc = playerObj.GetComponent<PlayerController>();
+            var gk = playerObj.GetComponent<GoalkeeperAI>();
+
+            if (pc != null)
+            {
+                pc.InputEnabled = false;
+                pc.aiControlled = true;
+            }
+
+            if (gk != null)
+            {
+                gk.humanControlled = false;
+            }
+
+            // Ensure layer is correct
+            playerObj.layer = Arena.LayerPlayerBody;
 
             return playerObj;
         }

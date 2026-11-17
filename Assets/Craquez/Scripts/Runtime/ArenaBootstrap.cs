@@ -257,6 +257,15 @@ namespace Craquez
             // Limpar sessão anterior se houver
             CleanupCurrentSession();
 
+            // Configurar prefabs no CollectiveMatchMode (singleton)
+            var collectiveMode = CollectiveMatchMode.Instance;
+            if (collectiveMode != null)
+            {
+                collectiveMode.playerPrefab = playerPrefab;
+                collectiveMode.keeperPrefab = keeperPrefab;
+                collectiveMode.ballPrefab = ballPrefab;
+            }
+
             // Criar sessão 11v11
             if (_uiRoot != null)
             {
@@ -279,7 +288,7 @@ namespace Craquez
                 Weather.grassMaterials.Add(GrassLightMat); Weather.grassBaseColors.Add(GrassLightMat.GetColor("_BaseColor"));
                 Weather.grassMaterials.Add(GrassDarkMat); Weather.grassBaseColors.Add(GrassDarkMat.GetColor("_BaseColor"));
                 CollectCharacterMaterials(Ball.gameObject, Weather.characterMaterials);
-                // Os jogadores serão adicionados pelo MatchSession11v11
+                // Os jogadores serão adicionados pelo MatchSession11v11 / CollectiveMatchMode
             }
 
             // Atualizar AppFlow para usar a nova sessão

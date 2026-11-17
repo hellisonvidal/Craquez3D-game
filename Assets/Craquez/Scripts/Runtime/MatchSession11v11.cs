@@ -143,6 +143,11 @@ namespace Craquez
                 _collectiveMatchMode.enablePenalties = enablePenalties;
                 _collectiveMatchMode.maxSubstitutions = maxSubstitutions;
                 _collectiveMatchMode.useVAR = useVAR;
+
+                // Passar prefabs (se já não foram passados pelo ArenaBootstrap)
+                if (_collectiveMatchMode.playerPrefab == null) _collectiveMatchMode.playerPrefab = playerPrefab;
+                if (_collectiveMatchMode.keeperPrefab == null) _collectiveMatchMode.keeperPrefab = keeperPrefab;
+                if (_collectiveMatchMode.ballPrefab == null) _collectiveMatchMode.ballPrefab = ballPrefab;
             }
 
             Active = true;
