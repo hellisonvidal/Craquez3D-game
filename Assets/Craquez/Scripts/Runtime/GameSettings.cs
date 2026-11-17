@@ -111,6 +111,8 @@ namespace Craquez
             AudioListener.volume = Volume;
             var q = Qualidade;
             Application.targetFrameRate = q == QualidadeGrafica.Baixa ? 30 : 60;
+            // qualidade baixa: texturas na metade da resolução (menos memória e banda nos celulares fracos)
+            QualitySettings.globalTextureMipmapLimit = q == QualidadeGrafica.Baixa ? 1 : 0;
             if (Application.isMobilePlatform)
             {
                 if (baseW == 0) { baseW = Screen.width; baseH = Screen.height; }

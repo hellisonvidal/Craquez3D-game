@@ -106,10 +106,24 @@ namespace Craquez
                 climaSel = rodada == 0 ? 0 : 2;  // limpo e tempestade
                 StartMatch();
                 Console.WriteLine("[AUTOTESTE] partida " + (rodada + 1) + " iniciada");
-                float fim = Time.realtimeSinceStartup + 150f;
+                float inicio = Time.realtimeSinceStartup, fim = inicio + 150f;
+                int foto = 0;
                 while (Time.realtimeSinceStartup < fim)
                 {
                     if (tela == Tela.Jogando && Time.timeScale > 0f && Time.timeScale < 4f) Time.timeScale = 4f;
+                    // fotos da partida (artefato do workflow de diagnóstico): conferir texturas e uniformes
+                    if (foto < 3 && Time.realtimeSinceStartup > inicio + 20f + foto * 40f)
+                    {
+                        string nome = "autoteste_" + (rodada + 1) + "_" + (++foto) + ".png";
+                        // sem o módulo ScreenCapture no projeto: lê a tela no fim do quadro e grava o PNG
+                        yield return new WaitForEndOfFrame();
+                        var shot = new Texture2D(Screen.width, Screen.height, TextureFormat.RGB24, false);
+                        shot.ReadPixels(new Rect(0, 0, Screen.width, Screen.height), 0, 0);
+                        shot.Apply();
+                        System.IO.File.WriteAllBytes(nome, shot.EncodeToPNG());
+                        Destroy(shot);
+                        Console.WriteLine("[AUTOTESTE] foto " + nome);
+                    }
                     yield return null;
                 }
                 Time.timeScale = 1f;

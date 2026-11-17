@@ -182,6 +182,8 @@ namespace Craquez
             spawned.Add(gkGo);
             var gkAtr = GeradorJogador.Atributos(Funcao.Zagueiro, rng, nivel);
             var gkLook = PlayerLook.Sortear(Funcao.Goleiro, !t.goleiroModeloA, 0, gkAtr, rng);
+            // uniforme antes do penteado: senão o cabelo 3D (black power, coque, faixa) recebe a textura do uniforme
+            ApplyKit(gkGo, KitMaterial(gkPrefab, t.kitGoleiro));
             PlayerLook.Aplicar(gkGo, gkLook, t.goleiroModeloA ? 1.87f : 1.90f, !t.goleiroModeloA, propMaterial, hairMats);
             gkLook.rosto = FaceShapes.Aplicar(gkGo, rng);
             var gk = gkGo.GetComponent<GoalkeeperAI>();
@@ -193,7 +195,6 @@ namespace Craquez
             gk.opponentDistance = p => KeeperOpponentDistance(tt, p);
             gk.distributionTarget = () => KeeperTarget(tt);
             gk.OnSave += caught => OnKeeperSave(tt, caught);
-            ApplyKit(gkGo, KitMaterial(gkPrefab, t.kitGoleiro));
             var gkInfo = gkGo.AddComponent<MatchPlayer>();
             gkInfo.gk = gk;
             gkInfo.time = t;
@@ -329,6 +330,7 @@ namespace Craquez
             foreach (var r in go.GetComponentsInChildren<Renderer>())
             {
                 if (r is ParticleSystemRenderer) continue;
+                if (r.name.StartsWith("Penteado_")) continue; // cabelo 3D tem material próprio
                 var arr = r.sharedMaterials;
                 for (int i = 0; i < arr.Length; i++) arr[i] = m;
                 r.sharedMaterials = arr;
@@ -359,6 +361,9 @@ namespace Craquez
             FaceShapes.Limpar();
             foreach (var m in hairMats.Values) Destroy(m);
             hairMats.Clear();
+            if (ParticleEffectsManager.Instance != null) ParticleEffectsManager.Instance.ClearAllEffects();
+            // texturas de pele/cabelo (Resources/Visuais) e materiais da partida liberados da memória
+            Resources.UnloadUnusedAssets();
             Times = null;
             Owner = null; Human = null; KeeperHolding = null; LastToucher = null; Scorer = null; Restart = null;
             Active = false;
@@ -944,6 +949,7 @@ namespace Craquez
             ClearOffside();
             Whistle(1);
             if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.CrowdReaction(1f);
+            if (ParticleEffectsManager.Instance != null && ball != null) ParticleEffectsManager.Instance.PlayGoalCelebration(ball.transform.position);
             GameSettings.Vibrar();
             string who = Scorer != null ? (scorerOwnGoal ? Scorer.Rotulo + " (contra)" : Scorer.Rotulo) : scoringTeam.sigla;
             Show("GOOOL!  " + who, scoringTeam.cor, 4.5f);

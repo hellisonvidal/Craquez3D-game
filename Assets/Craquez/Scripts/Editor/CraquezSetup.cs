@@ -210,6 +210,24 @@ namespace Craquez.EditorTools
             return null;
         }
 
+        /// <summary>Textura do Kenney Particle Pack (Assets/ExternalAssets/Particles), importada com alfa = transparência.</summary>
+        static Texture2D KenneyParticle(string name)
+        {
+            string path = "Assets/ExternalAssets/Particles/" + name + ".png";
+            var ti = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (ti != null && (!ti.alphaIsTransparency || ti.maxTextureSize != 256 || ti.wrapMode != TextureWrapMode.Clamp))
+            {
+                ti.alphaSource = TextureImporterAlphaSource.FromInput;
+                ti.alphaIsTransparency = true;
+                ti.maxTextureSize = 256;
+                ti.wrapMode = TextureWrapMode.Clamp;
+                ti.SaveAndReimport();
+            }
+            var t = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (t == null) Debug.LogWarning("[Craquez 3D] Partícula não encontrada: " + path);
+            return t;
+        }
+
         static T SaveAsset<T>(T obj, string path) where T : UnityEngine.Object
         {
             var existing = AssetDatabase.LoadAssetAtPath<T>(path);
@@ -363,6 +381,10 @@ namespace Craquez.EditorTools
             d["Respingo"] = Particle("Respingo", T("Respingo"), new Color(0.85f, 0.9f, 1f, 0.6f));
             d["Borrifo"] = Particle("Borrifo", T("UI_Circulo"), new Color(0.8f, 0.86f, 0.95f, 0.75f));
             d["Anel"] = Particle("AnelChuva", T("Anel"), new Color(0.85f, 0.9f, 1f, 0.7f));
+            // efeitos (Kenney Particle Pack, CC0): uma textura por material (o modo Sprites exige uma só textura)
+            d["FxPoeira"] = Particle("FxPoeira", KenneyParticle("dirt_02"), Color.white);
+            d["FxFumaca"] = Particle("FxFumaca", KenneyParticle("smoke_04"), Color.white);
+            d["FxEstrela"] = Particle("FxEstrela", KenneyParticle("star_06"), Color.white);
 
             var nuvens = Mat("Nuvens", Find("Universal Render Pipeline/Unlit", "Unlit/Transparent"));
             nuvens.SetTexture("_BaseMap", T("Nuvens"));
@@ -929,6 +951,9 @@ namespace Craquez.EditorTools
             boot.droplet = mats["Borrifo"];
             boot.clouds = mats["Nuvens"];
             boot.skybox = mats["Ceu"];
+            boot.fxDust = mats["FxPoeira"];
+            boot.fxSmoke = mats["FxFumaca"];
+            boot.fxStar = mats["FxEstrela"];
             boot.sun = sun;
             boot.mainCamera = cam;
             boot.postProcessRoot = ppRoot.transform;

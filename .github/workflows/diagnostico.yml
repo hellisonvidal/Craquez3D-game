@@ -15,8 +15,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Library
-          key: Library-Diag-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: Library-Diag-
+          key: Library-Diag-v2-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-Diag-v2-
       - name: Unity (diagnóstico)
         uses: game-ci/unity-builder@v4
         env:
@@ -51,8 +51,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Library
-          key: Library-Linux-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: Library-Linux-
+          key: Library-Linux-v2-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-Linux-v2-
       - name: Unity (build Linux de teste)
         uses: game-ci/unity-builder@v4
         env:
@@ -69,14 +69,18 @@ jobs:
           sudo chown -R "$USER" Build || true
           chmod +x Build/Linux/Craquez3D.x86_64
           set +e
-          timeout 900 xvfb-run -a -s "-screen 0 1280x720x24" Build/Linux/Craquez3D.x86_64 -autoteste -force-glcore -screen-width 1280 -screen-height 720 -logFile partida.log
+          # log pelo stdout: com -logFile arquivo o player não chegava a criá-lo e o passo só via o timeout
+          timeout 900 xvfb-run -a -s "-screen 0 1280x720x24" Build/Linux/Craquez3D.x86_64 -autoteste -force-glcore -screen-width 1280 -screen-height 720 -logFile - > partida.log 2>&1
           echo "codigo de saida: $?"
           grep -E "AUTOTESTE|Exception|NullReference|IndexOutOfRange|MissingReference" partida.log | head -200
+          echo "--- fim do log ---"; tail -40 partida.log
           exit 0
       - name: Guardar log
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Partida
-          path: partida.log
+          path: |
+            partida.log
+            autoteste_*.png
           if-no-files-found: warn

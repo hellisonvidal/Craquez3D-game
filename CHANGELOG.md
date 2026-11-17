@@ -2,6 +2,16 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [1.2.1] — 2026-11-17
+
+- **Texturas dos uniformes:** o uniforme do goleiro visitante (laranja) e o da arbitragem (amarelo) tinham o verde/vermelho original sobrando fora das ilhas da UV (20% e 5% da textura), que vazava como filetes nas costuras pelos mipmaps; a gola do goleiro visitante também ficava verde. `tools/make_kits.py` agora recolore até o pescoço e preenche o espaço entre as ilhas com a cor vizinha; as duas texturas foram regeneradas.
+- **Cabelo do goleiro:** o uniforme era aplicado depois do penteado 3D, então black power, coque e faixa do goleiro ganhavam a textura do uniforme. A ordem foi corrigida e o penteado nunca recebe o material do uniforme.
+- **Partículas:** o gerenciador de efeitos nunca era criado (poeira de chute e de passada, carrinho e mergulho do goleiro nunca apareciam). Ele foi refeito: materiais URP próprios (sem partículas rosa), uma textura do Kenney por efeito (o modo Sprites exigia todas na mesma textura), pool reaproveitado em vez de criar/destruir a cada passo, sem o rastro da bola que ficaria tocando no centro do campo, poeira que some com o gramado molhado, tufo de grama no chute forte e estrelas no gol.
+- **Qualidade baixa:** texturas em meia resolução e menos poeira, para celulares com pouca memória.
+- **Atualizador:** se a Release ainda não tem o APK (só o build Windows saiu), o Android não oferece a atualização. Antes baixava a página da Release como se fosse o APK.
+- **Memória:** ao sair da partida, efeitos são limpos e as texturas de pele/cabelo dos jogadores são liberadas.
+- **Diagnóstico (CI):** a partida automática grava o log pelo stdout (o arquivo de log não era criado e o passo só estourava o tempo) e tira fotos da partida para conferir as texturas.
+
 ## [1.2.0] — 2026-11-17
 
 - **Partida 11 x 11 (modo novo):** Craquez FC x Atlético Celeste, com escolha do seu time, clima, duração (2 x 2 a 2 x 12 min), dificuldade e câmera. Tem dois tempos com troca de lado no intervalo, placar, relógio, estatísticas no fim e a opção de jogar de novo.

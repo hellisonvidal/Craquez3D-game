@@ -37,6 +37,8 @@ namespace Craquez
         public Material droplet;
         public Material clouds;
         public Material skybox;
+        [Tooltip("Partículas (Kenney, URP Particles/Unlit): poeira, fumaça e estrelas.")]
+        public Material fxDust, fxSmoke, fxStar;
 
         [Header("Cena")]
         public Light sun;
@@ -87,6 +89,9 @@ namespace Craquez
             var audioGo = new GameObject("AudioProcedural");
             audioGo.transform.SetParent(world, false);
             Safe("áudio", () => audioGo.AddComponent<ProceduralAudio>());
+
+            // efeitos de partículas: antes dos personagens e da bola, que os procuram no Awake
+            Safe("partículas", () => ParticleEffectsManager.Create(world, fxDust, fxSmoke, fxStar));
 
             // personagens e bola
             var ballGo = Instantiate(ballPrefab, new Vector3(30f, Arena.BallRadius, 0f), Quaternion.identity);
