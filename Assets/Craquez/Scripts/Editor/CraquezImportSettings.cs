@@ -13,7 +13,7 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 16;
+        public const int Version = 19;
 
         static readonly string[] LoopClips =
         {
@@ -56,6 +56,7 @@ namespace Craquez.EditorTools
                     mi.importTangents = ModelImporterTangents.CalculateMikk;
                     mi.optimizeMeshPolygons = true;
                     mi.optimizeMeshVertices = true;
+                    mi.isReadable = true; // formato do rosto: a partida lê os vértices da cabeça (FaceShapes)
                 }
                 else
                 {
@@ -67,6 +68,16 @@ namespace Craquez.EditorTools
                     mi.meshCompression = ModelImporterMeshCompression.Medium;
                     mi.isReadable = false;
                 }
+            }
+            else if (assetPath.Contains("/Animations/Quaternius/"))
+            {
+                // Universal Animation Library (Quaternius, CC0): esqueleto do manequim UE, vários clipes por arquivo
+                mi.animationType = ModelImporterAnimationType.Human;
+                mi.avatarSetup = ModelImporterAvatarSetup.CreateFromThisModel;
+                mi.bakeAxisConversion = true;
+                mi.importAnimation = true;
+                mi.optimizeGameObjects = false;
+                mi.animationCompression = ModelImporterAnimationCompression.Optimal;
             }
             else if (assetPath.Contains("/Animations/"))
             {
@@ -80,10 +91,44 @@ namespace Craquez.EditorTools
             }
         }
 
+        /// <summary>Clipes da Quaternius em que o corpo sai do chão (queda, carrinho, levantar): mantêm a altura real.</summary>
+        static readonly string[] QuaterniusFreeHeight = { "Death01", "LayToIdle", "Slide_Start", "Slide_Loop", "Slide_Exit", "Hit_Knockback", "Roll", "Jump_Start", "Jump_Loop", "Jump_Land" };
+
+        public static string TakeName(string n)
+        {
+            int i = n.LastIndexOf('|');
+            return i >= 0 ? n.Substring(i + 1) : n;
+        }
+
         void OnPreprocessAnimation()
         {
             if (!assetPath.StartsWith(Root + "Animations/")) return;
             var mi = (ModelImporter)assetImporter;
+            if (assetPath.Contains("/Quaternius/"))
+            {
+                var takes = mi.defaultClipAnimations;
+                if (takes == null || takes.Length == 0) return;
+                for (int i = 0; i < takes.Length; i++)
+                {
+                    var c = takes[i];
+                    string n = TakeName(c.takeName);
+                    bool loopQ = n.EndsWith("_Loop");
+                    bool free = System.Array.IndexOf(QuaterniusFreeHeight, n) >= 0;
+                    c.name = n;
+                    c.loopTime = loopQ;
+                    c.loopPose = loopQ;
+                    c.lockRootRotation = true;
+                    c.keepOriginalOrientation = true;
+                    c.lockRootHeightY = !free;
+                    c.keepOriginalPositionY = true;
+                    c.lockRootPositionXZ = true;
+                    c.keepOriginalPositionXZ = false;
+                    c.heightFromFeet = !free;
+                    takes[i] = c;
+                }
+                mi.clipAnimations = takes;
+                return;
+            }
             string file = Path.GetFileNameWithoutExtension(assetPath);
             bool loop = System.Array.IndexOf(LoopClips, file) >= 0;
             bool freeHeight = System.Array.IndexOf(FreeHeightClips, file) >= 0;
@@ -114,8 +159,10 @@ namespace Craquez.EditorTools
             if (!assetPath.StartsWith(Root)) return;
             var ti = (TextureImporter)assetImporter;
             string f = Path.GetFileNameWithoutExtension(assetPath);
-            bool isCharTex = f.StartsWith("Jogador_") || f.StartsWith("Goleiro_");
-            ti.maxTextureSize = (f == "Estadio_Albedo" || isCharTex) ? 4096 : 2048;
+            bool visual = assetPath.Contains("/Visuais/");          // pele/cabelo por jogador (1024)
+            bool kit = assetPath.Contains("/Uniformes/") || visual;
+            bool isCharTex = f.StartsWith("Jogador_") || f.StartsWith("Goleiro_") || kit;
+            ti.maxTextureSize = visual ? 1024 : (kit ? 2048 : ((f == "Estadio_Albedo" || isCharTex) ? 4096 : 2048));
             ti.wrapMode = TextureWrapMode.Clamp;
 
             if (isCharTex)

@@ -122,5 +122,31 @@ namespace Craquez.EditorTools
             }
             EditorApplication.Exit(exitCode);
         }
+
+        /// <summary>Build Linux de diagnóstico (roda a partida sozinho com -autoteste e mostra os erros no log).</summary>
+        public static void BuildLinuxTeste()
+        {
+            int exitCode = 1;
+            try
+            {
+                if (!CraquezSetup.Configure(false)) throw new Exception("o setup do projeto falhou (veja o log acima)");
+                var options = new BuildPlayerOptions
+                {
+                    scenes = new[] { CraquezSetup.Scene },
+                    locationPathName = "Build/Linux/Craquez3D.x86_64",
+                    target = BuildTarget.StandaloneLinux64,
+                    targetGroup = BuildTargetGroup.Standalone,
+                    options = BuildOptions.None
+                };
+                var r = BuildPipeline.BuildPlayer(options);
+                Debug.Log("[Craquez 3D] Build Linux: " + r.summary.result + ", " + r.summary.totalErrors + " erro(s)");
+                exitCode = r.summary.result == BuildResult.Succeeded ? 0 : 1;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("[Craquez 3D] Build Linux falhou: " + e);
+            }
+            EditorApplication.Exit(exitCode);
+        }
     }
 }

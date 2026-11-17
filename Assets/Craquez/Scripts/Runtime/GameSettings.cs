@@ -19,7 +19,52 @@ namespace Craquez
     public static class GameSettings
     {
         const string KLayout = "craquez.layout", KCam = "craquez.camera", KQual = "craquez.qualidade",
-                     KVol = "craquez.volume", KPapel = "craquez.papel", KVib = "craquez.vibracao", KInv = "craquez.inverterX";
+                     KVol = "craquez.volume", KPapel = "craquez.papel", KVib = "craquez.vibracao", KInv = "craquez.inverterX",
+                     KMapa = "craquez.minimapa", KNomes = "craquez.nomes", KTempo = "craquez.tempo", KDif = "craquez.dificuldade",
+                     KCamPartida = "craquez.cameraPartida", KTime = "craquez.timeUsuario";
+
+        /// <summary>Partida: duração de cada tempo (minutos reais).</summary>
+        public static readonly int[] DuracoesTempo = { 2, 3, 5, 8, 12 };
+
+        public static bool MiniMapa
+        {
+            get { return PlayerPrefs.GetInt(KMapa, 1) == 1; }
+            set { PlayerPrefs.SetInt(KMapa, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        public static bool NomesJogadores
+        {
+            get { return PlayerPrefs.GetInt(KNomes, 1) == 1; }
+            set { PlayerPrefs.SetInt(KNomes, value ? 1 : 0); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>Índice em <see cref="DuracoesTempo"/>.</summary>
+        public static int DuracaoTempo
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt(KTempo, 1), 0, DuracoesTempo.Length - 1); }
+            set { PlayerPrefs.SetInt(KTempo, Mathf.Clamp(value, 0, DuracoesTempo.Length - 1)); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>0 = Amador, 1 = Profissional, 2 = Lenda (IA adversária).</summary>
+        public static int Dificuldade
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt(KDif, 1), 0, 2); }
+            set { PlayerPrefs.SetInt(KDif, Mathf.Clamp(value, 0, 2)); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>Índice em CameraRig.ModosPartida.</summary>
+        public static int CameraPartida
+        {
+            get { return PlayerPrefs.GetInt(KCamPartida, 0); }
+            set { PlayerPrefs.SetInt(KCamPartida, value); PlayerPrefs.Save(); }
+        }
+
+        /// <summary>0 = Craquez FC (casa), 1 = Atlético Celeste (visitante).</summary>
+        public static int TimeUsuario
+        {
+            get { return Mathf.Clamp(PlayerPrefs.GetInt(KTime, 0), 0, 1); }
+            set { PlayerPrefs.SetInt(KTime, Mathf.Clamp(value, 0, 1)); PlayerPrefs.Save(); }
+        }
 
         public static LayoutControle Layout
         {

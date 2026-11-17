@@ -100,7 +100,20 @@ namespace Craquez
         public float WindSpeed { get { return Wind.magnitude; } }
         public float RollingDeceleration { get { return P != null ? P.rollDecel : 1.1f; } }
 
-        ParticleSystem rain, groundSplash, droplets;
+        ParticleSystem rain, groundSplash, droplets, mist;
+        LineRenderer bolt;
+        Material boltMaterial;
+        float wetLevel = 1f;          // 0..1 do encharcamento alvo: o campo vai molhando com o tempo
+        float wetApplied = -1f;
+        float rainIntensity = 1f;     // rajadas de chuva (Perlin)
+        float ballSprayTimer;
+        float boltUntil;
+        readonly List<Vector4> lensDrops = new List<Vector4>(); // x, y (0..1), raio, nascimento
+        float lensSpawn;
+
+        /// <summary>Encharcamento atual do gramado (0 = seco, 1 = o máximo deste clima).</summary>
+        public float WetLevel { get { return wetLevel; } }
+        public float RainIntensity { get { return P != null && P.rainRate > 0f ? rainIntensity : 0f; } }
         Material sky;
         GameObject cloudLayer;
         Light flash;
@@ -132,7 +145,9 @@ namespace Craquez
             rain = CreateRain();
             groundSplash = CreateGroundSplash();
             droplets = CreateDroplets();
+            mist = CreateMist();
             cloudLayer = CreateClouds();
+            bolt = CreateBolt();
 
             var fgo = new GameObject("Relampago");
             fgo.transform.SetParent(transform, false);
@@ -207,25 +222,13 @@ namespace Craquez
             // refletores: o URP usa queda física (1/d²); a ~70 m do campo precisamos de intensidade alta
             foreach (var l in floods) { l.enabled = p.floodlights > 0f; l.intensity = p.floodlights * 1800f; }
 
-            for (int i = 0; i < grassMaterials.Count; i++)
-            {
-                var m = grassMaterials[i];
-                Color b = i < grassBaseColors.Count ? grassBaseColors[i] : Color.white;
-                float k = Mathf.Lerp(1f, 0.85f, p.wetness);
-                m.SetColor("_BaseColor", new Color(b.r * k, b.g * k, b.b * k, 1f));
-                m.SetFloat("_Smoothness", Mathf.Lerp(0.12f, 0.36f, p.wetness)); // brilho molhado sem "estourar" nos refletores
-            }
-            foreach (var m in characterMaterials)
-            {
-                if (m == null) continue;
-                bool hasPbrMap = m.HasProperty("_MetallicGlossMap") && m.GetTexture("_MetallicGlossMap") != null;
-                // uniforme e pele ficam levemente mais escuros e reflexivos quando molhados pela chuva
-                if (m.HasProperty("_BaseColor"))
-                    m.SetColor("_BaseColor", Color.Lerp(Color.white, new Color(0.68f, 0.72f, 0.78f, 1f), p.wetness));
-                if (m.HasProperty("_Metallic"))
-                    m.SetFloat("_Metallic", Mathf.Lerp(0f, 0.18f, p.wetness));
-                m.SetFloat("_Smoothness", hasPbrMap ? Mathf.Lerp(0.90f, 1.0f, p.wetness) : Mathf.Lerp(0.50f, 0.90f, p.wetness));
-            }
+            // começa parcialmente molhado e vai encharcando com a chuva (jogo de verdade: o campo piora com o tempo)
+            wetLevel = p.rainRate > 0f ? 0.55f : 1f;
+            wetApplied = -1f;
+            ApplyWetness();
+            var me = mist.emission; me.rateOverTime = c == Clima.Tempestade ? 26f * GameSettings.Particulas : (c == Clima.Chuva ? 7f * GameSettings.Particulas : 0f);
+            if (c != Clima.Sol) { if (!mist.isPlaying) mist.Play(); } else mist.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+            lensDrops.Clear();
 
             if (puddleField != null)
                 puddleField.Generate(p.puddles, p.soakedAreas, p.puddleDepth, p.puddleSize, p.rippleSpeed, p.ripplesPerSecond, UnityEngine.Random.Range(0, 100000));
@@ -242,6 +245,49 @@ namespace Craquez
 
             StartCoroutine(RefreshProbe());
         }
+
+        /// <summary>Molhado efetivo agora (perfil do clima × encharcamento acumulado).</summary>
+        public float Wetness { get { return P != null ? P.wetness * wetLevel : 0f; } }
+
+        void ApplyWetness()
+        {
+            if (P == null) return;
+            float w = Wetness;
+            if (Mathf.Abs(w - wetApplied) < 0.01f) return;
+            wetApplied = w;
+            for (int i = 0; i < grassMaterials.Count; i++)
+            {
+                var m = grassMaterials[i];
+                Color b = i < grassBaseColors.Count ? grassBaseColors[i] : Color.white;
+                float k = Mathf.Lerp(1f, 0.85f, w);
+                m.SetColor("_BaseColor", new Color(b.r * k, b.g * k, b.b * k, 1f));
+                m.SetFloat("_Smoothness", Mathf.Lerp(0.12f, 0.36f, w)); // brilho molhado sem "estourar" nos refletores
+            }
+            foreach (var m in characterMaterials) ApplyWetCharacter(m, w);
+        }
+
+        static void ApplyWetCharacter(Material m, float w)
+        {
+            if (m == null) return;
+            bool hasPbrMap = m.HasProperty("_MetallicGlossMap") && m.GetTexture("_MetallicGlossMap") != null;
+            // uniforme e pele ficam levemente mais escuros e reflexivos quando molhados pela chuva
+            if (m.HasProperty("_BaseColor"))
+                m.SetColor("_BaseColor", Color.Lerp(Color.white, new Color(0.68f, 0.72f, 0.78f, 1f), w));
+            if (m.HasProperty("_Metallic"))
+                m.SetFloat("_Metallic", Mathf.Lerp(0f, 0.18f, w));
+            if (m.HasProperty("_Smoothness"))
+                m.SetFloat("_Smoothness", hasPbrMap ? Mathf.Lerp(0.90f, 1.0f, w) : Mathf.Lerp(0.50f, 0.90f, w));
+        }
+
+        /// <summary>Materiais criados depois (uniformes da partida) também ficam molhados.</summary>
+        public void RegisterCharacterMaterial(Material m)
+        {
+            if (m == null || characterMaterials.Contains(m)) return;
+            characterMaterials.Add(m);
+            ApplyWetCharacter(m, Wetness);
+        }
+
+        public void UnregisterCharacterMaterial(Material m) { characterMaterials.Remove(m); }
 
         IEnumerator RefreshProbe()
         {
@@ -276,6 +322,30 @@ namespace Craquez
             vel.y = new ParticleSystem.MinMaxCurve(0f);
             vel.z = new ParticleSystem.MinMaxCurve(Wind.z * 0.9f);
 
+            if (P.rainRate > 0f)
+            {
+                // a chuva vem em ondas: mais forte nas rajadas de vento, nunca constante
+                float wave = Mathf.PerlinNoise(windSeed + 31f, t * 0.06f);
+                rainIntensity = Mathf.Lerp(0.55f, 1.3f, wave) * Mathf.Lerp(0.9f, 1.15f, gust);
+                var em = rain.emission; em.rateOverTime = P.rainRate * rainIntensity * GameSettings.Particulas;
+                var em2 = groundSplash.emission; em2.rateOverTime = P.rainRate * 0.12f * rainIntensity * GameSettings.Particulas;
+                var rm = rain.main; rm.startSpeed = P.rainSpeed * Mathf.Lerp(0.95f, 1.15f, gust);
+                // o campo encharca aos poucos (cerca de 3 minutos de chuva forte até o máximo)
+                wetLevel = Mathf.MoveTowards(wetLevel, 1f, Time.deltaTime * rainIntensity / (Current == Clima.Tempestade ? 120f : 200f));
+                ApplyWetness();
+                if (followCamera != null)
+                {
+                    Vector3 c = followCamera.position;
+                    mist.transform.position = new Vector3(c.x, 0.4f, c.z) + Vector3.ProjectOnPlane(followCamera.forward, Vector3.up).normalized * 18f;
+                    var mv = mist.velocityOverLifetime;
+                    mv.x = new ParticleSystem.MinMaxCurve(Wind.x * 0.6f);
+                    mv.z = new ParticleSystem.MinMaxCurve(Wind.z * 0.6f);
+                }
+                UpdateBallSpray();
+                UpdateLensDrops();
+            }
+            if (bolt != null && bolt.enabled && Time.time > boltUntil) bolt.enabled = false;
+
             if (cloudMaterial != null)
             {
                 Vector2 off = cloudMaterial.GetTextureOffset("_BaseMap");
@@ -307,7 +377,9 @@ namespace Craquez
             {
                 yield return new WaitForSeconds(UnityEngine.Random.Range(5f, 13f));
                 float power = UnityEngine.Random.Range(0.5f, 1f);
-                flash.transform.rotation = Quaternion.Euler(UnityEngine.Random.Range(35f, 75f), UnityEngine.Random.Range(0f, 360f), 0f);
+                float yaw = UnityEngine.Random.Range(0f, 360f);
+                flash.transform.rotation = Quaternion.Euler(UnityEngine.Random.Range(35f, 75f), yaw, 0f);
+                ShowBolt(yaw, power);
                 flash.enabled = true;
                 int pulses = UnityEngine.Random.Range(2, 4);
                 for (int i = 0; i < pulses; i++)
@@ -335,7 +407,148 @@ namespace Craquez
             }
         }
 
+        // ------------------------------------------------------------ efeitos da chuva no jogo
+
+        /// <summary>A bola rolando ou quicando no gramado molhado levanta um rastro de água.</summary>
+        void UpdateBallSpray()
+        {
+            var b = BallPhysics.Instance;
+            if (b == null || b.IsHeld || Wetness < 0.25f) return;
+            Vector3 v = b.Velocity;
+            Vector3 p = b.transform.position;
+            float sp = new Vector2(v.x, v.z).magnitude;
+            if (p.y > Arena.BallRadius + 0.06f || sp < 3.5f) return;
+            ballSprayTimer -= Time.deltaTime;
+            if (ballSprayTimer > 0f) return;
+            ballSprayTimer = Mathf.Lerp(0.09f, 0.03f, Mathf.Clamp01(sp / 25f));
+            var ep = new ParticleSystem.EmitParams();
+            Vector3 back = -new Vector3(v.x, 0f, v.z).normalized;
+            int n = Mathf.RoundToInt(Mathf.Lerp(2f, 7f, Mathf.Clamp01(sp / 22f)) * Wetness);
+            for (int i = 0; i < n; i++)
+            {
+                Vector2 r = UnityEngine.Random.insideUnitCircle;
+                ep.position = new Vector3(p.x, 0.04f, p.z) + back * 0.1f;
+                ep.velocity = back * UnityEngine.Random.Range(0.5f, 1.6f) + new Vector3(r.x * 0.8f, UnityEngine.Random.Range(0.8f, 2.2f) * Mathf.Clamp01(sp / 15f), r.y * 0.8f);
+                ep.startSize = UnityEngine.Random.Range(0.02f, 0.045f);
+                ep.startLifetime = UnityEngine.Random.Range(0.25f, 0.5f);
+                droplets.Emit(ep, 1);
+            }
+        }
+
+        /// <summary>Gotas na lente da câmera (como nas transmissões debaixo de chuva).</summary>
+        void UpdateLensDrops()
+        {
+            if (GameSettings.Qualidade == QualidadeGrafica.Baixa) { lensDrops.Clear(); return; }
+            float rate = (Current == Clima.Tempestade ? 2.6f : 0.9f) * rainIntensity;
+            // a lente só pega chuva quando olha para o lado de onde o vento traz as gotas
+            if (followCamera != null && Wind.sqrMagnitude > 0.1f)
+                rate *= Mathf.Lerp(0.35f, 1.3f, Mathf.Clamp01(0.5f - 0.5f * Vector3.Dot(followCamera.forward, Wind.normalized)));
+            lensSpawn += Time.deltaTime * rate;
+            while (lensSpawn > 1f && lensDrops.Count < 26)
+            {
+                lensSpawn -= 1f;
+                lensDrops.Add(new Vector4(UnityEngine.Random.value, UnityEngine.Random.value, UnityEngine.Random.Range(0.006f, 0.02f), Time.time));
+            }
+            for (int i = lensDrops.Count - 1; i >= 0; i--)
+            {
+                var d = lensDrops[i];
+                float age = Time.time - d.w;
+                if (age > 3.5f) { lensDrops.RemoveAt(i); continue; }
+                // as maiores escorrem
+                if (d.z > 0.013f) { d.y += Time.deltaTime * 0.02f * (d.z / 0.02f); lensDrops[i] = d; }
+            }
+        }
+
+        void OnGUI()
+        {
+            if (lensDrops.Count == 0 || P == null || P.rainRate <= 0f) return;
+            GUI.depth = 3;
+            float H = Screen.height;
+            foreach (var d in lensDrops)
+            {
+                float age = Time.time - d.w;
+                float a = Mathf.Clamp01(age / 0.15f) * Mathf.Clamp01((3.5f - age) / 1.2f);
+                float r = d.z * H;
+                Vector2 c = new Vector2(d.x * Screen.width, d.y * H);
+                UiKit.Disc(c, r, new Color(0.75f, 0.82f, 0.9f, 0.16f * a));
+                UiKit.RingAt(c, r, new Color(1f, 1f, 1f, 0.22f * a));
+                UiKit.Disc(c + new Vector2(-r * 0.3f, -r * 0.35f), r * 0.25f, new Color(1f, 1f, 1f, 0.35f * a));
+            }
+        }
+
+        /// <summary>Desenha o raio no céu, longe do estádio, na direção do clarão.</summary>
+        void ShowBolt(float yaw, float power)
+        {
+            if (bolt == null) return;
+            Vector3 dir = Quaternion.Euler(0f, yaw + 180f, 0f) * Vector3.forward;
+            Vector3 top = dir * UnityEngine.Random.Range(300f, 520f) + Vector3.up * UnityEngine.Random.Range(150f, 210f);
+            Vector3 bottom = new Vector3(top.x, 0f, top.z) + UnityEngine.Random.insideUnitSphere * 40f;
+            bottom.y = UnityEngine.Random.Range(20f, 60f);
+            int n = bolt.positionCount;
+            for (int i = 0; i < n; i++)
+            {
+                float k = (float)i / (n - 1);
+                Vector3 p = Vector3.Lerp(top, bottom, k);
+                if (i > 0 && i < n - 1) p += new Vector3(UnityEngine.Random.Range(-14f, 14f), UnityEngine.Random.Range(-6f, 6f), UnityEngine.Random.Range(-14f, 14f));
+                bolt.SetPosition(i, p);
+            }
+            float w = Mathf.Lerp(1.6f, 3.2f, power);
+            bolt.startWidth = w;
+            bolt.endWidth = w * 0.35f;
+            bolt.enabled = true;
+            boltUntil = Time.time + UnityEngine.Random.Range(0.18f, 0.32f);
+        }
+
         // ------------------------------------------------------------ construção das partículas
+
+        ParticleSystem CreateMist()
+        {
+            // névoa de respingos rente ao gramado, levada pelo vento (aparece mais na tempestade)
+            var ps = NewPS("NevoaChuva", splashMaterial, 400);
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve(2.5f, 4f);
+            main.startSpeed = 0f;
+            main.startSize = new ParticleSystem.MinMaxCurve(4f, 9f);
+            main.startColor = new Color(0.82f, 0.86f, 0.92f, 0.07f);
+            var shape = ps.shape;
+            shape.enabled = true;
+            shape.shapeType = ParticleSystemShapeType.Box;
+            shape.scale = new Vector3(60f, 0.5f, 60f);
+            var vel = ps.velocityOverLifetime;
+            vel.enabled = true;
+            vel.space = ParticleSystemSimulationSpace.World;
+            vel.x = new ParticleSystem.MinMaxCurve(0f);
+            vel.y = new ParticleSystem.MinMaxCurve(0.05f);
+            vel.z = new ParticleSystem.MinMaxCurve(0f);
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            var g = new Gradient();
+            g.SetKeys(new[] { new GradientColorKey(Color.white, 0f), new GradientColorKey(Color.white, 1f) },
+                      new[] { new GradientAlphaKey(0f, 0f), new GradientAlphaKey(1f, 0.4f), new GradientAlphaKey(0f, 1f) });
+            col.color = new ParticleSystem.MinMaxGradient(g);
+            return ps;
+        }
+
+        LineRenderer CreateBolt()
+        {
+            var go = new GameObject("Raio");
+            go.transform.SetParent(transform, false);
+            var lr = go.AddComponent<LineRenderer>();
+            lr.positionCount = 9;
+            lr.useWorldSpace = true;
+            if (splashMaterial != null)
+            {
+                boltMaterial = new Material(splashMaterial);
+                if (boltMaterial.HasProperty("_BaseColor")) boltMaterial.SetColor("_BaseColor", new Color(0.92f, 0.95f, 1f, 1f));
+                lr.sharedMaterial = boltMaterial;
+            }
+            lr.startColor = lr.endColor = new Color(0.95f, 0.97f, 1f, 1f);
+            lr.shadowCastingMode = ShadowCastingMode.Off;
+            lr.receiveShadows = false;
+            lr.enabled = false;
+            return lr;
+        }
+
 
         ParticleSystem NewPS(string n, Material mat, int max)
         {

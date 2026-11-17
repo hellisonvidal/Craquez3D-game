@@ -26,6 +26,16 @@ A Unity com URP entrega iluminação PBR, sombras, pós-processamento e boa perf
 
 ## O que tem no jogo
 
+**Partida 11 x 11** (menu principal → PARTIDA 11 x 11)
+- Craquez FC x Atlético Celeste: escolha seu time, o clima, a duração, a dificuldade e a câmera.
+- 22 jogadores alternando os dois rostos do jogo, cada um com nome, número, atributos e **mentalidade própria** (ofensividade, criatividade, disciplina, agressividade, espírito de equipe, frieza e liderança), visão tática e jogo coletivo.
+- Árbitro e dois assistentes em laterais opostas. Regras completas: lateral, escanteio, tiro de meta, falta com barreira, pênalti, impedimento, vantagem, cartões e atendimento médico.
+- Trombadas, quedas, contusões, carrinho e escorregões na chuva.
+- HUD com nomes fixos, cartão do jogador controlado e minimapa central (dá para desligar). Câmera **Visão do jogador**.
+- Controles: com a bola, ✕ passe, △ lançamento, ○/□ chute, R1 drible e L1 arrancada. Sem a bola, ✕ desarme, ○ carrinho e L1 trocar de jogador (teclado: Z, Q, Espaço/E, F, X).
+
+> Animações de queda, contusão, colisão, carrinho e árbitros: [Universal Animation Library](https://quaternius.com) 1 e 2 da Quaternius, licença CC0 (veja `Assets/Craquez/Animations/Quaternius/LICENCA.txt`).
+
 **Abertura e menus**
 - Aviso "jogo totalmente programado por IA" → vídeo de abertura → **"Toque na tela para iniciar"**.
 - Menu principal: **Arena de Treino**, **Configurações** e **Sair do jogo**. Pausa no jogo (Continuar, Nova bola, Câmera, Configurações, Sair para o menu, Sair do jogo).

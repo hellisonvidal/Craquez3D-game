@@ -40,3 +40,43 @@ jobs:
           name: Diagnostico
           path: Diagnostico
           if-no-files-found: warn
+
+  partida:
+    # Build Linux e uma partida jogada sozinha (-autoteste): lista no log todo erro/exceção da partida.
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cache da pasta Library
+        uses: actions/cache@v4
+        with:
+          path: Library
+          key: Library-Linux-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          restore-keys: Library-Linux-
+      - name: Unity (build Linux de teste)
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          targetPlatform: StandaloneLinux64
+          buildMethod: Craquez.EditorTools.CraquezCI.BuildLinuxTeste
+          versioning: None
+      - name: Jogar a partida automática
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb mesa-vulkan-drivers libgl1-mesa-dri >/dev/null
+          sudo chown -R "$USER" Build || true
+          chmod +x Build/Linux/Craquez3D.x86_64
+          set +e
+          timeout 900 xvfb-run -a -s "-screen 0 1280x720x24" Build/Linux/Craquez3D.x86_64 -autoteste -force-glcore -screen-width 1280 -screen-height 720 -logFile partida.log
+          echo "codigo de saida: $?"
+          grep -E "AUTOTESTE|Exception|NullReference|IndexOutOfRange|MissingReference" partida.log | head -200
+          exit 0
+      - name: Guardar log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Partida
+          path: partida.log
+          if-no-files-found: warn

@@ -5,17 +5,8 @@ using UnityEngine.Video;
 namespace Craquez
 {
     /// <summary>
-    /// Modos de jogo disponíveis
-    /// </summary>
-    public enum GameMode
-    {
-        Treino,       // Jogo-treino 1x1 (atacante vs goleiro)
-        Partida11v11  // Partida coletiva 11x11
-    }
-
-    /// <summary>
-    /// Monta a arena em tempo de execução a partir dos assets ligados pelo setup do editor
-    /// (menu Craquez 3D > Configurar Projeto). Suporta modo Treino e Partida 11x11.
+    /// Monta a arena de treino em tempo de execução a partir dos assets ligados pelo setup do editor
+    /// (menu Craquez 3D > Configurar Projeto). Mantém a cena simples e robusta.
     /// </summary>
     [DefaultExecutionOrder(-100)]
     public class ArenaBootstrap : MonoBehaviour
@@ -24,7 +15,13 @@ namespace Craquez
         public GameObject playerPrefab;
         public GameObject keeperPrefab;
         public GameObject ballPrefab;
+
+        [Header("Partida 11 x 11")]
+        public GameObject playerPrefabB;
+        public GameObject keeperPrefabA;
         public GameObject refereePrefab;
+        public GameObject refereePrefabB;
+        public Texture2D kitA_Casa, kitB_Casa, kitB_GoleiroCasa, kitA_Visitante, kitB_Visitante, kitA_GoleiroVisitante, kitA_Arbitro, kitB_Arbitro;
 
         [Header("Materiais")]
         public Material grassLight;
@@ -54,27 +51,6 @@ namespace Craquez
         [Tooltip("Altura do jogador em metros (o modelo é escalado para esta altura no setup).")]
         public float playerHeight = 1.78f;
 
-        // Componentes comuns da cena
-        public BallPhysics Ball { get; private set; }
-        public WeatherSystem Weather { get; private set; }
-        public CameraRig CameraRig { get; private set; }
-        public PuddleField PuddleField { get; private set; }
-        public TouchControls TouchControls { get; private set; }
-        public AppUpdater AppUpdater { get; private set; }
-        public AppFlow AppFlow { get; private set; }
-        public GameObject WorldRoot { get; private set; }
-        public Material GrassLightMat { get; private set; }
-        public Material GrassDarkMat { get; private set; }
-
-        // Estado
-        private GameMode _currentMode = GameMode.Treino;
-        private TrainingSession _trainingSession;
-        private MatchSession11v11 _matchSession11v11;
-        private PlayerController _player;
-        private GoalkeeperAI _keeper;
-        private ShooterAI _shooterAI;
-        private GameObject _uiRoot;
-
         void Awake()
         {
             ErrorOverlay.Ensure();
@@ -87,266 +63,131 @@ namespace Craquez
             Physics.bounceThreshold = 0.6f;
             Arena.ConfigurePhysicsLayers();
 
-            WorldRoot = new GameObject("Mundo").transform;
+            var world = new GameObject("Mundo").transform;
 
-            // Materiais com instância própria (o clima altera em tempo de execução)
-            GrassLightMat = new Material(grassLight);
-            GrassDarkMat = new Material(grassDark);
-            var pm = new Material(puddle);
-            var cm = clouds != null ? new Material(clouds) : null;
+            // materiais com instância própria (o clima altera em tempo de execução)
+            var gl = new Material(grassLight); var gd = new Material(grassDark);
+            var pm = new Material(puddle); var cm = clouds != null ? new Material(clouds) : null;
             var sm = soaked != null ? new Material(soaked) : null;
 
-            // Campo e gols
             Renderer[] grassRenderers;
-            PitchBuilder.Build(WorldRoot, GrassLightMat, GrassDarkMat, lines, out grassRenderers);
+            PitchBuilder.Build(world, gl, gd, lines, out grassRenderers);
+            // partes "decorativas" protegidas: um erro aqui não pode impedir o jogo de abrir
             Safe("gols", () =>
             {
-                GoalNet.Build(WorldRoot, "GolTreino", new Vector3(Arena.HalfLength - PitchBuilder.LineWidth * 0.5f, 0f, 0f), 0f, post, net);
-                GoalNet.Build(WorldRoot, "GolOposto", new Vector3(-Arena.HalfLength + PitchBuilder.LineWidth * 0.5f, 0f, 0f), 180f, post, net);
+                GoalNet.Build(world, "GolTreino", new Vector3(Arena.HalfLength - PitchBuilder.LineWidth * 0.5f, 0f, 0f), 0f, post, net);
+                GoalNet.Build(world, "GolOposto", new Vector3(-Arena.HalfLength + PitchBuilder.LineWidth * 0.5f, 0f, 0f), 180f, post, net);
             });
 
-            // Poças
             var pfGo = new GameObject("Pocas");
-            pfGo.transform.SetParent(WorldRoot, false);
-            PuddleField = pfGo.AddComponent<PuddleField>();
-            Safe("poças", () => PuddleField.Init(pm, sm, ripple));
+            pfGo.transform.SetParent(world, false);
+            var puddles = pfGo.AddComponent<PuddleField>();
+            Safe("poças", () => puddles.Init(pm, sm, ripple));
 
-            // Áudio procedural
             var audioGo = new GameObject("AudioProcedural");
-            audioGo.transform.SetParent(WorldRoot, false);
+            audioGo.transform.SetParent(world, false);
             Safe("áudio", () => audioGo.AddComponent<ProceduralAudio>());
 
-            // Bola
+            // personagens e bola
             var ballGo = Instantiate(ballPrefab, new Vector3(30f, Arena.BallRadius, 0f), Quaternion.identity);
             ballGo.name = "Bola";
-            Ball = ballGo.GetComponent<BallPhysics>();
-            if (Ball == null) Ball = ballGo.AddComponent<BallPhysics>();
+            var ball = ballGo.GetComponent<BallPhysics>();
+            if (ball == null) ball = ballGo.AddComponent<BallPhysics>();
 
-            // Clima
-            var wGo = new GameObject("Clima");
-            wGo.transform.SetParent(WorldRoot, false);
-            Weather = wGo.AddComponent<WeatherSystem>();
-            Weather.sun = sun;
-            Weather.skyboxTemplate = skybox;
-            Weather.rainMaterial = rain;
-            Weather.splashMaterial = splash;
-            Weather.dropletMaterial = droplet;
-            Weather.cloudMaterial = cm;
-            Weather.postProcessRoot = postProcessRoot;
-            Weather.probe = reflectionProbe;
-            Weather.puddleField = PuddleField;
-            Weather.followCamera = mainCamera.transform;
-            Safe("clima", () => Weather.Build());
-
-            // Câmera
-            CameraRig = mainCamera.GetComponent<CameraRig>();
-            if (CameraRig == null) CameraRig = mainCamera.gameObject.AddComponent<CameraRig>();
-            CameraRig.ball = Ball;
-            mainCamera.farClipPlane = 1500f;
-
-            // Interface comum
-            _uiRoot = new GameObject("Interface");
-            _uiRoot.transform.SetParent(WorldRoot, false);
-            TouchControls = _uiRoot.AddComponent<TouchControls>();
-            TouchControls.circle = uiCircle;
-            TouchControls.enabled = false;
-
-            AppUpdater = _uiRoot.AddComponent<AppUpdater>();
-            AppFlow = _uiRoot.AddComponent<AppFlow>();
-            AppFlow.arenaBootstrap = this;
-
-            // Criar TrainingSession mínima para preview/menus
-            _trainingSession = _uiRoot.AddComponent<TrainingSession>();
-            _trainingSession.cameraRig = CameraRig;
-            _trainingSession.weather = Weather;
-            _trainingSession.touch = TouchControls;
-
-            AppFlow.session = _trainingSession;
-
-            // WeatherBallLink
-            WeatherBallLink link = _uiRoot.AddComponent<WeatherBallLink>();
-            link.ball = Ball;
-            link.weather = Weather;
-
-            // Iniciar no modo Treino por padrão (AppFlow vai chamar Begin)
-            _currentMode = GameMode.Treino;
-        }
-
-        /// <summary>
-        /// Inicia o modo Jogo-Treino (1x1: atacante vs goleiro)
-        /// </summary>
-        public void StartTraining(Clima clima, PapelControle papel)
-        {
-            _currentMode = GameMode.Treino;
-
-            // Limpar sessão anterior se houver
-            CleanupCurrentSession();
-
-            // Criar jogador
             var playerGo = Instantiate(playerPrefab, new Vector3(28f, 0f, 0f), Quaternion.LookRotation(Vector3.right));
             playerGo.name = "Jogador";
-            _player = playerGo.GetComponent<PlayerController>();
-            if (_player == null) _player = playerGo.AddComponent<PlayerController>();
-            _player.ball = Ball;
-            _player.cameraTransform = mainCamera.transform;
+            var player = playerGo.GetComponent<PlayerController>();
+            if (player == null) player = playerGo.AddComponent<PlayerController>();
+            player.ball = ball;
+            player.cameraTransform = mainCamera.transform;
+            var shooter = playerGo.GetComponent<ShooterAI>();
+            if (shooter == null) shooter = playerGo.AddComponent<ShooterAI>();
+            shooter.ball = ball;
+            shooter.enabled = false;
 
-            // Shooter AI (para modo goleiro)
-            _shooterAI = playerGo.GetComponent<ShooterAI>();
-            if (_shooterAI == null) _shooterAI = playerGo.AddComponent<ShooterAI>();
-            _shooterAI.ball = Ball;
-            _shooterAI.enabled = false;
-
-            // Criar goleiro
             var keeperGo = Instantiate(keeperPrefab, Arena.AttackGoalCenter + new Vector3(-0.6f, 0f, 0f), Quaternion.LookRotation(-Vector3.right));
             keeperGo.name = "Goleiro";
-            _keeper = keeperGo.GetComponent<GoalkeeperAI>();
-            if (_keeper == null) _keeper = keeperGo.AddComponent<GoalkeeperAI>();
-            _keeper.ball = Ball;
-            _keeper.cameraTransform = mainCamera.transform;
+            var keeper = keeperGo.GetComponent<GoalkeeperAI>();
+            if (keeper == null) keeper = keeperGo.AddComponent<GoalkeeperAI>();
+            keeper.ball = ball;
+            keeper.cameraTransform = mainCamera.transform;
 
-            // Coletar materiais para o clima
-            if (Weather != null)
-            {
-                Weather.grassMaterials.Clear();
-                Weather.grassBaseColors.Clear();
-                Weather.grassMaterials.Add(GrassLightMat); Weather.grassBaseColors.Add(GrassLightMat.GetColor("_BaseColor"));
-                Weather.grassMaterials.Add(GrassDarkMat); Weather.grassBaseColors.Add(GrassDarkMat.GetColor("_BaseColor"));
-                CollectCharacterMaterials(playerGo, Weather.characterMaterials);
-                CollectCharacterMaterials(keeperGo, Weather.characterMaterials);
-                CollectCharacterMaterials(Ball.gameObject, Weather.characterMaterials);
-            }
+            // clima
+            var wGo = new GameObject("Clima");
+            wGo.transform.SetParent(world, false);
+            var weather = wGo.AddComponent<WeatherSystem>();
+            weather.sun = sun;
+            weather.skyboxTemplate = skybox;
+            weather.rainMaterial = rain;
+            weather.splashMaterial = splash;
+            weather.dropletMaterial = droplet;
+            weather.cloudMaterial = cm;
+            weather.postProcessRoot = postProcessRoot;
+            weather.probe = reflectionProbe;
+            weather.puddleField = puddles;
+            weather.followCamera = mainCamera.transform;
+            weather.grassMaterials.Add(gl); weather.grassBaseColors.Add(gl.GetColor("_BaseColor"));
+            weather.grassMaterials.Add(gd); weather.grassBaseColors.Add(gd.GetColor("_BaseColor"));
+            CollectCharacterMaterials(playerGo, weather.characterMaterials);
+            CollectCharacterMaterials(keeperGo, weather.characterMaterials);
+            CollectCharacterMaterials(ballGo, weather.characterMaterials);
+            Safe("clima", () => weather.Build());
 
-            // Configurar câmera
-            CameraRig.player = playerGo.transform;
-            CameraRig.keeper = keeperGo.transform;
-            CameraRig.ball = Ball;
+            // câmera
+            var rig = mainCamera.GetComponent<CameraRig>();
+            if (rig == null) rig = mainCamera.gameObject.AddComponent<CameraRig>();
+            rig.player = playerGo.transform;
+            rig.keeper = keeperGo.transform;
+            rig.ball = ball;
+            mainCamera.farClipPlane = 1500f;
 
-            // Criar sessão de treino
-            _trainingSession = _uiRoot.GetComponent<TrainingSession>();
-            if (_trainingSession == null)
-            {
-                _trainingSession = _uiRoot.AddComponent<TrainingSession>();
-            }
-            _trainingSession.player = _player;
-            _trainingSession.shooterAI = _shooterAI;
-            _trainingSession.keeper = _keeper;
-            _trainingSession.ball = Ball;
-            _trainingSession.cameraRig = CameraRig;
-            _trainingSession.weather = Weather;
-            _trainingSession.touch = TouchControls;
+            // controles e sessão
+            var ui = new GameObject("Interface");
+            ui.transform.SetParent(world, false);
+            var touch = ui.AddComponent<TouchControls>();
+            touch.circle = uiCircle;
+            touch.enabled = false;
+            var session = ui.AddComponent<TrainingSession>();
+            session.player = player;
+            session.shooterAI = shooter;
+            session.keeper = keeper;
+            session.ball = ball;
+            session.cameraRig = rig;
+            session.weather = weather;
+            session.touch = touch;
 
-            // Atualizar AppFlow
-            if (AppFlow != null)
-            {
-                AppFlow.session = _trainingSession;
-                AppFlow.cameraRig = CameraRig;
-            }
+            var match = ui.AddComponent<MatchSession>();
+            match.ball = ball;
+            match.cameraRig = rig;
+            match.weather = weather;
+            match.touch = touch;
+            match.mainCamera = mainCamera;
+            match.playerPrefab = playerPrefab;
+            match.playerPrefabB = playerPrefabB != null ? playerPrefabB : playerPrefab;
+            match.keeperPrefab = keeperPrefab;
+            match.keeperPrefabA = keeperPrefabA != null ? keeperPrefabA : keeperPrefab;
+            match.refereePrefab = refereePrefab;
+            match.refereePrefabB = refereePrefabB != null ? refereePrefabB : refereePrefab;
+            match.kitA_Casa = kitA_Casa; match.kitB_Casa = kitB_Casa; match.kitB_GoleiroCasa = kitB_GoleiroCasa;
+            match.kitA_Visitante = kitA_Visitante; match.kitB_Visitante = kitB_Visitante; match.kitA_GoleiroVisitante = kitA_GoleiroVisitante;
+            match.kitA_Arbitro = kitA_Arbitro; match.kitB_Arbitro = kitB_Arbitro;
+            match.propMaterial = post;
+            match.trainingObjects.Add(playerGo);
+            match.trainingObjects.Add(keeperGo);
 
-            // Iniciar sessão
-            Weather.Apply(clima);
-            _trainingSession.Begin(clima, papel);
-        }
+            var updater = ui.AddComponent<AppUpdater>();
+            var flow = ui.AddComponent<AppFlow>();
+            flow.session = session;
+            flow.match = match;
+            flow.updater = updater;
+            flow.introClip = introClip;
+            flow.logo = logo;
+            flow.cameraRig = rig;
 
-        /// <summary>
-        /// Inicia o modo Partida 11x11
-        /// </summary>
-        public void StartMatch11v11(Clima clima, CollectiveMatchMode.TeamData homeTeam = null, CollectiveMatchMode.TeamData awayTeam = null)
-        {
-            _currentMode = GameMode.Partida11v11;
-
-            // Limpar sessão anterior se houver
-            CleanupCurrentSession();
-
-            // Configurar prefabs no CollectiveMatchMode (singleton)
-            var collectiveMode = CollectiveMatchMode.Instance;
-            if (collectiveMode != null)
-            {
-                collectiveMode.playerPrefab = playerPrefab;
-                collectiveMode.keeperPrefab = keeperPrefab;
-                collectiveMode.ballPrefab = ballPrefab;
-            }
-
-            // Criar sessão 11v11
-            if (_uiRoot != null)
-            {
-                _matchSession11v11 = _uiRoot.AddComponent<MatchSession11v11>();
-                _matchSession11v11.playerPrefab = playerPrefab;
-                _matchSession11v11.keeperPrefab = keeperPrefab;
-                _matchSession11v11.ballPrefab = ballPrefab;
-                _matchSession11v11.refereePrefab = refereePrefab;
-                _matchSession11v11.InjectDependencies(CameraRig, Weather, TouchControls, PuddleField);
-            }
-
-            // Configurar câmera (a bola já está configurada)
-            CameraRig.ball = Ball;
-
-            // Coletar materiais para o clima (a bola já existe)
-            if (Weather != null)
-            {
-                Weather.grassMaterials.Clear();
-                Weather.grassBaseColors.Clear();
-                Weather.grassMaterials.Add(GrassLightMat); Weather.grassBaseColors.Add(GrassLightMat.GetColor("_BaseColor"));
-                Weather.grassMaterials.Add(GrassDarkMat); Weather.grassBaseColors.Add(GrassDarkMat.GetColor("_BaseColor"));
-                CollectCharacterMaterials(Ball.gameObject, Weather.characterMaterials);
-                // Os jogadores serão adicionados pelo MatchSession11v11 / CollectiveMatchMode
-            }
-
-            // Atualizar AppFlow para usar a nova sessão
-            if (AppFlow != null && _matchSession11v11 != null)
-            {
-                // AppFlow espera TrainingSession, mas podemos adaptar ou criar um wrapper
-                // Por enquanto, deixamos o AppFlow com a TrainingSession para menus
-                // O MatchSession11v11 gerencia sua própria UI
-            }
-
-            // Iniciar partida
-            Weather.Apply(clima);
-            _matchSession11v11?.Begin(clima, homeTeam, awayTeam);
-        }
-
-        void CleanupCurrentSession()
-        {
-            // Não destrói _trainingSession pois é reutilizado
-            // Apenas limpa referências dos jogadores
-            if (_player != null)
-            {
-                Destroy(_player.gameObject);
-                _player = null;
-            }
-            if (_keeper != null)
-            {
-                Destroy(_keeper.gameObject);
-                _keeper = null;
-            }
-            if (_shooterAI != null)
-            {
-                Destroy(_shooterAI);
-                _shooterAI = null;
-            }
-            CameraRig.player = null;
-            CameraRig.keeper = null;
-            if (_matchSession11v11 != null)
-            {
-                Destroy(_matchSession11v11);
-                _matchSession11v11 = null;
-            }
-            if (_player != null)
-            {
-                Destroy(_player.gameObject);
-                _player = null;
-            }
-            if (_keeper != null)
-            {
-                Destroy(_keeper.gameObject);
-                _keeper = null;
-            }
-            if (_shooterAI != null)
-            {
-                Destroy(_shooterAI);
-                _shooterAI = null;
-            }
-            CameraRig.player = null;
-            CameraRig.keeper = null;
+            // bola quica menos com o gramado molhado
+            WeatherBallLink link = ui.AddComponent<WeatherBallLink>();
+            link.ball = ball;
+            link.weather = weather;
         }
 
         static void Safe(string step, System.Action action)

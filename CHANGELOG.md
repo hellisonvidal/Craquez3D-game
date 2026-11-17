@@ -2,14 +2,31 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
-## [1.1.4] — 2026-11-17
+## [1.2.0] — 2026-11-17
 
-- **Correção Braços Goleiro:** `MixamoBoneSockets` agora suporta múltiplos nomes para ossos de braço (`RightArm`/`LeftArm`, `RightUpperArm`/`LeftUpperArm`, `RightShoulder`/`LeftShoulder`, `RightForeArm`/`RightLowerArm`), corrigindo deformação dos braços do goleiro.
-- **Modo 11x11 Integrado:** Adicionado menu "PARTIDA 11x11" (renomeado "ARENA DE TREINO" → "JOGO-TREINO"), telas de configuração de times/formações, `MatchSession11v11`, e integração completa do `CollectiveMatchMode` com prefabs.
-- **Passes e Cruzamentos:** Sistema completo de passes no `PlayerController` e `TeamAI` — passe curto (`C`/`R1`), passe em profundidade (`V`/`L1`), cruzamento (`B`/`R1+L1`), com física, spin e decisão de IA.
-- **Rostos Aleatórios / Kits Casa/Fora:** `PlayerAttributes.GenerateRandom` gera atributos faciais aleatórios (tom de pele, cabelo, barba, etc.); `TeamData` agora tem cores de kits home/away/third gerados automaticamente.
-- **Correções e Otimizações:** Propriedade `Busy` inclui passes; animações de passe usam fallbacks existentes (`ChuteColocado`, `Cavadinha`); limpeza de referências nulas.
-- **CI/CD Windows Build:** Novo workflow `.github/workflows/windows-release.yml` e método `CraquezCI.BuildWindows` para builds StandaloneWindows64 automáticos.
+- **Partida 11 x 11 (modo novo):** Craquez FC x Atlético Celeste, com escolha do seu time, clima, duração (2 x 2 a 2 x 12 min), dificuldade e câmera. Tem dois tempos com troca de lado no intervalo, placar, relógio, estatísticas no fim e a opção de jogar de novo.
+- **Corpos novos:** jogador e goleiro trocados pelos modelos novos, com esqueleto Mixamo próprio (pesos automáticos, braços em T). As animações antigas usam o esqueleto original como referência e chegam aos corpos novos pelo retarget Humanoid da Unity. **Bola nova** com a arte "Craquez".
+- **Uniformes iguais por time:** todos da casa vestem o uniforme azul e todos os visitantes o branco, transferidos dos modelos de uniforme para o corpo do jogador (peito, número e escudos completos). Goleiro da casa verde, goleiro visitante laranja, arbitragem preta e amarela.
+- **Elencos:** 22 jogadores e 2 goleiros, com nome e número.
+- **Cada jogador é diferente:** 8 aparências, combinando pele (clara, morena, negra), cabelo (preto, castanho, loiro, ruivo) e barba (cheia, sem barba, cavanhaque, bigode, por fazer); **formato do rosto 3D** próprio (maxilar largo ou fino, queixo longo ou curto, nariz grande, bochechas, testa alta, orelhas de abano, rosto comprido), gerado pelo jogo sobre a malha da cabeça; penteado (natural, black power, moicano, coque ou faixa), altura de 1,66 m a 1,97 m conforme a posição e porte (magro, normal, forte, pesado) com peso em kg. O corpo influencia trombadas, velocidade, aceleração e cabeceio. Altura, peso e porte aparecem no cartão do jogador.
+- **Inteligência:** cada jogador tem atributos e mentalidade próprios (ofensividade, criatividade, disciplina, agressividade, espírito de equipe, frieza, liderança). Com a bola, ele escolhe entre finalizar, passar, lançar, cruzar, conduzir, driblar e afastar. Sem a bola, dá opção de passe, infiltra sem ficar impedido, pressiona, fecha linhas de passe, marca e recompõe. Na comemoração, os mais solidários correm para abraçar o autor do gol.
+- **Regras:** saída de bola, lateral, escanteio, tiro de meta, falta (com barreira), pênalti, impedimento, vantagem, cartões amarelo e vermelho (expulsão) e atendimento médico.
+- **Arbitragem:** árbitro no sistema diagonal e dois assistentes em laterais opostas, cada um alinhado ao penúltimo defensor da sua metade, com bandeira, cartões e apito.
+- **Física dos jogadores:** trombadas com troca de quantidade de movimento conforme massa e velocidade, desequilíbrio, quedas, contusões (o jogador fica mais lento), carrinho, bote, divididas, domínio que pode escapar com a bola rápida e escorregões no gramado molhado.
+- **Animações gratuitas:** Universal Animation Library 1 e 2 da Quaternius (licença CC0): quedas, levantar, atingido, empurrado, carrinho, arremesso lateral, comemorações, reclamação e locomoção e gestos dos árbitros.
+- **HUD:** nomes fixos sobre os jogadores, cartão do jogador controlado (função, perfil e fôlego) e minimapa no centro, embaixo. Nomes e minimapa podem ser desligados em Configurações ou na Pausa.
+- **Câmera:** nova **visão do jogador** (primeira pessoa, sem ver a própria cabeça), além de TV, atrás do jogador, aérea e dinâmica.
+- **Chuva e tempestade:** a chuva vem em ondas de intensidade, o gramado encharca com o tempo, há névoa de respingos rente ao chão, rastro d'água da bola, gotas na lente da câmera, raios visíveis no céu e torcida e apito sintetizados.
+- **Controles da partida:** com a bola, ✕ = passe, △ = lançamento, ○/□ = chute. Sem a bola, ✕ = desarme, ○ = carrinho e L1 = trocar de jogador. Os botões de toque mudam de nome conforme a situação.
+- **Comandos na tela:** um painel mostra os comandos do momento ("COM A BOLA" / "SEM A BOLA") e pisca ao ganhar ou perder a posse; mostra os botões do controle, as teclas ou os botões de toque, conforme o aparelho.
+- **Toque mais responsivo:** o toque é lido antes da partida em cada quadro (sem atraso de um quadro), toques muito rápidos contam, a área dos botões é maior, o analógico responde mais cedo, e o passe apertado um pouco antes de a bola chegar é feito assim que você domina.
+- **Câmera TV mais próxima** do lance, com o mesmo ângulo. **Minimapa mais transparente.**
+- **Erros na tela:** a caixa vermelha que cobria o jogo virou um selo pequeno e translúcido no canto (toque para ver os detalhes), sem repetir o mesmo erro.
+- O esqueleto antigo e não utilizado do modo 11 x 11 (`TeamAI`, `CollectiveMatchMode`, `FootballRulesEngine`, `RefereeSystem`, `PlayerAttributes`) foi substituído por esta implementação.
+- **Branch `feat/partida-11x11` mesclada na `main`:** o 11 x 11 da 1.1.4 (não publicada; `MatchSession11v11`, passes do `TeamAI`) foi substituído por esta implementação. Ficam da main o build Windows (`CraquezCI.BuildWindows`), os nomes alternativos de ossos do `MixamoBoneSockets` e as verificações nulas do `TrainingSession`.
+- **Correção:** `MixamoBoneSockets` não usa mais `RightArm`/`LeftArm` (braço) como antebraço quando o antebraço não é achado pelo nome; agora cai no Avatar Humanoid.
+- **CI Windows:** o workflow "Windows: build e Release" rodava scripts bash no PowerShell do `windows-latest` (falhava no primeiro passo) e o game-ci no Windows exige licença Pro. Agora roda em Linux (imagem `windows-mono`), gera o `.zip` e o anexa à mesma Release do APK.
+- **CI:** Android e Windows publicam na mesma Release sem conflito (quem chegar primeiro cria, o outro só anexa o arquivo).
 
 ## [1.1.3] — 2026-11-16
 

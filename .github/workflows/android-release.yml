@@ -58,9 +58,10 @@ jobs:
           IFS=. read -r MA MI PA <<< "$V"
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "code=$((MA*10000 + MI*100 + PA))" >> "$GITHUB_OUTPUT"
-          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+          # pula só se a Release já tiver o arquivo desta plataforma (Android e Windows dividem a mesma Release)
+          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null | grep -q '\.apk$'; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::A Release v$V já existe. O APK será gerado só como artefato; aumente o arquivo VERSION para publicar outra."
+            echo "::warning::A Release v$V já tem o arquivo .apk. O APK será gerado só como artefato; aumente o arquivo VERSION para publicar outra."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
@@ -134,9 +135,13 @@ jobs:
             on { print }
           ' CHANGELOG.md > notas.md
           [ -s notas.md ] || echo "Craquez 3D v$V" > notas.md
-          gh release create "v$V" "${{ steps.apk.outputs.file }}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Craquez 3D v$V" \
-            --notes-file notas.md \
-            --latest
+          # cria a Release ou, se o outro workflow já criou, só anexa o arquivo
+          if ! gh release view "v$V" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "v$V" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Craquez 3D v$V" \
+              --notes-file notas.md \
+              --latest || true
+          fi
+          gh release upload "v$V" "${{ steps.apk.outputs.file }}" --repo "$GITHUB_REPOSITORY" --clobber

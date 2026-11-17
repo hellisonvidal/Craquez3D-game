@@ -28,10 +28,10 @@ namespace Craquez
         public Transform Foot_L;        // mixamorig:LeftFoot
         public Transform Toe_L;         // mixamorig:LeftToeBase
         public Transform Hand_R;        // mixamorig:RightHand
-        public Transform ForeArm_R;     // mixamorig:RightForeArm (ou RightArm, RightLowerArm)
+        public Transform ForeArm_R;     // mixamorig:RightForeArm (ou RightLowerArm)
         public Transform UpperArm_R;    // mixamorig:RightArm (ou RightUpperArm, RightShoulder)
         public Transform Hand_L;        // mixamorig:LeftHand
-        public Transform ForeArm_L;     // mixamorig:LeftForeArm (ou LeftArm, LeftLowerArm)
+        public Transform ForeArm_L;     // mixamorig:LeftForeArm (ou LeftLowerArm)
         public Transform UpperArm_L;    // mixamorig:LeftArm (ou LeftUpperArm, LeftShoulder)
         public Transform Head;          // mixamorig:Head
 
@@ -143,13 +143,13 @@ namespace Craquez
             // Support both Mixamo standard (LeftToeBase) and Jogador.fbx naming (LeftToes)
             Toe_L = FindBone(searchRoot, "mixamorig:LeftToeBase", "LeftToeBase", "mixamorig:LeftToe_End", "LeftToes");
             Hand_R = FindBone(searchRoot, "mixamorig:RightHand", "RightHand");
-            // Support multiple forearm naming conventions: mixamorig:RightForeArm, RightForeArm, RightLowerArm, RightArm
-            ForeArm_R = FindBone(searchRoot, "mixamorig:RightForeArm", "RightForeArm", "RightLowerArm", "RightArm", "mixamorig:RightArm");
+            // Antebraço: mixamorig:RightForeArm, RightForeArm, RightLowerArm (RightArm é o braço, não o antebraço)
+            ForeArm_R = FindBone(searchRoot, "mixamorig:RightForeArm", "RightForeArm", "RightLowerArm");
             // Support upper arm naming: mixamorig:RightArm, RightArm, RightUpperArm, RightShoulder
             UpperArm_R = FindBone(searchRoot, "mixamorig:RightArm", "RightArm", "RightUpperArm", "RightShoulder", "mixamorig:RightUpperArm", "mixamorig:RightShoulder");
             Hand_L = FindBone(searchRoot, "mixamorig:LeftHand", "LeftHand");
-            // Support multiple forearm naming conventions: mixamorig:LeftForeArm, LeftForeArm, LeftLowerArm, LeftArm
-            ForeArm_L = FindBone(searchRoot, "mixamorig:LeftForeArm", "LeftForeArm", "LeftLowerArm", "LeftArm", "mixamorig:LeftArm");
+            // Antebraço: mixamorig:LeftForeArm, LeftForeArm, LeftLowerArm (LeftArm é o braço, não o antebraço)
+            ForeArm_L = FindBone(searchRoot, "mixamorig:LeftForeArm", "LeftForeArm", "LeftLowerArm");
             // Support upper arm naming: mixamorig:LeftArm, LeftArm, LeftUpperArm, LeftShoulder
             UpperArm_L = FindBone(searchRoot, "mixamorig:LeftArm", "LeftArm", "LeftUpperArm", "LeftShoulder", "mixamorig:LeftUpperArm", "mixamorig:LeftShoulder");
             Head = FindBone(searchRoot, "mixamorig:Head", "Head");

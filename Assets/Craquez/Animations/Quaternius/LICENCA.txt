@@ -1,0 +1,6 @@
+Universal Animation Library 1 e 2 — Quaternius (https://quaternius.com)
+Licença: CC0 1.0 Universal (domínio público) — https://creativecommons.org/publicdomain/zero/1.0/
+Baixado de https://quaternius.itch.io/universal-animation-library e
+https://quaternius.itch.io/universal-animation-library-2 (versões Standard, sem root motion).
+Usado no Craquez 3D para: quedas, contusões, colisões, carrinho, levantar do chão,
+arremesso lateral, comemoração, reclamação e locomoção/gestos dos árbitros.

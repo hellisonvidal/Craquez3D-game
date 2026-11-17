@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Video;
@@ -15,13 +16,13 @@ namespace Craquez
     public class AppFlow : MonoBehaviour
     {
         public TrainingSession session;
+        public MatchSession match;
         public AppUpdater updater;
         public VideoClip introClip;
         public CameraRig cameraRig;
         public Texture2D logo;
-        public ArenaBootstrap arenaBootstrap;
 
-        enum Tela { Aviso, Video, ToqueIniciar, Atualizacao, Principal, Arena, Partida11v11, ConfigEquipes, Formacao, Config, Pausa, Jogando }
+        enum Tela { Aviso, Video, ToqueIniciar, Atualizacao, Principal, Arena, Config, Pausa, Jogando, Partida }
         enum Tipo { Botao, Lista, Alternar, Volume, Info }
 
         /// <summary>Item navegável de uma tela.</summary>
@@ -49,6 +50,9 @@ namespace Craquez
         int arenaRow; // 0 = clima, 1 = papel, 2 = iniciar, 3 = voltar
         readonly List<Item> items = new List<Item>();
         bool usingPointer;
+        bool inMatch;
+        static readonly string[] Dificuldades = { "Amador", "Profissional", "Lenda" };
+        static readonly string[] TimesNomes = { "Craquez FC", "Atlético Celeste" };
 
         // altura (fração da tela) onde o texto aparece, logo abaixo do logo no último quadro do vídeo
         const float LogoTextY = 0.72f;
@@ -68,14 +72,64 @@ namespace Craquez
             GameSettings.Aplicar();
             climaSel = Selecao.Aleatorio ? 3 : (int)Selecao.Clima;
             session.OnPauseRequested += Pause;
+            if (match != null)
+            {
+                match.OnPauseRequested += Pause;
+                match.OnExitRequested += ExitMatch;
+                match.OnRestartRequested += RestartMatch;
+            }
             session.Preview();
             if (updater != null) updater.Check();
             Go(Tela.Aviso);
+            if (Array.IndexOf(Environment.GetCommandLineArgs(), "-autoteste") >= 0) StartCoroutine(AutoTeste());
+        }
+
+        /// <summary>
+        /// Teste automático (build de diagnóstico): entra direto numa partida curta, acelera o tempo,
+        /// conta os erros/exceções do log e fecha o jogo (código 0 = sem erros).
+        /// </summary>
+        IEnumerator AutoTeste()
+        {
+            int erros = 0;
+            Application.logMessageReceived += (msg, stack, type) =>
+            {
+                if (type == LogType.Exception || type == LogType.Error || type == LogType.Assert)
+                {
+                    erros++;
+                    Console.WriteLine("[AUTOTESTE] ERRO: " + msg + " | " + (stack ?? "").Replace("\n", " | "));
+                }
+            };
+            yield return new WaitForSecondsRealtime(2f);
+            GameSettings.DuracaoTempo = 0;
+            for (int rodada = 0; rodada < 2; rodada++)
+            {
+                climaSel = rodada == 0 ? 0 : 2;  // limpo e tempestade
+                StartMatch();
+                Console.WriteLine("[AUTOTESTE] partida " + (rodada + 1) + " iniciada");
+                float fim = Time.realtimeSinceStartup + 150f;
+                while (Time.realtimeSinceStartup < fim)
+                {
+                    if (tela == Tela.Jogando && Time.timeScale > 0f && Time.timeScale < 4f) Time.timeScale = 4f;
+                    yield return null;
+                }
+                Time.timeScale = 1f;
+                Console.WriteLine("[AUTOTESTE] partida " + (rodada + 1) + " placar " + (match != null && match.Times != null ? match.Times[0].gols + "x" + match.Times[1].gols : "?") + " fase " + (match != null ? match.Phase.ToString() : "?"));
+                ExitMatch();
+                yield return new WaitForSecondsRealtime(1f);
+            }
+            Console.WriteLine("[AUTOTESTE] FIM erros=" + erros);
+            Application.Quit(erros > 0 ? 1 : 0);
         }
 
         void OnDestroy()
         {
             if (session != null) session.OnPauseRequested -= Pause;
+            if (match != null)
+            {
+                match.OnPauseRequested -= Pause;
+                match.OnExitRequested -= ExitMatch;
+                match.OnRestartRequested -= RestartMatch;
+            }
             if (rt != null) rt.Release();
         }
 
@@ -89,8 +143,35 @@ namespace Craquez
 
         void Pause()
         {
-            session.SetPaused(true);
+            if (inMatch) match.SetPaused(true); else session.SetPaused(true);
             Go(Tela.Pausa);
+        }
+
+        void StartMatch()
+        {
+            Selecao.Aleatorio = climaSel == 3;
+            if (climaSel < 3) Selecao.Clima = (Clima)climaSel;
+            Clima c = Selecao.Resolver();
+            inMatch = true;
+            Go(Tela.Jogando);
+            session.SetPaused(false);
+            match.Begin(c, GameSettings.TimeUsuario, GameSettings.DuracoesTempo[GameSettings.DuracaoTempo], GameSettings.Dificuldade);
+        }
+
+        void ExitMatch()
+        {
+            if (match != null && match.Active) match.Teardown();
+            inMatch = false;
+            Time.timeScale = 1f;
+            AudioListener.pause = false;
+            session.Preview();
+            Go(Tela.Principal);
+        }
+
+        void RestartMatch()
+        {
+            if (match != null && match.Active) match.Teardown();
+            StartMatch();
         }
 
         // ------------------------------------------------------------ vídeo
@@ -120,7 +201,7 @@ namespace Craquez
             telaTime += Time.unscaledDeltaTime;
 
             if (updater != null && updater.UpdateRequired &&
-                (tela == Tela.Principal || tela == Tela.Arena || tela == Tela.Config))
+                (tela == Tela.Principal || tela == Tela.Arena || tela == Tela.Config || tela == Tela.Partida))
                 Go(Tela.Atualizacao);
 
             switch (tela)
@@ -153,15 +234,6 @@ namespace Craquez
                     break;
                 case Tela.Arena:
                     NavigateArena();
-                    break;
-                case Tela.Partida11v11:
-                    NavigatePartida11v11();
-                    break;
-                case Tela.ConfigEquipes:
-                    NavigateConfigEquipes();
-                    break;
-                case Tela.Formacao:
-                    NavigateFormacao();
                     break;
                 default:
                     NavigateList();
@@ -228,33 +300,6 @@ namespace Craquez
             else if (InputBridge.BackPressed) Go(Tela.Principal);
         }
 
-        void NavigatePartida11v11()
-        {
-            int dv = InputBridge.NavVertical();
-            int dh = InputBridge.NavHorizontal();
-            if (dv != 0 || dh != 0) usingPointer = false;
-            // Navigate list for Partida11v11
-            NavigateList();
-        }
-
-        void NavigateConfigEquipes()
-        {
-            int dv = InputBridge.NavVertical();
-            int dh = InputBridge.NavHorizontal();
-            if (dv != 0 || dh != 0) usingPointer = false;
-            // Navigate list for ConfigEquipes
-            NavigateList();
-        }
-
-        void NavigateFormacao()
-        {
-            int dv = InputBridge.NavVertical();
-            int dh = InputBridge.NavHorizontal();
-            if (dv != 0 || dh != 0) usingPointer = false;
-            // Navigate list for Formacao
-            NavigateList();
-        }
-
         void SetClima(int c)
         {
             climaSel = c;
@@ -272,9 +317,7 @@ namespace Craquez
             switch (tela)
             {
                 case Tela.Arena: Go(Tela.Principal); break;
-                case Tela.Partida11v11: Go(Tela.Principal); break;
-                case Tela.ConfigEquipes: Go(Tela.Partida11v11); break;
-                case Tela.Formacao: Go(Tela.ConfigEquipes); break;
+                case Tela.Partida: Go(Tela.Principal); break;
                 case Tela.Config: Go(configBack); break;
                 case Tela.Pausa: Resume(); break;
             }
@@ -282,7 +325,7 @@ namespace Craquez
 
         void Resume()
         {
-            session.SetPaused(false);
+            if (inMatch) match.SetPaused(false); else session.SetPaused(false);
             Go(Tela.Jogando);
         }
 
@@ -292,31 +335,45 @@ namespace Craquez
             switch (tela)
             {
                 case Tela.Principal:
-                    items.Add(new Item { label = "JOGO-TREINO", desc = "Finalização contra o goleiro • escolha o clima e quem você controla", activate = () => Go(Tela.Arena) });
-                    items.Add(new Item { label = "PARTIDA 11x11", desc = "Jogo coletivo completo • escolha times, formações e táticas", activate = () => Go(Tela.Partida11v11) });
+                    if (match != null)
+                        items.Add(new Item { label = "PARTIDA 11 x 11", desc = "Jogo completo com árbitro, regras, clima e IA tática • escolha seu time", activate = () => Go(Tela.Partida) });
+                    items.Add(new Item { label = "ARENA DE TREINO", desc = "Finalização contra o goleiro • escolha o clima e quem você controla", activate = () => Go(Tela.Arena) });
                     items.Add(new Item { label = "CONFIGURAÇÕES", desc = "Controles, câmera, gráficos, som e atualizações", activate = () => { configBack = Tela.Principal; Go(Tela.Config); } });
                     items.Add(new Item { label = "SAIR DO JOGO", desc = "Fechar o Craquez 3D", activate = Application.Quit });
                     break;
 
-                case Tela.Partida11v11:
-                    items.Add(new Item { label = "CONFIGURAR EQUIPES", desc = "Escolha times, escudos e cores", activate = () => Go(Tela.ConfigEquipes) });
-                    items.Add(new Item { label = "CONFIGURAR FORMAÇÃO", desc = "Defina táticas e posições iniciais", activate = () => Go(Tela.Formacao) });
-                    items.Add(new Item { label = "INICIAR PARTIDA", desc = "Começar o jogo 11x11", activate = () => StartMatch11v11() });
-                    items.Add(new Item { label = "VOLTAR", activate = () => Go(Tela.Principal) });
+                case Tela.Pausa when inMatch:
+                    items.Add(new Item { label = "CONTINUAR", activate = Resume });
+                    items.Add(new Item { label = "CÂMERA", tipo = Tipo.Lista, value = () => CameraRig.Nome(cameraRig.mode), change = d => match.CycleCameraFromMenu() });
+                    items.Add(new Item { label = "MINI MAPA", tipo = Tipo.Lista, value = () => GameSettings.MiniMapa ? "Ligado" : "Desligado", change = d => GameSettings.MiniMapa = !GameSettings.MiniMapa });
+                    items.Add(new Item { label = "NOMES DOS JOGADORES", tipo = Tipo.Lista, value = () => GameSettings.NomesJogadores ? "Ligados" : "Desligados", change = d => GameSettings.NomesJogadores = !GameSettings.NomesJogadores });
+                    items.Add(new Item { label = "CONFIGURAÇÕES", activate = () => { configBack = Tela.Pausa; Go(Tela.Config); } });
+                    items.Add(new Item { label = "SAIR PARA O MENU", activate = ExitMatch });
                     break;
 
-                case Tela.ConfigEquipes:
-                    items.Add(new Item { label = "TIME MANDANTE", desc = "Configure o time da casa", activate = () => { /* TODO: team editor */ } });
-                    items.Add(new Item { label = "TIME VISITANTE", desc = "Configure o time visitante", activate = () => { /* TODO: team editor */ } });
-                    items.Add(new Item { label = "VOLTAR", activate = () => Go(Tela.Partida11v11) });
-                    break;
-
-                case Tela.Formacao:
-                    items.Add(new Item { label = "FORMAÇÃO MANDANTE", desc = "Escolha a formação do time da casa", activate = () => { /* TODO: formation editor */ } });
-                    items.Add(new Item { label = "FORMAÇÃO VISITANTE", desc = "Escolha a formação do time visitante", activate = () => { /* TODO: formation editor */ } });
-                    items.Add(new Item { label = "MENTALIDADE MANDANTE", desc = "Define a postura tática do time da casa", activate = () => { /* TODO: mentality editor */ } });
-                    items.Add(new Item { label = "MENTALIDADE VISITANTE", desc = "Define a postura tática do time visitante", activate = () => { /* TODO: mentality editor */ } });
-                    items.Add(new Item { label = "VOLTAR", activate = () => Go(Tela.ConfigEquipes) });
+                case Tela.Partida:
+                    items.Add(new Item
+                    {
+                        label = "Clima", tipo = Tipo.Lista, value = () => Climas[climaSel],
+                        change = d => SetClima((climaSel + d + 4) % 4)
+                    });
+                    items.Add(new Item { label = "Seu time", tipo = Tipo.Lista, value = () => TimesNomes[GameSettings.TimeUsuario], change = d => GameSettings.TimeUsuario = 1 - GameSettings.TimeUsuario });
+                    items.Add(new Item
+                    {
+                        label = "Duração", tipo = Tipo.Lista, value = () => "2 x " + GameSettings.DuracoesTempo[GameSettings.DuracaoTempo] + " min",
+                        change = d => GameSettings.DuracaoTempo = (GameSettings.DuracaoTempo + d + GameSettings.DuracoesTempo.Length) % GameSettings.DuracoesTempo.Length
+                    });
+                    items.Add(new Item { label = "Dificuldade", tipo = Tipo.Lista, value = () => Dificuldades[GameSettings.Dificuldade], change = d => GameSettings.Dificuldade = (GameSettings.Dificuldade + d + 3) % 3 });
+                    items.Add(new Item
+                    {
+                        label = "Câmera", tipo = Tipo.Lista,
+                        value = () => CameraRig.Nome(CameraRig.ModosPartida[Mathf.Clamp(GameSettings.CameraPartida, 0, CameraRig.ModosPartida.Length - 1)]),
+                        change = d => GameSettings.CameraPartida = (Mathf.Clamp(GameSettings.CameraPartida, 0, CameraRig.ModosPartida.Length - 1) + d + CameraRig.ModosPartida.Length) % CameraRig.ModosPartida.Length
+                    });
+                    items.Add(new Item { label = "Mini mapa", tipo = Tipo.Alternar, on = () => GameSettings.MiniMapa, change = d => GameSettings.MiniMapa = !GameSettings.MiniMapa });
+                    items.Add(new Item { label = "Nomes dos jogadores", tipo = Tipo.Alternar, on = () => GameSettings.NomesJogadores, change = d => GameSettings.NomesJogadores = !GameSettings.NomesJogadores });
+                    items.Add(new Item { label = "INICIAR PARTIDA", tipo = Tipo.Botao, activate = StartMatch });
+                    items.Add(new Item { label = "VOLTAR", tipo = Tipo.Botao, activate = () => Go(Tela.Principal) });
                     break;
 
                 case Tela.Pausa:
@@ -341,6 +398,8 @@ namespace Craquez
                         value = () => CameraRig.Nome(CameraRig.ModosAtacante[Mathf.Clamp(GameSettings.CameraPadrao, 0, CameraRig.ModosAtacante.Length - 1)]),
                         change = d => GameSettings.CameraPadrao = (GameSettings.CameraPadrao + d + CameraRig.ModosAtacante.Length) % CameraRig.ModosAtacante.Length
                     });
+                    items.Add(new Item { section = "PARTIDA", label = "Mini mapa", tipo = Tipo.Alternar, on = () => GameSettings.MiniMapa, change = d => GameSettings.MiniMapa = !GameSettings.MiniMapa });
+                    items.Add(new Item { label = "Nomes dos jogadores", tipo = Tipo.Alternar, on = () => GameSettings.NomesJogadores, change = d => GameSettings.NomesJogadores = !GameSettings.NomesJogadores });
                     items.Add(new Item
                     {
                         section = "GRÁFICOS E SOM", column = 1, label = "Qualidade gráfica", tipo = Tipo.Lista,
@@ -398,31 +457,7 @@ namespace Craquez
             if (climaSel < 3) Selecao.Clima = (Clima)climaSel;
             Clima c = Selecao.Resolver();
             Go(Tela.Jogando);
-            if (arenaBootstrap != null)
-            {
-                arenaBootstrap.StartTraining(c, GameSettings.Papel);
-            }
-            else if (session != null)
-            {
-                session.Begin(c, GameSettings.Papel);
-            }
-        }
-
-        void StartMatch11v11()
-        {
-            Selecao.Aleatorio = climaSel == 3;
-            if (climaSel < 3) Selecao.Clima = (Clima)climaSel;
-            Clima c = Selecao.Resolver();
-            Go(Tela.Jogando);
-            if (arenaBootstrap != null)
-            {
-                arenaBootstrap.StartMatch11v11(c);
-            }
-            // Fallback: if no arenaBootstrap, just start training session
-            else if (session != null)
-            {
-                session.Begin(c, GameSettings.Papel);
-            }
+            session.Begin(c, GameSettings.Papel);
         }
 
         // ------------------------------------------------------------ desenho
@@ -448,9 +483,7 @@ namespace Craquez
                 case Tela.Jogando: return;
                 case Tela.Principal: DrawPrincipal(W, H); break;
                 case Tela.Arena: DrawArena(W, H); break;
-                case Tela.Partida11v11: DrawPartida11v11(W, H); break;
-                case Tela.ConfigEquipes: DrawConfigEquipes(W, H); break;
-                case Tela.Formacao: DrawFormacao(W, H); break;
+                case Tela.Partida: DrawPartida(W, H); break;
                 case Tela.Config: DrawConfig(W, H); break;
                 case Tela.Pausa: DrawPausa(W, H); break;
             }
@@ -614,74 +647,6 @@ namespace Craquez
             if (ui.Hit(back)) Go(Tela.Principal);
         }
 
-        // --- PARTIDA 11x11: menu principal do modo coletivo
-        void DrawPartida11v11(float W, float H)
-        {
-            BuildItems();
-            Backdrop(W, H, W * 0.62f);
-            float lw = Mathf.Min(620 * S, W * 0.42f);
-            float intro = UiKit.EaseOut(telaTime / 0.5f);
-            DrawLogo(new Rect(70 * S, 40 * S - (1f - intro) * 30 * S, lw, lw * 0.53f), intro);
-
-            float cw = Mathf.Min(700 * S, W * 0.5f), ch = 132 * S, gap = 22 * S;
-            float y0 = 40 * S + lw * 0.53f + 30 * S;
-            for (int i = 0; i < items.Count; i++)
-            {
-                var it = items[i];
-                float t = UiKit.EaseOut((telaTime - 0.1f - i * 0.08f) / 0.35f);
-                Rect r = new Rect(70 * S - (1f - t) * 80 * S, y0 + i * (ch + gap), cw, ch);
-                bool selected = i == sel && !usingPointer;
-                DrawCard(r, it.label, it.desc, selected, i == 0 ? UiKit.Red : (i == 2 ? UiKit.Green : (it.activate == Application.Quit ? new Color(0.45f, 0.5f, 0.6f) : UiKit.Blue)), t);
-                if (ui.Hit(r)) { sel = i; Activate(it); }
-            }
-        }
-
-        // --- CONFIGURAR EQUIPES
-        void DrawConfigEquipes(float W, float H)
-        {
-            BuildItems();
-            Backdrop(W, H, W * 0.62f);
-            float x0 = 70 * S;
-            float intro = UiKit.EaseOut(telaTime / 0.4f);
-            UiKit.Text(new Rect(x0, 34 * S, W, 80 * S), "CONFIGURAR EQUIPES", ui.Title, new Color(1f, 1f, 1f, intro), 3 * S);
-            UiKit.Text(new Rect(x0, 104 * S, W, 40 * S), "Personalize os times da partida 11x11.", ui.Body, UiKit.A(UiKit.TextDim, intro), 0f);
-
-            float cw = Mathf.Min(700 * S, W * 0.5f), ch = 132 * S, gap = 22 * S;
-            float y0 = 180 * S;
-            for (int i = 0; i < items.Count; i++)
-            {
-                var it = items[i];
-                float t = UiKit.EaseOut((telaTime - 0.1f - i * 0.08f) / 0.35f);
-                Rect r = new Rect(70 * S - (1f - t) * 80 * S, y0 + i * (ch + gap), cw, ch);
-                bool selected = i == sel && !usingPointer;
-                DrawCard(r, it.label, it.desc, selected, it.activate == null ? new Color(0.45f, 0.5f, 0.6f) : UiKit.Blue, t);
-                if (ui.Hit(r)) { sel = i; Activate(it); }
-            }
-        }
-
-        // --- CONFIGURAR FORMAÇÃO
-        void DrawFormacao(float W, float H)
-        {
-            BuildItems();
-            Backdrop(W, H, W * 0.62f);
-            float x0 = 70 * S;
-            float intro = UiKit.EaseOut(telaTime / 0.4f);
-            UiKit.Text(new Rect(x0, 34 * S, W, 80 * S), "CONFIGURAR FORMAÇÃO", ui.Title, new Color(1f, 1f, 1f, intro), 3 * S);
-            UiKit.Text(new Rect(x0, 104 * S, W, 40 * S), "Defina formações, mentalidades e táticas para ambos os times.", ui.Body, UiKit.A(UiKit.TextDim, intro), 0f);
-
-            float cw = Mathf.Min(700 * S, W * 0.5f), ch = 132 * S, gap = 22 * S;
-            float y0 = 180 * S;
-            for (int i = 0; i < items.Count; i++)
-            {
-                var it = items[i];
-                float t = UiKit.EaseOut((telaTime - 0.1f - i * 0.08f) / 0.35f);
-                Rect r = new Rect(70 * S - (1f - t) * 80 * S, y0 + i * (ch + gap), cw, ch);
-                bool selected = i == sel && !usingPointer;
-                DrawCard(r, it.label, it.desc, selected, it.activate == null ? new Color(0.45f, 0.5f, 0.6f) : UiKit.Blue, t);
-                if (ui.Hit(r)) { sel = i; Activate(it); }
-            }
-        }
-
         void SectionLabel(Rect r, string text, bool focus)
         {
             UiKit.Fill(new Rect(r.x, r.y + 8 * S, 6 * S, r.height - 16 * S), focus ? UiKit.Yellow : UiKit.Blue);
@@ -773,6 +738,44 @@ namespace Craquez
             UiKit.Text(new Rect(r.x + 80 * S, r.y + 14 * S, r.width - 100 * S, 50 * S), title, ui.H1, Color.white, 2 * S);
             UiKit.Text(new Rect(r.x + 80 * S, r.y + 64 * S, r.width - 100 * S, 56 * S), desc, ui.Small, UiKit.TextDim, 0f);
             if (chosen) UiKit.RoundBorder(r, focus ? UiKit.Yellow : UiKit.A(Color.white, 0.8f), rad, (focus ? 5 : 3) * S);
+        }
+
+        // --- preparar partida: lista de opções + iniciar
+        void DrawPartida(float W, float H)
+        {
+            BuildItems();
+            Backdrop(W, H, W * 0.75f);
+            float x0 = 70 * S;
+            float intro = UiKit.EaseOut(telaTime / 0.4f);
+            UiKit.Text(new Rect(x0, 34 * S, W, 80 * S), "PARTIDA 11 x 11", ui.Title, new Color(1f, 1f, 1f, intro), 3 * S);
+            UiKit.Text(new Rect(x0, 104 * S, W, 40 * S), "Craquez FC x Atlético Celeste • árbitro e dois assistentes • regras completas", ui.Body, UiKit.A(UiKit.TextDim, intro), 0f);
+            float colW = Mathf.Min(W - x0 * 2f, 900 * S);
+            float rowH = 74 * S, gap = 10 * S;
+            float y = 160 * S;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var it = items[i];
+                bool focus = i == sel && !usingPointer;
+                if (it.tipo == Tipo.Botao)
+                {
+                    bool start = it.label == "INICIAR PARTIDA";
+                    float bw = start ? 520 * S : 260 * S, bh = start ? 92 * S : 76 * S;
+                    Rect b = start ? new Rect(x0, Mathf.Min(y + 10 * S, H - bh - 90 * S), bw, bh)
+                                   : new Rect(x0 + 544 * S, Mathf.Min(y - 92 * S + 8 * S, H - bh - 98 * S), bw, bh);
+                    UiKit.ShadowRect(b, 14 * S, 0.5f);
+                    UiKit.RoundRect(b, start ? UiKit.Red : UiKit.A(UiKit.NavyLight, 0.95f), bh * 0.5f);
+                    if (focus) UiKit.RoundBorder(b, UiKit.Yellow, bh * 0.5f, 4 * S);
+                    UiKit.Text(b, start ? "INICIAR PARTIDA  ›" : "VOLTAR", new GUIStyle(start ? ui.H1 : ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 2 * S);
+                    if (ui.Hit(b)) { sel = i; Activate(it); }
+                    if (start) y += bh + 20 * S;
+                    continue;
+                }
+                Rect r = new Rect(x0, y, colW, rowH);
+                it.rect = r;
+                DrawSettingRow(r, it, focus);
+                if (ui.Hit(r)) { sel = i; Activate(it); }
+                y += rowH + gap;
+            }
         }
 
         // --- configurações em duas colunas com seções
@@ -895,7 +898,9 @@ namespace Craquez
             UiKit.RoundBorder(p, UiKit.A(UiKit.Blue, 0.8f), 28 * S, 2 * S);
             UiKit.Fill(new Rect(p.x + 40 * S, p.y + 112 * S, 100 * S, 4 * S), UiKit.Yellow);
             UiKit.Text(new Rect(p.x + 40 * S, p.y + 26 * S, pw, 80 * S), "PAUSA", ui.Title, Color.white, 3 * S);
-            string info = Arena.Nome(session.weather.Current) + "  •  " + (session.Role == PapelControle.Goleiro ? "Goleiro" : "Atacante");
+            string info = inMatch && match.Times != null
+                ? match.Times[0].sigla + " " + match.Times[0].gols + " x " + match.Times[1].gols + " " + match.Times[1].sigla + "  •  " + match.MatchMinute + "'"
+                : Arena.Nome(session.weather.Current) + "  •  " + (session.Role == PapelControle.Goleiro ? "Goleiro" : "Atacante");
             UiKit.Text(new Rect(p.x, p.y + 40 * S, pw - 40 * S, 60 * S), info, new GUIStyle(ui.Body) { alignment = TextAnchor.MiddleRight }, UiKit.TextDim, 0f);
 
             float y = p.y + 140 * S;

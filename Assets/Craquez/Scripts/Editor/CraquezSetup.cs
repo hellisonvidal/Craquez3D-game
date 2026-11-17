@@ -69,13 +69,21 @@ namespace Craquez.EditorTools
                 var keeperCtrl = CreateKeeperController();
 
                 Progress(interactive, "Criando prefabs...", 0.6f);
-                var playerPrefab = CreateCharacterPrefab("Jogador", PlayerHeight, playerCtrl, mats["Jogador"], typeof(PlayerController));
-                var keeperPrefab = CreateCharacterPrefab("Goleiro", KeeperHeight, keeperCtrl, mats["Goleiro"], typeof(GoalkeeperAI));
+                var refCtrl = CreateRefereeController();
+                var playerPrefab = CreateCharacterPrefab("Jogador", "Jogador", PlayerHeight, playerCtrl, mats["Jogador"], typeof(PlayerController));
+                var keeperPrefab = CreateCharacterPrefab("Goleiro", "Goleiro", KeeperHeight, keeperCtrl, mats["Goleiro"], typeof(GoalkeeperAI));
+                // partida 11 x 11: corpo do jogador para a linha e a arbitragem, corpo do goleiro para os dois goleiros
+                // (a variedade vem de pele, cabelo, barba, formato do rosto, altura e peso de cada um)
+                var playerPrefabB = playerPrefab;
+                var keeperPrefabA = keeperPrefab;
+                var refereePrefab = CreateCharacterPrefab("Arbitro", "Jogador", 1.80f, refCtrl, mats["Jogador"], typeof(RefereeAgent));
+                var refereePrefabB = refereePrefab;
                 var ballPrefab = CreateBallPrefab(mats["Bola"]);
 
                 Progress(interactive, "Montando a cena...", 0.75f);
                 var profiles = CreateVolumeProfiles();
                 CreateScene(mats, playerPrefab, keeperPrefab, ballPrefab, profiles);
+                LinkMatchAssets(playerPrefabB, keeperPrefabA, refereePrefab, refereePrefabB);
 
                 Progress(interactive, "Player Settings...", 0.9f);
                 SetupPlayerSettings();
@@ -151,7 +159,9 @@ namespace Craquez.EditorTools
             foreach (var set in sets)
             {
                 Avatar avatar = null;
-                foreach (var o in AssetDatabase.LoadAllAssetsAtPath(Root + "/Models/" + set.model + ".fbx"))
+                // o avatar vem do esqueleto original com que os clipes foram gravados (Animations/<pasta>/Esqueleto.fbx);
+                // o retarget Humanoid leva o movimento para os corpos novos
+                foreach (var o in AssetDatabase.LoadAllAssetsAtPath(Root + "/Animations/" + set.folder + "/Esqueleto.fbx"))
                     if (o is Avatar a && a.isHuman) { avatar = a; break; }
                 if (avatar == null) { Debug.LogWarning("[Craquez 3D] Avatar de " + set.model + " não encontrado"); continue; }
                 foreach (var c in set.clips)
@@ -385,6 +395,35 @@ namespace Craquez.EditorTools
             return null;
         }
 
+        /// <summary>Clipe da Universal Animation Library (Quaternius, CC0) pelo nome do take.</summary>
+        static AnimationClip QClip(string file, string take)
+        {
+            string path = Root + "/Animations/Quaternius/" + file + ".fbx";
+            foreach (var o in AssetDatabase.LoadAllAssetRepresentationsAtPath(path))
+            {
+                var c = o as AnimationClip;
+                if (c != null && !c.name.StartsWith("__preview__") && CraquezImportSettings.TakeName(c.name) == take) return c;
+            }
+            Debug.LogWarning("[Craquez 3D] Clipe da Quaternius não encontrado: " + file + "/" + take);
+            return null;
+        }
+
+        static AnimatorState AddClipState(AnimatorStateMachine sm, string state, AnimationClip clip, float speed, AnimatorState exitTo, float exitTime, float blend)
+        {
+            if (clip == null) return null;
+            var st = sm.AddState(state);
+            st.motion = clip;
+            st.speed = speed;
+            if (exitTo != null)
+            {
+                var tr = st.AddTransition(exitTo);
+                tr.hasExitTime = true;
+                tr.exitTime = exitTime;
+                tr.duration = blend;
+            }
+            return st;
+        }
+
         static float NativeSpeed(AnimationClip c, float fallback)
         {
             if (c == null) return fallback;
@@ -449,6 +488,57 @@ namespace Craquez.EditorTools
                 tr.exitTime = 0.85f;
                 tr.duration = 0.16f;
             }
+
+            // contato físico, contusões e bola parada (Universal Animation Library — Quaternius, CC0)
+            var levantar = AddClipState(sm, "Levantar", QClip("UAL2", "LayToIdle"), 1.25f, loco, 0.9f, 0.22f);
+            AddClipState(sm, "Queda", QClip("UAL1", "Death01"), 1.35f, null, 0f, 0f);                 // fica no chão até o código levantar
+            AddClipState(sm, "Atingido", QClip("UAL1", "Hit_Chest"), 1.2f, loco, 0.8f, 0.18f);
+            AddClipState(sm, "AtingidoCabeca", QClip("UAL1", "Hit_Head"), 1.2f, loco, 0.8f, 0.18f);
+            AddClipState(sm, "Empurrado", QClip("UAL2", "Hit_Knockback"), 1.25f, loco, 0.85f, 0.2f);
+            AddClipState(sm, "Lateral", QClip("UAL2", "OverhandThrow"), 1.1f, loco, 0.92f, 0.2f);
+            AddClipState(sm, "Comemorar", QClip("UAL1", "Dance_Loop"), 1f, null, 0f, 0f);
+            AddClipState(sm, "ComemorarSim", QClip("UAL2", "Yes"), 1f, loco, 0.95f, 0.25f);
+            AddClipState(sm, "Reclamar", QClip("UAL2", "Idle_No_Loop"), 1f, loco, 1.6f, 0.25f);
+            AddClipState(sm, "CaidoDor", QClip("UAL1", "Crouch_Idle_Loop"), 0.7f, null, 0f, 0f);       // agachado, segurando a contusão
+            var deslize = AddClipState(sm, "CarrinhoInicio", QClip("UAL2", "Slide_Start"), 1.2f, null, 0f, 0f);
+            var deslizeLoop = AddClipState(sm, "CarrinhoDeslize", QClip("UAL2", "Slide_Loop"), 1f, null, 0f, 0f);
+            var deslizeFim = AddClipState(sm, "CarrinhoFim", QClip("UAL2", "Slide_Exit"), 1.2f, loco, 0.9f, 0.2f);
+            if (deslize != null && deslizeLoop != null)
+            {
+                var a = deslize.AddTransition(deslizeLoop); a.hasExitTime = true; a.exitTime = 0.95f; a.duration = 0.05f;
+            }
+            if (levantar == null) Debug.LogWarning("[Craquez 3D] Sem LayToIdle: o jogador levanta direto na locomoção.");
+            EnableIK(ac);
+            EditorUtility.SetDirty(ac);
+            return ac;
+        }
+
+        /// <summary>Árbitro e assistentes: locomoção completa e gestos (apito, cartão, bandeira).</summary>
+        static AnimatorController CreateRefereeController()
+        {
+            var ac = NewController("Arbitro");
+            ac.AddParameter("Speed", AnimatorControllerParameterType.Float);
+            var sm = ac.layers[0].stateMachine;
+            BlendTree bt;
+            var loco = ac.CreateBlendTreeInController("Locomocao", out bt, 0);
+            bt.blendType = BlendTreeType.Simple1D;
+            bt.blendParameter = "Speed";
+            bt.useAutomaticThresholds = false;
+            var idle = QClip("UAL1", "Idle_Loop");
+            var walk = QClip("UAL1", "Walk_Loop");
+            var jog = QClip("UAL1", "Jog_Fwd_Loop");
+            var sprint = QClip("UAL1", "Sprint_Loop");
+            // fallback: animações do jogador se a biblioteca não estiver presente
+            bt.AddChild(idle != null ? idle : Clip("Jogador", "Idle"), 0f);
+            bt.AddChild(walk != null ? walk : Clip("Jogador", "Andar"), 1.4f);
+            bt.AddChild(jog != null ? jog : Clip("Jogador", "Trote"), 3.6f);
+            bt.AddChild(sprint != null ? sprint : Clip("Jogador", "Correr"), 6.8f);
+            sm.defaultState = loco;
+            AddClipState(sm, "Apitar", QClip("UAL1", "Interact"), 1.1f, loco, 0.9f, 0.2f);
+            AddClipState(sm, "Cartao", QClip("UAL2", "Idle_Rail_Call"), 1f, loco, 0.95f, 0.25f);
+            AddClipState(sm, "Bandeira", QClip("UAL2", "Idle_Rail_Call"), 0.8f, null, 0f, 0f);
+            AddClipState(sm, "Conversar", QClip("UAL1", "Idle_Talking_Loop"), 1f, loco, 1.8f, 0.3f);
+            AddClipState(sm, "Negar", QClip("UAL2", "Idle_No_Loop"), 1f, loco, 1.2f, 0.25f);
             EnableIK(ac);
             EditorUtility.SetDirty(ac);
             return ac;
@@ -600,9 +690,9 @@ namespace Craquez.EditorTools
             }
         }
 
-        static GameObject CreateCharacterPrefab(string name, float height, AnimatorController ctrl, Material mat, Type controller)
+        static GameObject CreateCharacterPrefab(string name, string modelName, float height, AnimatorController ctrl, Material mat, Type controller)
         {
-            var modelAsset = Load<GameObject>(Root + "/Models/" + name + ".fbx");
+            var modelAsset = Load<GameObject>(Root + "/Models/" + modelName + ".fbx");
             var root = new GameObject(name);
             var model = (GameObject)PrefabUtility.InstantiatePrefab(modelAsset);
             model.name = "Modelo";
@@ -611,11 +701,11 @@ namespace Craquez.EditorTools
             if (anim == null) anim = model.AddComponent<Animator>();
             if (anim.avatar == null)
             {
-                foreach (var o in AssetDatabase.LoadAllAssetsAtPath(Root + "/Models/" + name + ".fbx"))
+                foreach (var o in AssetDatabase.LoadAllAssetsAtPath(Root + "/Models/" + modelName + ".fbx"))
                     if (o is Avatar) { anim.avatar = (Avatar)o; break; }
             }
             if (anim.avatar == null || !anim.avatar.isHuman)
-                Debug.LogError("[Craquez 3D] O avatar de " + name + " não é Humanoid válido. Verifique o rig em Models/" + name + ".fbx > Rig.");
+                Debug.LogError("[Craquez 3D] O avatar de " + name + " não é Humanoid válido. Verifique o rig em Models/" + modelName + ".fbx > Rig.");
             anim.runtimeAnimatorController = ctrl;
             anim.applyRootMotion = false;
             anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
@@ -646,7 +736,7 @@ namespace Craquez.EditorTools
             root.layer = Arena.LayerPlayerBody;
             var cap = root.AddComponent<CapsuleCollider>();
             cap.direction = 1;
-            cap.radius = name == "Goleiro" ? 0.25f : 0.24f;
+            cap.radius = name.StartsWith("Goleiro") ? 0.25f : 0.24f;
             cap.height = height;
             cap.center = new Vector3(0f, height * 0.5f, 0f);
             var rb = root.AddComponent<Rigidbody>();
@@ -850,6 +940,30 @@ namespace Craquez.EditorTools
 
             EditorSceneManager.SaveScene(scene, ScenePath);
             EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(ScenePath, true) };
+        }
+
+        /// <summary>Prefabs e uniformes do modo Partida 11 x 11 ligados ao bootstrap da cena.</summary>
+        static void LinkMatchAssets(GameObject playerB, GameObject keeperA, GameObject referee, GameObject refereeB)
+        {
+            var scene = EditorSceneManager.OpenScene(ScenePath);
+            var boot = UnityEngine.Object.FindAnyObjectByType<ArenaBootstrap>();
+            if (boot == null) { Debug.LogError("[Craquez 3D] ArenaBootstrap não encontrado na cena."); return; }
+            boot.playerPrefabB = playerB;
+            boot.keeperPrefabA = keeperA;
+            boot.refereePrefab = referee;
+            boot.refereePrefabB = refereeB;
+            // uniformes iguais para o time inteiro: casa azul, visitante branco (tools/make_kits.py)
+            boot.kitA_Casa = T("Uniformes/A_Casa");
+            boot.kitB_Casa = boot.kitA_Casa;
+            boot.kitA_Visitante = T("Uniformes/A_Visitante");
+            boot.kitB_Visitante = boot.kitA_Visitante;
+            boot.kitB_GoleiroCasa = T("Goleiro_Albedo");
+            boot.kitA_GoleiroVisitante = T("Uniformes/B_GoleiroVisitante");
+            boot.kitA_Arbitro = T("Uniformes/A_Arbitro");
+            boot.kitB_Arbitro = boot.kitA_Arbitro;
+            EditorUtility.SetDirty(boot);
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene, ScenePath);
         }
 
         // ------------------------------------------------------------------ player settings

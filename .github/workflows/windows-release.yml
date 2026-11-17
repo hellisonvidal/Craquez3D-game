@@ -2,6 +2,8 @@
 # - Automático: a cada push na main que altere o arquivo VERSION.
 # - Manual: aba Actions -> "Windows: build e Release" -> Run workflow (qualquer branch).
 # A Release (tag vX.Y.Z + ZIP do build) é o que o atualizador dentro do app baixa.
+# Roda em Linux: a Unity gera o build Windows (Mono) a partir da imagem windows-mono do game-ci,
+# que funciona com a licença Personal (o runner windows-latest exigiria serial Pro e PowerShell).
 name: "Windows: build e Release"
 
 on:
@@ -24,7 +26,7 @@ concurrency:
 
 jobs:
   windows:
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
       - name: Conferir segredos
@@ -54,9 +56,10 @@ jobs:
           IFS=. read -r MA MI PA <<< "$V"
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "code=$((MA*10000 + MI*100 + PA))" >> "$GITHUB_OUTPUT"
-          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+          # pula só se a Release já tiver o arquivo desta plataforma (Android e Windows dividem a mesma Release)
+          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null | grep -q '\.zip$'; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::A Release v$V já existe. O build será gerado só como artefato; aumente o arquivo VERSION para publicar outra."
+            echo "::warning::A Release v$V já tem o arquivo .zip. O build será gerado só como artefato; aumente o arquivo VERSION para publicar outra."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
@@ -65,7 +68,7 @@ jobs:
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
           tool-cache: false
-          android: false
+          android: true
           dotnet: true
           haskell: true
           large-packages: false
@@ -95,11 +98,17 @@ jobs:
       - name: Compactar build Windows
         id: zip
         run: |
-          BUILD_DIR=$(find build -name "Craquez3D*" -type d | head -n1)
-          if [ -z "$BUILD_DIR" ]; then echo "::error::Build não encontrado"; exit 1; fi
-          7z a -tzip "saida/Craquez3D-v${{ steps.v.outputs.version }}-windows.zip" "$BUILD_DIR"
+          EXE=$(sudo find build -name 'Craquez3D.exe' | head -n1)
+          if [ -z "$EXE" ]; then echo "::error::Build Windows não encontrado"; exit 1; fi
+          BUILD_DIR=$(dirname "$EXE")
+          sudo chown -R "$(id -u):$(id -g)" build
+          # não vai para o jogador: símbolos de depuração gerados pela Unity
+          rm -rf "$BUILD_DIR"/*_BurstDebugInformation_DoNotShip "$BUILD_DIR"/*_BackUpThisFolder_ButDontShipItWithYourGame
+          mkdir -p saida
+          ZIP="$PWD/saida/Craquez3D-v${{ steps.v.outputs.version }}-windows.zip"
+          (cd "$BUILD_DIR" && zip -qr "$ZIP" .)
           ls -lh saida
-          echo "file=saida/Craquez3D-v${{ steps.v.outputs.version }}-windows.zip" >> $GITHUB_OUTPUT
+          echo "file=saida/Craquez3D-v${{ steps.v.outputs.version }}-windows.zip" >> "$GITHUB_OUTPUT"
 
       - name: Guardar build (artefato)
         uses: actions/upload-artifact@v4
@@ -121,9 +130,13 @@ jobs:
             on { print }
           ' CHANGELOG.md > notas.md
           [ -s notas.md ] || echo "Craquez 3D v$V" > notas.md
-          gh release create "v$V" "${{ steps.zip.outputs.file }}" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Craquez 3D v$V (Windows)" \
-            --notes-file notas.md \
-            --latest
+          # cria a Release ou, se o outro workflow já criou, só anexa o arquivo
+          if ! gh release view "v$V" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "v$V" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Craquez 3D v$V" \
+              --notes-file notas.md \
+              --latest || true
+          fi
+          gh release upload "v$V" "${{ steps.zip.outputs.file }}" --repo "$GITHUB_REPOSITORY" --clobber

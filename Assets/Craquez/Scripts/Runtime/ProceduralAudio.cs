@@ -11,8 +11,10 @@ namespace Craquez
         public static ProceduralAudio Instance { get; private set; }
         const int Rate = 22050;
 
-        AudioSource rain, wind, ui;
+        AudioSource rain, wind, ui, crowd, crowdFx;
         AudioClip rainClip, windClip, thunderClip, kickClip, postClip, netClip, splashClip, bounceClip;
+        AudioClip whistleClip, whistleLongClip, crowdClip, cheerClip;
+        float crowdTarget, crowdBoost;
         System.Random rng = new System.Random(1234);
 
         void Awake()
@@ -26,12 +28,53 @@ namespace Craquez
             netClip = MakeOneShot("Rede", 0.35f, NetSample);
             splashClip = MakeOneShot("Respingo", 0.3f, SplashSample);
             bounceClip = MakeOneShot("Quique", 0.12f, BounceSample);
+            whistleClip = MakeOneShot("Apito", 0.32f, WhistleSample);
+            whistleLongClip = MakeOneShot("ApitoLongo", 0.9f, WhistleSample);
+            crowdClip = MakeLoop("Torcida", 6f, CrowdSample);
+            cheerClip = MakeOneShot("Festa", 3.5f, CheerSample);
 
             rain = NewSource("FonteChuva", true, rainClip);
             wind = NewSource("FonteVento", true, windClip);
             ui = NewSource("FonteUI", false, null);
-            rain.volume = 0f; wind.volume = 0f;
-            rain.Play(); wind.Play();
+            crowd = NewSource("FonteTorcida", true, crowdClip);
+            crowdFx = NewSource("FonteTorcidaReacao", false, null);
+            rain.volume = 0f; wind.volume = 0f; crowd.volume = 0f;
+            rain.Play(); wind.Play(); crowd.Play();
+        }
+
+        void Update()
+        {
+            crowdBoost = Mathf.MoveTowards(crowdBoost, 0f, Time.unscaledDeltaTime * 0.25f);
+            if (crowd != null) crowd.volume = Mathf.MoveTowards(crowd.volume, crowdTarget * (1f + crowdBoost), Time.unscaledDeltaTime * 0.5f);
+        }
+
+        /// <summary>Murmúrio da torcida (0 = estádio vazio, como no treino).</summary>
+        public void SetCrowd(float volume) { crowdTarget = Mathf.Clamp01(volume); }
+
+        /// <summary>Explosão da torcida: gol (1) ou grande defesa/lance perigoso (menor).</summary>
+        public void CrowdReaction(float intensity)
+        {
+            if (crowdTarget <= 0f) return;
+            crowdBoost = Mathf.Max(crowdBoost, intensity * 0.8f);
+            crowdFx.pitch = Random.Range(0.92f, 1.06f);
+            crowdFx.PlayOneShot(cheerClip, Mathf.Clamp01(0.35f + intensity * 0.65f));
+        }
+
+        /// <summary>Apito do árbitro: 1 = curto, 2 = intervalo, 3 = fim de jogo (o último é longo).</summary>
+        public void Whistle(int times)
+        {
+            StartCoroutine(WhistleRoutine(Mathf.Max(1, times)));
+        }
+
+        System.Collections.IEnumerator WhistleRoutine(int n)
+        {
+            for (int i = 0; i < n; i++)
+            {
+                bool last = i == n - 1 && n > 1;
+                ui.pitch = Random.Range(0.98f, 1.03f);
+                ui.PlayOneShot(last ? whistleLongClip : whistleClip, 0.75f);
+                yield return new WaitForSecondsRealtime(last ? 1f : 0.42f);
+            }
         }
 
         void OnDestroy() { if (Instance == this) Instance = null; }
@@ -186,6 +229,42 @@ namespace Craquez
             lp += 0.4f * (w - lp);
             float bubbles = Mathf.Sin(2f * Mathf.PI * (500f + 900f * t) * t) * 0.15f;
             return ((w - lp) * 0.8f + bubbles) * Mathf.Exp(-t * 14f) * (1f - Mathf.Exp(-t * 300f));
+        }
+
+        float WhistleSample(int i, int n, ref float ph, ref float lp, ref float c)
+        {
+            // apito de árbitro: tom agudo com trinado (bolinha dentro do apito) e sopro
+            float t = (float)i / Rate;
+            float trill = 1f + 0.035f * Mathf.Sin(2f * Mathf.PI * 28f * t);
+            ph += 2f * Mathf.PI * 2850f * trill / Rate;
+            float env = Mathf.Clamp01(t / 0.015f) * Mathf.Clamp01((n - i) / (Rate * 0.05f));
+            lp += 0.5f * (Noise() - lp);
+            float am = 0.75f + 0.25f * Mathf.Sin(2f * Mathf.PI * 28f * t);
+            return (Mathf.Sin(ph) * 0.8f + Mathf.Sin(ph * 2f) * 0.12f) * am * env + lp * 0.08f * env;
+        }
+
+        float CrowdSample(int i, int n, ref float lp, ref float lp2, ref float voice)
+        {
+            // multidão: ruído filtrado na faixa da voz com ondulações lentas
+            float t = (float)i / Rate;
+            float w = Noise();
+            lp += 0.09f * (w - lp);
+            lp2 += 0.012f * (lp - lp2);
+            float band = lp - lp2;
+            float swell = 0.7f + 0.3f * Mathf.Sin(t * 0.7f) * Mathf.Sin(t * 0.23f + 2f);
+            voice *= 0.9995f;
+            if (rng.NextDouble() < 0.0004) voice += 0.6f;
+            return band * 3f * swell * (1f + voice * 0.3f);
+        }
+
+        float CheerSample(int i, int n, ref float lp, ref float lp2, ref float c)
+        {
+            float t = (float)i / Rate;
+            float w = Noise();
+            lp += 0.16f * (w - lp);
+            lp2 += 0.02f * (lp - lp2);
+            float env = Mathf.Clamp01(t / 0.25f) * Mathf.Exp(-Mathf.Max(0f, t - 0.8f) * 1.1f);
+            return (lp - lp2) * 3.5f * env;
         }
 
         float BounceSample(int i, int n, ref float a, ref float b, ref float c)

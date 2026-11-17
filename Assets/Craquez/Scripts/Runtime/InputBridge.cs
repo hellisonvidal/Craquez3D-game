@@ -468,7 +468,8 @@ namespace Craquez
                 for (int i = 0; i < touches.Count; i++)
                 {
                     TouchControl t = touches[i];
-                    if (!t.press.isPressed) continue;
+                    // toque muito rápido (começa e termina no mesmo quadro) também conta por um quadro
+                    if (!t.press.isPressed && !t.press.wasPressedThisFrame) continue;
                     list.Add(new PointerPoint { id = t.touchId.ReadValue(), position = t.position.ReadValue() });
                 }
             }
