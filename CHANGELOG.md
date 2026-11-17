@@ -2,6 +2,15 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [1.1.4] — 2026-11-17
+
+- **Correção Braços Goleiro:** `MixamoBoneSockets` agora suporta múltiplos nomes para ossos de braço (`RightArm`/`LeftArm`, `RightUpperArm`/`LeftUpperArm`, `RightShoulder`/`LeftShoulder`, `RightForeArm`/`RightLowerArm`), corrigindo deformação dos braços do goleiro.
+- **Modo 11x11 Integrado:** Adicionado menu "PARTIDA 11x11" (renomeado "ARENA DE TREINO" → "JOGO-TREINO"), telas de configuração de times/formações, `MatchSession11v11`, e integração completa do `CollectiveMatchMode` com prefabs.
+- **Passes e Cruzamentos:** Sistema completo de passes no `PlayerController` e `TeamAI` — passe curto (`C`/`R1`), passe em profundidade (`V`/`L1`), cruzamento (`B`/`R1+L1`), com física, spin e decisão de IA.
+- **Rostos Aleatórios / Kits Casa/Fora:** `PlayerAttributes.GenerateRandom` gera atributos faciais aleatórios (tom de pele, cabelo, barba, etc.); `TeamData` agora tem cores de kits home/away/third gerados automaticamente.
+- **Correções e Otimizações:** Propriedade `Busy` inclui passes; animações de passe usam fallbacks existentes (`ChuteColocado`, `Cavadinha`); limpeza de referências nulas.
+- **CI/CD Windows Build:** Novo workflow `.github/workflows/windows-release.yml` e método `CraquezCI.BuildWindows` para builds StandaloneWindows64 automáticos.
+
 ## [1.1.3] — 2026-11-16
 
 - **Correções de Malha e Ossos:** `MixamoBoneSockets` agora suporta nomes de ossos `LeftToes`/`RightToes` (usados pelo modelo `Jogador.fbx`), eliminando jogadores desfigurados/IK quebrado.
