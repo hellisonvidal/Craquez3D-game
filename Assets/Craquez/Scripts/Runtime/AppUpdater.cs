@@ -101,7 +101,17 @@ namespace Craquez
 #endif
                     }
                 }
-                if (downloadUrl == null) downloadUrl = pageUrl;
+                // Android e Windows dividem a Release: sem o arquivo desta plataforma (build ainda em andamento
+                // ou falhou) não há o que instalar. Antes o Android baixava a página HTML como se fosse o APK.
+                if (downloadUrl == null)
+                {
+#if UNITY_ANDROID && !UNITY_EDITOR
+                    State = Estado.EmDia;
+                    yield break;
+#else
+                    downloadUrl = pageUrl;
+#endif
+                }
                 State = Estado.Disponivel;
             }
         }

@@ -78,5 +78,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Partida
-          path: partida.log
+          path: |
+            partida.log
+            autoteste_*.png
+            Build/Linux/autoteste_*.png
           if-no-files-found: warn
