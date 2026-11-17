@@ -52,14 +52,26 @@ namespace Craquez
         /// <summary>Prévia de fundo para os menus (sem controle do usuário).</summary>
         public void Preview()
         {
-            if (weather.P == null) weather.Apply(Clima.Sol);
+            if (weather != null && weather.P == null) weather.Apply(Clima.Sol);
             Active = false;
-            SetControl(false, PapelControle.Atacante);
-            player.aiControlled = false;
+
+            // Safe null checks for lazy-initialized components
+            if (player != null)
+            {
+                player.aiControlled = false;
+                player.InputEnabled = false;
+            }
             if (shooterAI != null) shooterAI.enabled = false;
-            cameraRig.mode = CameraRig.Modo.Menu;
+            if (keeper != null) keeper.humanControlled = false;
+
+            if (cameraRig != null) cameraRig.mode = CameraRig.Modo.Menu;
             if (touch != null) touch.enabled = false;
-            ResetDrill();
+
+            // Only reset drill if all required components exist
+            if (player != null && keeper != null && ball != null)
+            {
+                ResetDrill();
+            }
         }
 
         public void Begin(Clima c, PapelControle role)
@@ -85,9 +97,15 @@ namespace Craquez
         void SetControl(bool on, PapelControle role)
         {
             bool gk = role == PapelControle.Goleiro;
-            player.InputEnabled = on && !gk;
-            player.aiControlled = on && gk;
-            keeper.humanControlled = on && gk;
+            if (player != null)
+            {
+                player.InputEnabled = on && !gk;
+                player.aiControlled = on && gk;
+            }
+            if (keeper != null)
+            {
+                keeper.humanControlled = on && gk;
+            }
             if (shooterAI != null) shooterAI.enabled = on && gk;
         }
 
@@ -101,6 +119,8 @@ namespace Craquez
 
         public void ResetDrill()
         {
+            if (ball == null || player == null || keeper == null) return;
+
             resultLocked = false;
             resetAt = -1f;
             ballStillTimer = 0f;

@@ -19,8 +19,9 @@ namespace Craquez
         public VideoClip introClip;
         public CameraRig cameraRig;
         public Texture2D logo;
+        public ArenaBootstrap arenaBootstrap;
 
-        enum Tela { Aviso, Video, ToqueIniciar, Atualizacao, Principal, Arena, Config, Pausa, Jogando }
+        enum Tela { Aviso, Video, ToqueIniciar, Atualizacao, Principal, Arena, Partida11v11, ConfigEquipes, Formacao, Config, Pausa, Jogando }
         enum Tipo { Botao, Lista, Alternar, Volume, Info }
 
         /// <summary>Item navegável de uma tela.</summary>
@@ -153,6 +154,15 @@ namespace Craquez
                 case Tela.Arena:
                     NavigateArena();
                     break;
+                case Tela.Partida11v11:
+                    NavigatePartida11v11();
+                    break;
+                case Tela.ConfigEquipes:
+                    NavigateConfigEquipes();
+                    break;
+                case Tela.Formacao:
+                    NavigateFormacao();
+                    break;
                 default:
                     NavigateList();
                     break;
@@ -218,6 +228,33 @@ namespace Craquez
             else if (InputBridge.BackPressed) Go(Tela.Principal);
         }
 
+        void NavigatePartida11v11()
+        {
+            int dv = InputBridge.NavVertical();
+            int dh = InputBridge.NavHorizontal();
+            if (dv != 0 || dh != 0) usingPointer = false;
+            // Navigate list for Partida11v11
+            NavigateList();
+        }
+
+        void NavigateConfigEquipes()
+        {
+            int dv = InputBridge.NavVertical();
+            int dh = InputBridge.NavHorizontal();
+            if (dv != 0 || dh != 0) usingPointer = false;
+            // Navigate list for ConfigEquipes
+            NavigateList();
+        }
+
+        void NavigateFormacao()
+        {
+            int dv = InputBridge.NavVertical();
+            int dh = InputBridge.NavHorizontal();
+            if (dv != 0 || dh != 0) usingPointer = false;
+            // Navigate list for Formacao
+            NavigateList();
+        }
+
         void SetClima(int c)
         {
             climaSel = c;
@@ -235,6 +272,9 @@ namespace Craquez
             switch (tela)
             {
                 case Tela.Arena: Go(Tela.Principal); break;
+                case Tela.Partida11v11: Go(Tela.Principal); break;
+                case Tela.ConfigEquipes: Go(Tela.Partida11v11); break;
+                case Tela.Formacao: Go(Tela.ConfigEquipes); break;
                 case Tela.Config: Go(configBack); break;
                 case Tela.Pausa: Resume(); break;
             }
@@ -252,9 +292,31 @@ namespace Craquez
             switch (tela)
             {
                 case Tela.Principal:
-                    items.Add(new Item { label = "ARENA DE TREINO", desc = "Finalização contra o goleiro • escolha o clima e quem você controla", activate = () => Go(Tela.Arena) });
+                    items.Add(new Item { label = "JOGO-TREINO", desc = "Finalização contra o goleiro • escolha o clima e quem você controla", activate = () => Go(Tela.Arena) });
+                    items.Add(new Item { label = "PARTIDA 11x11", desc = "Jogo coletivo completo • escolha times, formações e táticas", activate = () => Go(Tela.Partida11v11) });
                     items.Add(new Item { label = "CONFIGURAÇÕES", desc = "Controles, câmera, gráficos, som e atualizações", activate = () => { configBack = Tela.Principal; Go(Tela.Config); } });
                     items.Add(new Item { label = "SAIR DO JOGO", desc = "Fechar o Craquez 3D", activate = Application.Quit });
+                    break;
+
+                case Tela.Partida11v11:
+                    items.Add(new Item { label = "CONFIGURAR EQUIPES", desc = "Escolha times, escudos e cores", activate = () => Go(Tela.ConfigEquipes) });
+                    items.Add(new Item { label = "CONFIGURAR FORMAÇÃO", desc = "Defina táticas e posições iniciais", activate = () => Go(Tela.Formacao) });
+                    items.Add(new Item { label = "INICIAR PARTIDA", desc = "Começar o jogo 11x11", activate = () => StartMatch11v11() });
+                    items.Add(new Item { label = "VOLTAR", activate = () => Go(Tela.Principal) });
+                    break;
+
+                case Tela.ConfigEquipes:
+                    items.Add(new Item { label = "TIME MANDANTE", desc = "Configure o time da casa", activate = () => { /* TODO: team editor */ } });
+                    items.Add(new Item { label = "TIME VISITANTE", desc = "Configure o time visitante", activate = () => { /* TODO: team editor */ } });
+                    items.Add(new Item { label = "VOLTAR", activate = () => Go(Tela.Partida11v11) });
+                    break;
+
+                case Tela.Formacao:
+                    items.Add(new Item { label = "FORMAÇÃO MANDANTE", desc = "Escolha a formação do time da casa", activate = () => { /* TODO: formation editor */ } });
+                    items.Add(new Item { label = "FORMAÇÃO VISITANTE", desc = "Escolha a formação do time visitante", activate = () => { /* TODO: formation editor */ } });
+                    items.Add(new Item { label = "MENTALIDADE MANDANTE", desc = "Define a postura tática do time da casa", activate = () => { /* TODO: mentality editor */ } });
+                    items.Add(new Item { label = "MENTALIDADE VISITANTE", desc = "Define a postura tática do time visitante", activate = () => { /* TODO: mentality editor */ } });
+                    items.Add(new Item { label = "VOLTAR", activate = () => Go(Tela.ConfigEquipes) });
                     break;
 
                 case Tela.Pausa:
@@ -336,7 +398,31 @@ namespace Craquez
             if (climaSel < 3) Selecao.Clima = (Clima)climaSel;
             Clima c = Selecao.Resolver();
             Go(Tela.Jogando);
-            session.Begin(c, GameSettings.Papel);
+            if (arenaBootstrap != null)
+            {
+                arenaBootstrap.StartTraining(c, GameSettings.Papel);
+            }
+            else if (session != null)
+            {
+                session.Begin(c, GameSettings.Papel);
+            }
+        }
+
+        void StartMatch11v11()
+        {
+            Selecao.Aleatorio = climaSel == 3;
+            if (climaSel < 3) Selecao.Clima = (Clima)climaSel;
+            Clima c = Selecao.Resolver();
+            Go(Tela.Jogando);
+            if (arenaBootstrap != null)
+            {
+                arenaBootstrap.StartMatch11v11(c);
+            }
+            // Fallback: if no arenaBootstrap, just start training session
+            else if (session != null)
+            {
+                session.Begin(c, GameSettings.Papel);
+            }
         }
 
         // ------------------------------------------------------------ desenho
@@ -362,6 +448,9 @@ namespace Craquez
                 case Tela.Jogando: return;
                 case Tela.Principal: DrawPrincipal(W, H); break;
                 case Tela.Arena: DrawArena(W, H); break;
+                case Tela.Partida11v11: DrawPartida11v11(W, H); break;
+                case Tela.ConfigEquipes: DrawConfigEquipes(W, H); break;
+                case Tela.Formacao: DrawFormacao(W, H); break;
                 case Tela.Config: DrawConfig(W, H); break;
                 case Tela.Pausa: DrawPausa(W, H); break;
             }
@@ -523,6 +612,74 @@ namespace Craquez
             UiKit.RoundBorder(back, fBack ? UiKit.Yellow : UiKit.A(Color.white, 0.35f), back.height * 0.5f, (fBack ? 4 : 2) * S);
             UiKit.Text(back, "VOLTAR", new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 0f);
             if (ui.Hit(back)) Go(Tela.Principal);
+        }
+
+        // --- PARTIDA 11x11: menu principal do modo coletivo
+        void DrawPartida11v11(float W, float H)
+        {
+            BuildItems();
+            Backdrop(W, H, W * 0.62f);
+            float lw = Mathf.Min(620 * S, W * 0.42f);
+            float intro = UiKit.EaseOut(telaTime / 0.5f);
+            DrawLogo(new Rect(70 * S, 40 * S - (1f - intro) * 30 * S, lw, lw * 0.53f), intro);
+
+            float cw = Mathf.Min(700 * S, W * 0.5f), ch = 132 * S, gap = 22 * S;
+            float y0 = 40 * S + lw * 0.53f + 30 * S;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var it = items[i];
+                float t = UiKit.EaseOut((telaTime - 0.1f - i * 0.08f) / 0.35f);
+                Rect r = new Rect(70 * S - (1f - t) * 80 * S, y0 + i * (ch + gap), cw, ch);
+                bool selected = i == sel && !usingPointer;
+                DrawCard(r, it.label, it.desc, selected, i == 0 ? UiKit.Red : (i == 2 ? UiKit.Green : (it.activate == Application.Quit ? new Color(0.45f, 0.5f, 0.6f) : UiKit.Blue)), t);
+                if (ui.Hit(r)) { sel = i; Activate(it); }
+            }
+        }
+
+        // --- CONFIGURAR EQUIPES
+        void DrawConfigEquipes(float W, float H)
+        {
+            BuildItems();
+            Backdrop(W, H, W * 0.62f);
+            float x0 = 70 * S;
+            float intro = UiKit.EaseOut(telaTime / 0.4f);
+            UiKit.Text(new Rect(x0, 34 * S, W, 80 * S), "CONFIGURAR EQUIPES", ui.Title, new Color(1f, 1f, 1f, intro), 3 * S);
+            UiKit.Text(new Rect(x0, 104 * S, W, 40 * S), "Personalize os times da partida 11x11.", ui.Body, UiKit.A(UiKit.TextDim, intro), 0f);
+
+            float cw = Mathf.Min(700 * S, W * 0.5f), ch = 132 * S, gap = 22 * S;
+            float y0 = 180 * S;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var it = items[i];
+                float t = UiKit.EaseOut((telaTime - 0.1f - i * 0.08f) / 0.35f);
+                Rect r = new Rect(70 * S - (1f - t) * 80 * S, y0 + i * (ch + gap), cw, ch);
+                bool selected = i == sel && !usingPointer;
+                DrawCard(r, it.label, it.desc, selected, it.activate == null ? new Color(0.45f, 0.5f, 0.6f) : UiKit.Blue, t);
+                if (ui.Hit(r)) { sel = i; Activate(it); }
+            }
+        }
+
+        // --- CONFIGURAR FORMAÇÃO
+        void DrawFormacao(float W, float H)
+        {
+            BuildItems();
+            Backdrop(W, H, W * 0.62f);
+            float x0 = 70 * S;
+            float intro = UiKit.EaseOut(telaTime / 0.4f);
+            UiKit.Text(new Rect(x0, 34 * S, W, 80 * S), "CONFIGURAR FORMAÇÃO", ui.Title, new Color(1f, 1f, 1f, intro), 3 * S);
+            UiKit.Text(new Rect(x0, 104 * S, W, 40 * S), "Defina formações, mentalidades e táticas para ambos os times.", ui.Body, UiKit.A(UiKit.TextDim, intro), 0f);
+
+            float cw = Mathf.Min(700 * S, W * 0.5f), ch = 132 * S, gap = 22 * S;
+            float y0 = 180 * S;
+            for (int i = 0; i < items.Count; i++)
+            {
+                var it = items[i];
+                float t = UiKit.EaseOut((telaTime - 0.1f - i * 0.08f) / 0.35f);
+                Rect r = new Rect(70 * S - (1f - t) * 80 * S, y0 + i * (ch + gap), cw, ch);
+                bool selected = i == sel && !usingPointer;
+                DrawCard(r, it.label, it.desc, selected, it.activate == null ? new Color(0.45f, 0.5f, 0.6f) : UiKit.Blue, t);
+                if (ui.Hit(r)) { sel = i; Activate(it); }
+            }
         }
 
         void SectionLabel(Rect r, string text, bool focus)
