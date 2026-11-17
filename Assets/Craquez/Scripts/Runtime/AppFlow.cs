@@ -408,12 +408,23 @@ namespace Craquez
                     items.Add(new Item { label = "Controle conectado", tipo = Tipo.Info, value = ControllerName });
                     items.Add(new Item
                     {
+                        section = "TOQUE", label = "Analógico", tipo = Tipo.Lista,
+                        value = () => GameSettings.Joystick == ModoJoystick.Fixo ? "Fixo" : (GameSettings.Joystick == ModoJoystick.Ancorado ? "Ancorado" : "Flutuante"),
+                        change = d => GameSettings.Joystick = (ModoJoystick)(((int)GameSettings.Joystick + d + 3) % 3)
+                    });
+                    items.Add(new Item
+                    {
+                        label = "Tamanho dos botões", tipo = Tipo.Lista,
+                        value = () => GameSettings.TamanhoControles == 0 ? "Pequeno" : (GameSettings.TamanhoControles == 2 ? "Grande" : "Médio"),
+                        change = d => GameSettings.TamanhoControles = (GameSettings.TamanhoControles + d + 3) % 3
+                    });
+                    items.Add(new Item { label = "Correr no analógico (borda)", tipo = Tipo.Alternar, on = () => GameSettings.CorrerNoAnalogico, change = d => GameSettings.CorrerNoAnalogico = !GameSettings.CorrerNoAnalogico });
+                    items.Add(new Item
+                    {
                         section = "CÂMERA", label = "Câmera padrão", tipo = Tipo.Lista,
                         value = () => CameraRig.Nome(CameraRig.ModosAtacante[Mathf.Clamp(GameSettings.CameraPadrao, 0, CameraRig.ModosAtacante.Length - 1)]),
                         change = d => GameSettings.CameraPadrao = (GameSettings.CameraPadrao + d + CameraRig.ModosAtacante.Length) % CameraRig.ModosAtacante.Length
                     });
-                    items.Add(new Item { section = "JOGO-TREINO", label = "Mini mapa", tipo = Tipo.Alternar, on = () => GameSettings.MiniMapa, change = d => GameSettings.MiniMapa = !GameSettings.MiniMapa });
-                    items.Add(new Item { label = "Nomes dos jogadores", tipo = Tipo.Alternar, on = () => GameSettings.NomesJogadores, change = d => GameSettings.NomesJogadores = !GameSettings.NomesJogadores });
                     items.Add(new Item
                     {
                         section = "GRÁFICOS E SOM", column = 1, label = "Qualidade gráfica", tipo = Tipo.Lista,
@@ -433,6 +444,8 @@ namespace Craquez
                         activate = () => { if (updater == null) return; if (updater.UpdateRequired) Go(Tela.Atualizacao); else updater.Check(); }
                     });
                     items.Add(new Item { column = 1, label = "Versão instalada", tipo = Tipo.Info, value = () => "v" + Application.version });
+                    items.Add(new Item { section = "JOGO-TREINO", column = 1, label = "Mini mapa", tipo = Tipo.Alternar, on = () => GameSettings.MiniMapa, change = d => GameSettings.MiniMapa = !GameSettings.MiniMapa });
+                    items.Add(new Item { column = 1, label = "Nomes dos jogadores", tipo = Tipo.Alternar, on = () => GameSettings.NomesJogadores, change = d => GameSettings.NomesJogadores = !GameSettings.NomesJogadores });
                     items.Add(new Item { column = 0, label = "VOLTAR", tipo = Tipo.Botao, activate = () => Go(configBack) });
                     break;
             }
@@ -803,7 +816,7 @@ namespace Craquez
 
             float colGap = 40 * S;
             float colW = Mathf.Min((W - x0 * 2f - colGap) / 2f, 820 * S);
-            float rowH = 84 * S, rowGap = 12 * S;
+            float rowH = 72 * S, rowGap = 10 * S; // cabem as opções de toque sem o VOLTAR cobrir a lista
             float[] y = { 150 * S, 150 * S };
             for (int i = 0; i < items.Count; i++)
             {

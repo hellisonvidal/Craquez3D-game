@@ -33,6 +33,19 @@ namespace Craquez
 #if ENABLE_INPUT_SYSTEM
         static Gamepad Pad { get { return Gamepad.current; } }
 
+        /// <summary>Um controle físico (Bluetooth/USB) foi mexido neste quadro: os controles de toque saem da tela.</summary>
+        public static bool GamepadActive
+        {
+            get
+            {
+                var gp = Pad;
+                if (gp == null) return false;
+                if (gp.leftStick.ReadValue().sqrMagnitude > 0.09f || gp.rightStick.ReadValue().sqrMagnitude > 0.09f || gp.dpad.ReadValue().sqrMagnitude > 0.25f) return true;
+                return gp.buttonSouth.isPressed || gp.buttonEast.isPressed || gp.buttonWest.isPressed || gp.buttonNorth.isPressed ||
+                       gp.leftShoulder.isPressed || gp.rightShoulder.isPressed || gp.leftTrigger.isPressed || gp.rightTrigger.isPressed || gp.startButton.isPressed;
+            }
+        }
+
         static ButtonControl ShootButton(Gamepad gp)
         {
             return GameSettings.Layout == LayoutControle.ChuteNoCirculo ? gp.buttonEast : gp.buttonWest;
@@ -42,6 +55,8 @@ namespace Craquez
         {
             return GameSettings.Layout == LayoutControle.ChuteNoCirculo ? gp.buttonWest : gp.buttonEast;
         }
+#else
+        public static bool GamepadActive { get { return false; } }
 #endif
 
         public static TipoControle ControleConectado
