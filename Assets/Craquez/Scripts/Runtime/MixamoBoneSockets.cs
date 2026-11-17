@@ -135,9 +135,11 @@ namespace Craquez
             Hips = FindBone(searchRoot, "mixamorig:Hips", "Hips");
             Chest = FindBone(searchRoot, "mixamorig:Spine2", "Spine2", "mixamorig:Spine1", "Chest");
             Foot_R = FindBone(searchRoot, "mixamorig:RightFoot", "RightFoot");
-            Toe_R = FindBone(searchRoot, "mixamorig:RightToeBase", "RightToeBase", "mixamorig:RightToe_End");
+            // Support both Mixamo standard (RightToeBase) and Jogador.fbx naming (RightToes)
+            Toe_R = FindBone(searchRoot, "mixamorig:RightToeBase", "RightToeBase", "mixamorig:RightToe_End", "RightToes");
             Foot_L = FindBone(searchRoot, "mixamorig:LeftFoot", "LeftFoot");
-            Toe_L = FindBone(searchRoot, "mixamorig:LeftToeBase", "LeftToeBase", "mixamorig:LeftToe_End");
+            // Support both Mixamo standard (LeftToeBase) and Jogador.fbx naming (LeftToes)
+            Toe_L = FindBone(searchRoot, "mixamorig:LeftToeBase", "LeftToeBase", "mixamorig:LeftToe_End", "LeftToes");
             Hand_R = FindBone(searchRoot, "mixamorig:RightHand", "RightHand");
             ForeArm_R = FindBone(searchRoot, "mixamorig:RightForeArm", "RightForeArm", "RightLowerArm");
             Hand_L = FindBone(searchRoot, "mixamorig:LeftHand", "LeftHand");

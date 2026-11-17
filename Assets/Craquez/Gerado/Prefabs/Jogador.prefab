@@ -147,7 +147,7 @@ MonoBehaviour:
   Head: {fileID: 6066717669695275560}
   BallControlPoint: {fileID: 6195688598921550540}
   GK_CatchSocket: {fileID: 4894765119764872762}
-  ballControlDistance: 0.24
+  ballControlDistance: 0.40
   lockHipsHorizontalInPlace: 1
 --- !u!114 &1939238123125949682
 MonoBehaviour:

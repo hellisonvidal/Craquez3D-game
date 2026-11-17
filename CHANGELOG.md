@@ -2,6 +2,13 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [1.1.3] — 2026-11-16
+
+- **Correções de Malha e Ossos:** `MixamoBoneSockets` agora suporta nomes de ossos `LeftToes`/`RightToes` (usados pelo modelo `Jogador.fbx`), eliminando jogadores desfigurados/IK quebrado.
+- **Controle de Bola:** `ballControlDistance` corrigido de `0.24` para `0.40` (faixa válida 0.30–0.50) nos prefabs `Jogador` e `Goleiro`.
+- **Input System:** Habilitado *Active Input Handling = Both* (`activeInputHandler: 2`) para ativar o Input System 1.20.1 já instalado, melhorando suporte a gamepads.
+- **Unity:** Confirmada versão 6000.6.9f1 (Unity 6), compatível com todos os pacotes.
+
 ## [1.1.2] — 2026-11-16
 
 - **Modo 11v11:** Inclui o modo coletivo (`CollectiveMatchMode`, `TeamAI`, `FootballRulesEngine`, `RefereeSystem`, `PlayerAttributes`) e os sistemas de áudio e partículas (`AudioManager`, `ParticleEffectsManager`), que ainda não tinham sido incluídos em um APK.
