@@ -81,5 +81,4 @@ jobs:
           path: |
             partida.log
             autoteste_*.png
-            Build/Linux/autoteste_*.png
           if-no-files-found: warn
