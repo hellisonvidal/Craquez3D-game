@@ -28,9 +28,11 @@ namespace Craquez
         public Transform Foot_L;        // mixamorig:LeftFoot
         public Transform Toe_L;         // mixamorig:LeftToeBase
         public Transform Hand_R;        // mixamorig:RightHand
-        public Transform ForeArm_R;     // mixamorig:RightForeArm
+        public Transform ForeArm_R;     // mixamorig:RightForeArm (ou RightArm, RightLowerArm)
+        public Transform UpperArm_R;    // mixamorig:RightArm (ou RightUpperArm, RightShoulder)
         public Transform Hand_L;        // mixamorig:LeftHand
-        public Transform ForeArm_L;     // mixamorig:LeftForeArm
+        public Transform ForeArm_L;     // mixamorig:LeftForeArm (ou LeftArm, LeftLowerArm)
+        public Transform UpperArm_L;    // mixamorig:LeftArm (ou LeftUpperArm, LeftShoulder)
         public Transform Head;          // mixamorig:Head
 
         [Header("Sockets Virtuais (Camada 3)")]
@@ -141,9 +143,15 @@ namespace Craquez
             // Support both Mixamo standard (LeftToeBase) and Jogador.fbx naming (LeftToes)
             Toe_L = FindBone(searchRoot, "mixamorig:LeftToeBase", "LeftToeBase", "mixamorig:LeftToe_End", "LeftToes");
             Hand_R = FindBone(searchRoot, "mixamorig:RightHand", "RightHand");
-            ForeArm_R = FindBone(searchRoot, "mixamorig:RightForeArm", "RightForeArm", "RightLowerArm");
+            // Support multiple forearm naming conventions: mixamorig:RightForeArm, RightForeArm, RightLowerArm, RightArm
+            ForeArm_R = FindBone(searchRoot, "mixamorig:RightForeArm", "RightForeArm", "RightLowerArm", "RightArm", "mixamorig:RightArm");
+            // Support upper arm naming: mixamorig:RightArm, RightArm, RightUpperArm, RightShoulder
+            UpperArm_R = FindBone(searchRoot, "mixamorig:RightArm", "RightArm", "RightUpperArm", "RightShoulder", "mixamorig:RightUpperArm", "mixamorig:RightShoulder");
             Hand_L = FindBone(searchRoot, "mixamorig:LeftHand", "LeftHand");
-            ForeArm_L = FindBone(searchRoot, "mixamorig:LeftForeArm", "LeftForeArm", "LeftLowerArm");
+            // Support multiple forearm naming conventions: mixamorig:LeftForeArm, LeftForeArm, LeftLowerArm, LeftArm
+            ForeArm_L = FindBone(searchRoot, "mixamorig:LeftForeArm", "LeftForeArm", "LeftLowerArm", "LeftArm", "mixamorig:LeftArm");
+            // Support upper arm naming: mixamorig:LeftArm, LeftArm, LeftUpperArm, LeftShoulder
+            UpperArm_L = FindBone(searchRoot, "mixamorig:LeftArm", "LeftArm", "LeftUpperArm", "LeftShoulder", "mixamorig:LeftUpperArm", "mixamorig:LeftShoulder");
             Head = FindBone(searchRoot, "mixamorig:Head", "Head");
 
             // 2. Fallback via Avatar Humanoid da Unity caso algum osso tenha sido renomeado
@@ -159,8 +167,10 @@ namespace Craquez
                 if (Toe_L == null) Toe_L = animator.GetBoneTransform(HumanBodyBones.LeftToes) ?? Foot_L;
                 if (Hand_R == null) Hand_R = animator.GetBoneTransform(HumanBodyBones.RightHand);
                 if (ForeArm_R == null) ForeArm_R = animator.GetBoneTransform(HumanBodyBones.RightLowerArm);
+                if (UpperArm_R == null) UpperArm_R = animator.GetBoneTransform(HumanBodyBones.RightUpperArm);
                 if (Hand_L == null) Hand_L = animator.GetBoneTransform(HumanBodyBones.LeftHand);
                 if (ForeArm_L == null) ForeArm_L = animator.GetBoneTransform(HumanBodyBones.LeftLowerArm);
+                if (UpperArm_L == null) UpperArm_L = animator.GetBoneTransform(HumanBodyBones.LeftUpperArm);
                 if (Head == null) Head = animator.GetBoneTransform(HumanBodyBones.Head);
             }
         }
