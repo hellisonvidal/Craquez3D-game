@@ -10,6 +10,8 @@ namespace Craquez.EditorTools
     /// Build automático (GitHub Actions / linha de comando, sem abrir a Unity):
     ///   Unity -batchmode -quit -projectPath . -buildTarget Android -executeMethod Craquez.EditorTools.CraquezCI.BuildAndroid
     ///         [-customBuildPath Build/Craquez3D.apk] [-androidKeystoreName x.keystore -androidKeystorePass ... -androidKeyaliasName ... -androidKeyaliasPass ...]
+    ///   Unity -batchmode -quit -projectPath . -buildTarget StandaloneWindows64 -executeMethod Craquez.EditorTools.CraquezCI.BuildWindows
+    ///         [-customBuildPath Build/Windows/Craquez3D.exe]
     /// Configura o projeto (cena, prefabs, URP...), assina o APK com a keystore informada e sai com código 0 (sucesso) ou 1 (falha).
     /// </summary>
     public static class CraquezCI
@@ -67,6 +69,47 @@ namespace Craquez.EditorTools
                     options = BuildOptions.None
                 };
                 Debug.Log("[Craquez 3D] Gerando APK v" + PlayerSettings.bundleVersion + " (versionCode " + PlayerSettings.Android.bundleVersionCode + ") em " + path);
+                BuildReport report = BuildPipeline.BuildPlayer(options);
+                var s = report.summary;
+                Debug.Log("[Craquez 3D] Resultado: " + s.result + ", " + s.totalErrors + " erro(s), " + (s.totalSize / (1024f * 1024f)).ToString("0.0") + " MB, " + s.totalTime);
+                exitCode = s.result == BuildResult.Succeeded ? 0 : 1;
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("[Craquez 3D] Build falhou: " + e);
+                exitCode = 1;
+            }
+            EditorApplication.Exit(exitCode);
+        }
+
+        public static void BuildWindows()
+        {
+            int exitCode = 1;
+            try
+            {
+                if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.StandaloneWindows64)
+                    EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64);
+
+                if (!CraquezSetup.Configure(false)) throw new Exception("o setup do projeto falhou (veja o log acima)");
+                if (AssetDatabase.LoadAssetAtPath<UnityEngine.Video.VideoClip>(CraquezSetup.IntroVideo) == null)
+                    throw new Exception("vídeo de abertura não importado: " + CraquezSetup.IntroVideo);
+
+                EditorUserBuildSettings.development = false;
+
+                string path = Arg("-customBuildPath") ?? "Build/Windows/Craquez3D.exe";
+                if (!path.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)) path = Path.Combine(path, "Craquez3D.exe");
+                string dir = Path.GetDirectoryName(Path.GetFullPath(path));
+                if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+
+                var options = new BuildPlayerOptions
+                {
+                    scenes = new[] { CraquezSetup.Scene },
+                    locationPathName = path,
+                    target = BuildTarget.StandaloneWindows64,
+                    targetGroup = BuildTargetGroup.Standalone,
+                    options = BuildOptions.None
+                };
+                Debug.Log("[Craquez 3D] Gerando build Windows v" + PlayerSettings.bundleVersion + " em " + path);
                 BuildReport report = BuildPipeline.BuildPlayer(options);
                 var s = report.summary;
                 Debug.Log("[Craquez 3D] Resultado: " + s.result + ", " + s.totalErrors + " erro(s), " + (s.totalSize / (1024f * 1024f)).ToString("0.0") + " MB, " + s.totalTime);
