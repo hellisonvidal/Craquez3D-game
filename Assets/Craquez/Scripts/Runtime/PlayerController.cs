@@ -53,7 +53,7 @@ public enum TipoPasse { Curto = 0, Profundidade = 1, Cruzamento = 2 }
         [System.NonSerialized] public bool aiPass, aiThroughBall, aiCross;
         [System.NonSerialized] public Vector3 aiAimWorld;
 
-        public bool Busy { get { return kickPending || Time.time < lockMoveUntil; } }
+        public bool Busy { get { return kickPending || passPending || Time.time < lockMoveUntil || Time.time < passLockMoveUntil; } }
         public bool Charging { get; private set; }
         public float Charge { get; private set; }
         public TipoChute ChargingType { get; private set; }
@@ -617,8 +617,12 @@ public enum TipoPasse { Curto = 0, Profundidade = 1, Cruzamento = 2 }
             passPending = true;
             passStartedAt = Time.time;
 
-            activePassState = passType == TipoPasse.Profundidade ? "PasseProfundidade" :
-                              (passType == TipoPasse.Cruzamento ? "Cruzamento" : "PasseCurto");
+            // Use existing animations as fallbacks for passes
+            // PasseCurto (short pass) -> ChuteColocado (similar controlled technique)
+            // PasseProfundidade (through ball) -> Cavadinha (lofted, similar to chip)
+            // Cruzamento (cross) -> ChuteColocado (striking technique)
+            activePassState = passType == TipoPasse.Profundidade ? "Cavadinha" :
+                              (passType == TipoPasse.Cruzamento ? "ChuteColocado" : "ChuteColocado");
             if (anim != null) anim.CrossFadeInFixedTime(activePassState, 0.07f, 0, 0f);
 
             // Janela determinística sincronizada com o avanço do pé (mais curta que chute)
