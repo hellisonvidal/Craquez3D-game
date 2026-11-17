@@ -40,9 +40,9 @@ namespace Craquez
         public Transform GK_CatchSocket;
 
         [Header("Configuração de Projeção e In-Place Lock")]
-        [Tooltip("Distância base do BallControlPoint à frente do Root (0.35m em baixa velocidade até 0.45m em corrida).")]
-        [Range(0.30f, 0.50f)]
-        public float ballControlDistance = 0.40f;
+        [Tooltip("Distância do BallControlPoint à frente do Root (0,28 m devagar até 0,36 m correndo): a bola colada no pé.")]
+        [Range(0.22f, 0.50f)]
+        public float ballControlDistance = 0.32f;
 
         [Tooltip("Trava deslocamentos horizontais residuais (X/Z) do mixamorig:Hips durante locomoção In-Place.")]
         public bool lockHipsHorizontalInPlace = true;
@@ -186,7 +186,7 @@ namespace Craquez
                 BallControlPoint = go.transform;
             }
             // Inicializa na velocidade média (0.5)
-            BallControlPoint.localPosition = new Vector3(0f, Arena.BallRadius, Mathf.Lerp(0.35f, 0.45f, 0.5f));
+            BallControlPoint.localPosition = new Vector3(0f, Arena.BallRadius, Mathf.Lerp(0.28f, 0.36f, 0.5f));
             BallControlPoint.localRotation = Quaternion.identity;
 
             Transform existingCatch = transform.Find("GK_CatchSocket");
@@ -201,14 +201,14 @@ namespace Craquez
         }
 
         /// <summary>
-        /// Atualiza a projeção do BallControlPoint (0.35m a 0.45m conforme velocidade)
+        /// Atualiza a projeção do BallControlPoint (0,28 m a 0,36 m conforme velocidade)
         /// e centraliza o GK_CatchSocket entre Hand_L e Hand_R à frente do mixamorig:Spine2.
         /// </summary>
         public void UpdateSockets(float normalizedSpeed01)
         {
             if (BallControlPoint != null)
             {
-                float d = Mathf.Lerp(0.35f, 0.45f, Mathf.Clamp01(normalizedSpeed01));
+                float d = Mathf.Lerp(0.28f, 0.36f, Mathf.Clamp01(normalizedSpeed01)); // antes 0,35–0,45 m: bola longe do pé
                 ballControlDistance = d;
                 BallControlPoint.localPosition = new Vector3(0f, Arena.BallRadius, d);
             }

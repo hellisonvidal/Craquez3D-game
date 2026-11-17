@@ -1264,6 +1264,58 @@ namespace Craquez
             {
                 anim.SetLookAtWeight(0f);
             }
+            DiveHandsIK();
         }
+
+        /// <summary>
+        /// Mãos no mergulho/salto: o clipe GK_Mergulho cruza os braços em X na extensão (e o espelhamento para a
+        /// esquerda piora), parecendo mãos "embaralhadas". Na janela de extensão as duas mãos vão juntas para a bola
+        /// (ou para o ponto previsto): a mão do lado do mergulho por baixo, a outra por cima, as duas um pouco
+        /// atrás da bola, como um goleiro de verdade espalmando/encaixando.
+        /// </summary>
+        void DiveHandsIK()
+        {
+            bool dive = State == Estado.Defendendo && diving && anim != null;
+            AnimatorStateInfo st = anim.GetCurrentAnimatorStateInfo(0);
+            bool clip = st.IsName("GK_Mergulho") || st.IsName("GK_Salto") || st.IsName("GK_Soco");
+            float w = 0f;
+            if (dive && clip)
+            {
+                float t = st.normalizedTime;
+                w = Mathf.Clamp01((t - 0.08f) / 0.17f) * (1f - Mathf.Clamp01((t - 0.72f) / 0.2f));
+            }
+            handIK = Mathf.MoveTowards(handIK, w, Time.deltaTime * 8f);
+            if (handIK <= 0.001f)
+            {
+                anim.SetIKPositionWeight(AvatarIKGoal.LeftHand, 0f);
+                anim.SetIKPositionWeight(AvatarIKGoal.RightHand, 0f);
+                return;
+            }
+            Vector3 bpos = ball.transform.position;
+            Vector3 target = (bpos - transform.position).sqrMagnitude < 9f || predictedHitPoint == Vector3.zero ? bpos : predictedHitPoint;
+            // não estica além do alcance real: o centro das mãos fica no máximo a ~1,05 m do ombro mais próximo
+            Transform chestT = sockets != null && sockets.Chest != null ? sockets.Chest : transform;
+            Vector3 fromChest = target - chestT.position;
+            float maxReach = 1.05f * Mathf.Max(0.5f, transform.lossyScale.y);
+            if (fromChest.magnitude > maxReach) target = chestT.position + fromChest.normalized * maxReach;
+            target -= transform.forward * 0.06f;                              // mãos um pouco atrás da bola
+            float side = diveSide == 0f ? 1f : diveSide;                      // +1 = mergulho para a direita do goleiro
+            Vector3 up = Vector3.up * 0.09f;
+            Vector3 along = transform.right * side * 0.03f;
+            Vector3 lowHand = target - up + along, highHand = target + up - along;
+            AvatarIKGoal lowGoal = side > 0f ? AvatarIKGoal.RightHand : AvatarIKGoal.LeftHand;
+            AvatarIKGoal highGoal = side > 0f ? AvatarIKGoal.LeftHand : AvatarIKGoal.RightHand;
+            anim.SetIKPositionWeight(lowGoal, handIK);
+            anim.SetIKPositionWeight(highGoal, handIK);
+            anim.SetIKPosition(lowGoal, lowHand);
+            anim.SetIKPosition(highGoal, highHand);
+            // cotovelos para fora (lado de cima / de baixo), impedindo que os antebraços se cruzem
+            anim.SetIKHintPositionWeight(side > 0f ? AvatarIKHint.RightElbow : AvatarIKHint.LeftElbow, handIK * 0.6f);
+            anim.SetIKHintPositionWeight(side > 0f ? AvatarIKHint.LeftElbow : AvatarIKHint.RightElbow, handIK * 0.6f);
+            anim.SetIKHintPosition(side > 0f ? AvatarIKHint.RightElbow : AvatarIKHint.LeftElbow, Vector3.Lerp(chestT.position, lowHand, 0.5f) - Vector3.up * 0.25f);
+            anim.SetIKHintPosition(side > 0f ? AvatarIKHint.LeftElbow : AvatarIKHint.RightElbow, Vector3.Lerp(chestT.position, highHand, 0.5f) + Vector3.up * 0.25f);
+        }
+
+        float handIK;
     }
 }

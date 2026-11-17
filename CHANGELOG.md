@@ -2,6 +2,13 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [1.4.0] — 2026-11-17
+
+- **Corpos com proporção humana normal:** jogador e goleiro tinham tronco ~30% comprido, pernas curtas (canela principalmente) e pelve larga. Os dois modelos foram corrigidos de forma definitiva nos próprios FBX, usando como referência o esqueleto dos Universal Base Characters / Universal Animation Library da Quaternius: quadril a 52% da altura, joelho a 29%, ombros na mesma altura, pelve mais estreita. Cabeça, mãos, pés, braços, UVs, pesos e nomes dos ossos foram mantidos, então uniformes, rostos e animações continuam valendo. Script reproduzível em `tools/blender/corpo_proporcoes.py` e comparação em `tools/blender/proporcoes_antes_depois.png`.
+- **Passadas maiores:** com pernas mais longas, a corrida cobre 4,5 m/s por passada (antes 3,8): menos deslizamento dos pés.
+- **Condução de bola colada ao pé:** ponto de controle a 28–36 cm do jogador (antes 35–45), toques mais curtos (trote 14–30 cm, sprint 35–60 cm; antes 24–48 e 55–95), a bola se adianta no máximo 48/85 cm (antes 72/125) e o domínio "puxa" a bola com mais força.
+- **Mãos do goleiro no mergulho:** o clipe de mergulho cruzava os braços em X na extensão (mãos "embaralhadas", pior no lado espelhado). Na janela do mergulho, do salto e do soco, as mãos agora vão juntas para a bola por IK, a do lado do mergulho por baixo e a outra por cima, com os cotovelos abertos.
+
 ## [1.3.0] — 2026-11-17
 
 - **Jogo-treino:** o modo 11 x 11 passa a se chamar Jogo-treino (menu principal, tela de escolha e configurações).

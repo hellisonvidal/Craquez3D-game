@@ -38,7 +38,7 @@ namespace Craquez
         public float sprintTurnRate = 300f;
 
         [Header("Domínio e Condução Magnética")]
-        [Tooltip("Raio de domínio para condução magnética rumo ao BallControlPoint (0.35-0.45m à frente).")]
+        [Tooltip("Raio de domínio para condução magnética rumo ao BallControlPoint (0,28-0,36 m à frente).")]
         public float possessionRadius = 0.55f;
         [Tooltip("Alcance máximo do pé no frame de impacto do chute.")]
         public float kickFootReach = 1.05f;
@@ -831,7 +831,7 @@ namespace Craquez
                     Vector3 nd = Vector3.RotateTowards(fb / bs, wdir, maxTurn * Mathf.Deg2Rad, 0f);
                     fb = nd * bs;
                 }
-                float maxLead = sprintHeld ? 1.25f : 0.72f;
+                float maxLead = sprintHeld ? 0.85f : 0.48f; // quanto a bola pode se adiantar (antes 1,25 / 0,72 m)
                 float ahead = Vector3.Dot(toBallFromRoot, fb.normalized);
                 if (ahead > maxLead)
                 {
@@ -858,7 +858,7 @@ namespace Craquez
             // Mantém a bola próxima ao pé (BallControlPoint) com rotação visual (spin) compatível
             if (distToControlPt < possessionRadius && rel.magnitude < 6.5f && !knockQueued)
             {
-                Vector3 magnetPull = toControlPt * (sprintHeld ? 7.5f : 10.5f) * grip;
+                Vector3 magnetPull = toControlPt * (sprintHeld ? 9.5f : 13f) * grip;
                 Vector3 baseCarryVel = velocity + magnetPull;
                 float blendRate = (now < nextTouchAt) ? 14f : 20f;
                 flatBv = Vector3.MoveTowards(flatBv, new Vector3(baseCarryVel.x, 0f, baseCarryVel.z), blendRate * dt);
@@ -931,8 +931,9 @@ namespace Craquez
             else
             {
                 float touchDist;
-                if (sprintHeld) { touchDist = Mathf.Lerp(0.55f, 0.95f, Mathf.Clamp01(spd / sprintSpeed)); interval = 0.34f; }
-                else { touchDist = Mathf.Lerp(0.24f, 0.48f, Mathf.Clamp01(spd / jogSpeed)); interval = 0.28f; }
+                // toques curtos: a bola fica perto dos pés (antes 0,55–0,95 m no sprint e 0,24–0,48 m no trote)
+                if (sprintHeld) { touchDist = Mathf.Lerp(0.35f, 0.6f, Mathf.Clamp01(spd / sprintSpeed)); interval = 0.3f; }
+                else { touchDist = Mathf.Lerp(0.14f, 0.3f, Mathf.Clamp01(spd / jogSpeed)); interval = 0.26f; }
                 if (sharpTurn) { touchDist *= 0.6f; playerSpeed *= 0.78f; }
                 touchDist *= jitter * Mathf.Lerp(1.12f, 1f, grip);
                 interval *= jitter;
