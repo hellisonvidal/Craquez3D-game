@@ -181,7 +181,9 @@ namespace Craquez
             var gkGo = Instantiate(gkPrefab, t.OwnGoal + t.Forward * 1.2f, Quaternion.LookRotation(t.Forward));
             spawned.Add(gkGo);
             var gkAtr = GeradorJogador.Atributos(Funcao.Zagueiro, rng, nivel);
+            var gkRostos = PlayerLook.Embaralhar("Goleiro", rng, true);   // o uniforme do goleiro só existe com pele clara
             var gkLook = PlayerLook.Sortear(Funcao.Goleiro, !t.goleiroModeloA, 0, gkAtr, rng);
+            if (gkRostos.Count > 0) PlayerLook.UsarRosto(gkLook, gkRostos[t.indice % gkRostos.Count], "Goleiro");
             // uniforme antes do penteado: senão o cabelo 3D (black power, coque, faixa) recebe a textura do uniforme
             ApplyKit(gkGo, KitMaterial(gkPrefab, t.kitGoleiro));
             PlayerLook.Aplicar(gkGo, gkLook, t.goleiroModeloA ? 1.87f : 1.90f, !t.goleiroModeloA, propMaterial, hairMats);
@@ -220,8 +222,12 @@ namespace Craquez
                 spawned.Add(go);
                 // aparência própria: pele/cabelo, altura, porte, peso e penteado
                 var atr = GeradorJogador.Atributos(slots[i].funcao, rng, nivel);
-                int visual = b ? visB[ib++ % PlayerLook.Visuais] : visA[ia++ % PlayerLook.Visuais];
+                // rosto (foto) próprio, sem repetir na partida; o tom de pele do corpo acompanha o rosto
+                if (rostosPartida == null || rostosPartida.Count == 0) rostosPartida = PlayerLook.Embaralhar("Jogador", rng, false);
+                PlayerLook.Rosto rosto = rostosPartida.Count > 0 ? rostosPartida[rostoIdx++ % rostosPartida.Count] : null;
+                int visual = rosto != null ? rosto.visual : (b ? visB[ib++ % PlayerLook.Visuais] : visA[ia++ % PlayerLook.Visuais]);
                 var look = PlayerLook.Sortear(slots[i].funcao, b, visual, atr, rng);
+                PlayerLook.UsarRosto(look, rosto, "Jogador");
                 PlayerLook.AjustarAtributos(atr, look);
                 ApplyKit(go, KitMaterial(prefab, PlayerLook.Textura(b, t.indice, visual, b ? t.kitB : t.kitA)));
                 PlayerLook.Aplicar(go, look, b ? 1.80f : 1.78f, b, propMaterial, hairMats);
@@ -293,13 +299,17 @@ namespace Craquez
             var rng = new System.Random(Random.Range(0, int.MaxValue));
             var atr = GeradorJogador.Atributos(Funcao.Meia, rng, 0.6f);
             var look = PlayerLook.Sortear(Funcao.Meia, modelB, 0, atr, rng);
-            if (look.penteado == Penteado.BlackPower || look.penteado == Penteado.Moicano) look.penteado = Penteado.Natural;
+            var rr = PlayerLook.Embaralhar("Jogador", rng, true);           // o uniforme da arbitragem só existe com pele clara
+            if (rr.Count > 0) PlayerLook.UsarRosto(look, rr[0], "Jogador");
+            if (look.penteado == Penteado.BlackPower || look.penteado == Penteado.Moicano) look.penteado = Penteado.Curto;
             if (look.porte == Porte.Pesado) look.porte = Porte.Normal;
             PlayerLook.Aplicar(go, look, 1.80f, modelB, propMaterial, hairMats);
         }
 
         readonly Dictionary<string, Material> kitCache = new Dictionary<string, Material>();
         readonly Dictionary<Color, Material> hairMats = new Dictionary<Color, Material>();
+        List<PlayerLook.Rosto> rostosPartida;
+        int rostoIdx;
 
         static int[] Shuffled(System.Random rng)
         {
@@ -312,7 +322,8 @@ namespace Craquez
         Material KitMaterial(GameObject prefab, Texture2D tex)
         {
             if (prefab == null) return null;
-            var r = prefab.GetComponentInChildren<Renderer>();
+            Renderer r = null;
+            foreach (var x in prefab.GetComponentsInChildren<Renderer>(true)) if (PlayerLook.EhCorpo(x)) { r = x; break; }
             if (r == null || r.sharedMaterial == null) return null;
             string key = r.sharedMaterial.name + "/" + (tex != null ? tex.name : "orig");
             Material m;
@@ -330,7 +341,7 @@ namespace Craquez
             foreach (var r in go.GetComponentsInChildren<Renderer>())
             {
                 if (r is ParticleSystemRenderer) continue;
-                if (r.name.StartsWith("Penteado_")) continue; // cabelo 3D tem material próprio
+                if (!PlayerLook.EhCorpo(r)) continue; // cabeça (foto) e cabelo 3D têm material próprio
                 var arr = r.sharedMaterials;
                 for (int i = 0; i < arr.Length; i++) arr[i] = m;
                 r.sharedMaterials = arr;
@@ -361,6 +372,7 @@ namespace Craquez
             FaceShapes.Limpar();
             foreach (var m in hairMats.Values) Destroy(m);
             hairMats.Clear();
+            rostosPartida = null; rostoIdx = 0;
             if (ParticleEffectsManager.Instance != null) ParticleEffectsManager.Instance.ClearAllEffects();
             // texturas de pele/cabelo (Resources/Visuais) e materiais da partida liberados da memória
             Resources.UnloadUnusedAssets();
