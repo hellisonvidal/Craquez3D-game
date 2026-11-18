@@ -78,7 +78,7 @@ A Unity com URP entrega iluminação PBR, sombras, pós-processamento e boa perf
 | Chute colocado (curva) | COLOCADO | E | □ *(ou ○)* | X *(ou B)* |
 | Cavadinha | CAVADINHA | Q | △ | Y |
 | Chute rasteiro | RASTEIRO | Z | ✕ | A |
-| Drible: corte (com direção), puxada (para trás), parar a bola (sem direção) | DRIBLE | F | R1 | RB |
+| Drible: corte (devagar) ou finta de corpo / pedalada (em velocidade) para o lado, puxada (para trás), parar a bola (sem direção) | DRIBLE | F | R1 | RB |
 | Arrancada (toque longo e disparada) | ARRANCADA | X | L1 | LB |
 | Câmera / Nova bola / Pausa | botões no topo | C / R / Esc | R3 / Share / Options | RS / View / Menu |
 
