@@ -37,6 +37,7 @@ namespace Craquez.EditorTools
                 sb.Append("[\n");
                 bool first = true;
                 Sample("Jogador", "Jogador", new[] { "Idle", "Andar", "Trote", "Correr", "Disparada", "ChuteForte", "ChuteColocado", "Cavadinha" }, sb, ref first);
+                Sample("Jogador", "Jogador/Jogadas", new[] { "FintaCorpoDir", "PedaladaDir", "PuxadaDir", "Arrancada", "Freada" }, sb, ref first);
                 Sample("Goleiro", "Goleiro", new[] { "GK_Pronto", "GK_DeslocarDir", "GK_Mergulho", "GK_Salto", "GK_Defesa", "GK_Levantar" }, sb, ref first);
                 sb.Append("\n]\n");
                 File.WriteAllText("Diagnostico/poses.json", sb.ToString());

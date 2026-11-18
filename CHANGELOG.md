@@ -2,6 +2,14 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [1.5.0] — 2026-11-18
+
+- **Jogadas novas (animações próprias, para os dois lados):** finta de corpo (ameaça um lado e sai pelo outro), pedalada (a perna passa por cima da bola antes de sair), puxada com a sola, arrancada explosiva (primeiras passadas com o tronco à frente) e freada brusca vinda do sprint. Geradas com o kit de poses do projeto no esqueleto do próprio Jogador.fbx (`tools/blender/jogadoranim`).
+- **Drible:** devagar continua o corte seco; em velocidade, o botão de drible faz finta de corpo ou pedalada e a bola só sai para o lado no fim da finta. Para trás, puxada com a sola; a arrancada e a freada tocam a animação própria.
+- **Sprint:** a corrida de velocidade máxima usa o `Sprint_Loop` da Quaternius (passada de 7,3 m/s): no sprint a animação acelera só ~1,2x (antes 1,5x), pés sem deslizar.
+- **Passes mais fortes:** o passe rasteiro chega ao companheiro a 7,5–11 m/s (antes 4,5–7,5); um passe de 20 m sai a ~13 m/s. O lançamento é mais tenso (menos tempo no ar).
+- **Chutes mais fortes:** um toque rápido no chute já sai com ~40% da força (antes ~10%, chute "mascado"); força cresce mais rápido no começo e carrega em 0,7 s (antes 0,85 s). Faixas: forte 15–34 m/s, colocado 13–26, rasteiro 15–30.
+
 ## [1.4.0] — 2026-11-17
 
 - **Corpos com proporção humana normal:** jogador e goleiro tinham tronco ~30% comprido, pernas curtas (canela principalmente) e pelve larga. Os dois modelos foram corrigidos de forma definitiva nos próprios FBX, usando como referência o esqueleto dos Universal Base Characters / Universal Animation Library da Quaternius: quadril a 52% da altura, joelho a 29%, ombros na mesma altura, pelve mais estreita. Cabeça, mãos, pés, braços, UVs, pesos e nomes dos ossos foram mantidos, então uniformes, rostos e animações continuam valendo. Script reproduzível em `tools/blender/corpo_proporcoes.py` e comparação em `tools/blender/proporcoes_antes_depois.png`.

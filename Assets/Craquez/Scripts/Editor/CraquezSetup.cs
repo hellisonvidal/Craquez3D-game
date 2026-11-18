@@ -182,7 +182,26 @@ namespace Craquez.EditorTools
                     mi.SaveAndReimport();
                 }
             }
+
+            // dribles, fintas, arrancada e freada (tools/blender/jogadoranim): feitos no esqueleto do próprio Jogador.fbx
+            Avatar corpo = null;
+            foreach (var o in AssetDatabase.LoadAllAssetsAtPath(Root + "/Models/Jogador.fbx"))
+                if (o is Avatar a && a.isHuman) { corpo = a; break; }
+            if (corpo == null) { Debug.LogWarning("[Craquez 3D] Avatar do Jogador.fbx não encontrado (jogadas)"); return; }
+            foreach (var c in Jogadas)
+            {
+                var mi = AssetImporter.GetAtPath(Root + "/Animations/Jogador/Jogadas/" + c + ".fbx") as ModelImporter;
+                if (mi == null) { Debug.LogWarning("[Craquez 3D] Jogada ausente: " + c); continue; }
+                if (mi.avatarSetup == ModelImporterAvatarSetup.CopyFromOther && mi.sourceAvatar == corpo) continue;
+                mi.animationType = ModelImporterAnimationType.Human;
+                mi.avatarSetup = ModelImporterAvatarSetup.CopyFromOther;
+                mi.sourceAvatar = corpo;
+                mi.SaveAndReimport();
+            }
         }
+
+        /// <summary>Jogadas do jogador geradas por tools/blender/jogadoranim/build.py.</summary>
+        static readonly string[] Jogadas = { "FintaCorpoDir", "FintaCorpoEsq", "PedaladaDir", "PedaladaEsq", "PuxadaDir", "PuxadaEsq", "Arrancada", "Freada" };
 
         static void ReimportAll()
         {
@@ -614,6 +633,9 @@ namespace Craquez.EditorTools
             // sprint: arrancada nativa do Meshy (ou a corrida acelerada, se faltar)
             var sprint = Clip("Jogador", "Disparada");
             bt.AddChild(sprint != null ? sprint : run, 10.2f);
+            // corrida de velocidade máxima: Sprint_Loop da Quaternius (passada longa, pés sem deslizar acima de ~7 m/s)
+            var sprintQ = QClip("UAL1", "Sprint_Loop");
+            if (sprintQ != null) bt.AddChild(sprintQ, 12f);
             var ch = bt.children;
             ch[3].timeScale = 1.18f;
             ch[4].timeScale = sprint != null ? 1.30f : 10.2f / sRun;
@@ -629,6 +651,15 @@ namespace Craquez.EditorTools
                 tr.hasExitTime = true;
                 tr.exitTime = 0.85f;
                 tr.duration = 0.16f;
+            }
+
+            // dribles, fintas, arrancada e freada (tools/blender/jogadoranim); voltam à locomoção no fim
+            foreach (var n in Jogadas)
+            {
+                var clipJ = Clip("Jogador/Jogadas", n);
+                if (clipJ == null) continue;
+                bool finta = n.StartsWith("Finta") || n.StartsWith("Pedalada");
+                AddClipState(sm, n, clipJ, finta ? 1.3f : (n == "Arrancada" ? 1.1f : 1.2f), loco, n == "Arrancada" ? 0.8f : 0.88f, 0.15f);
             }
 
             // contato físico, contusões e bola parada (Universal Animation Library — Quaternius, CC0)
