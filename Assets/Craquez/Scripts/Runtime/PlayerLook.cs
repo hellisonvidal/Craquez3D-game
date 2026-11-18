@@ -4,7 +4,8 @@ using UnityEngine;
 namespace Craquez
 {
     public enum Porte { Magro = 0, Normal = 1, Forte = 2, Pesado = 3 }
-    public enum Penteado { Natural = 0, BlackPower = 1, Moicano = 2, Coque = 3, Faixa = 4 }
+    /// <summary>Cortes de cabelo: malhas 3D ajustadas ao crânio (Cabelo_&lt;nome&gt; no FBX, tools/blender/cabeca_cabelos.py).</summary>
+    public enum Penteado { Curto = 0, BlackPower = 1, Moicano = 2, Topete = 3, Raspado = 4, Cacheado = 5, Careca = 6 }
 
     /// <summary>Aparência individual: rosto/pele/cabelo (textura), altura, porte, peso e penteado.</summary>
     [System.Serializable]
@@ -18,6 +19,8 @@ namespace Craquez
         public Color corCabelo;
         public string barba;
         public string rosto;        // formato do rosto (FaceShapes)
+        public string rostoId;      // foto do rosto (Resources/Rostos/<modelo>/Rosto_<id>)
+        public string modeloRosto = "Jogador";
 
         public string Descricao()
         {
@@ -76,12 +79,7 @@ namespace Craquez
         static readonly string[] BeardB = { "barba cheia", "barba cheia", "sem barba", "cavanhaque", "sem barba", "bigode", "barba por fazer", "cavanhaque" };
         public static string Barba(bool modelB, int visual) { return (modelB ? BeardB : BeardA)[Mathf.Clamp(visual, 0, Visuais - 1)]; }
         // visuais de pele escura (o black power aparece mais neles)
-        static bool DarkSkin(bool modelB, int visual) { return modelB ? (visual == 0 || visual == 1 || visual == 4 || visual == 5 || visual == 7) : (visual == 2 || visual == 6); }
-
-        // medidas da cabeça na pose de repouso, em fração da altura do modelo (medidas no Blender)
-        struct HeadShape { public float top, fwd, rx, rz; }
-        static readonly HeadShape HeadA = new HeadShape { top = 0.1116f, fwd = -0.006f, rx = 0.0497f, rz = 0.0544f };
-        static readonly HeadShape HeadB = new HeadShape { top = 0.1066f, fwd = -0.0127f, rx = 0.0455f, rz = 0.0566f };
+        static bool DarkSkin(bool modelB, int visual) { return visual == 1 || visual == 5 || visual == 7; } // visuais de pele escura do corpo
 
         public static Aparencia Sortear(Funcao f, bool modelB, int visual, Atributos atr, System.Random rng)
         {
@@ -104,14 +102,11 @@ namespace Craquez
             a.porte = r < 0.22 ? Porte.Magro : (r < 0.7 ? Porte.Normal : (r < 1.0 ? Porte.Forte : Porte.Pesado));
             float bmi = a.porte == Porte.Magro ? 20.6f : (a.porte == Porte.Normal ? 22.6f : (a.porte == Porte.Forte ? 24.4f : 26.8f));
             a.peso = bmi * a.altura * a.altura + (float)(rng.NextDouble() * 3.0 - 1.5);
-            // penteado
+            // penteado (black power e cacheado mais comuns em quem tem pele escura)
             double ph = rng.NextDouble();
             bool dark = DarkSkin(modelB, visual);
-            if (ph < 0.42) a.penteado = Penteado.Natural;
-            else if (ph < (dark ? 0.72 : 0.52)) a.penteado = Penteado.BlackPower;
-            else if (ph < (dark ? 0.82 : 0.68)) a.penteado = Penteado.Moicano;
-            else if (ph < (dark ? 0.9 : 0.84)) a.penteado = Penteado.Coque;
-            else a.penteado = Penteado.Faixa;
+            if (dark) a.penteado = ph < 0.22 ? Penteado.BlackPower : ph < 0.42 ? Penteado.Cacheado : ph < 0.62 ? Penteado.Raspado : ph < 0.8 ? Penteado.Curto : ph < 0.9 ? Penteado.Moicano : Penteado.Careca;
+            else a.penteado = ph < 0.36 ? Penteado.Curto : ph < 0.56 ? Penteado.Topete : ph < 0.72 ? Penteado.Raspado : ph < 0.84 ? Penteado.Cacheado : ph < 0.92 ? Penteado.Moicano : ph < 0.97 ? Penteado.Careca : Penteado.BlackPower;
             a.corCabelo = (modelB ? HairB : HairA)[Mathf.Clamp(visual, 0, Visuais - 1)];
             a.barba = Barba(modelB, visual);
             return a;
@@ -172,56 +167,83 @@ namespace Craquez
                 if (head != null) head.localScale = head.localScale * inv; // cabeça proporcional
             }
             if (head == null) return;
-            if (a.penteado == Penteado.Natural || propBase == null) return;
-
-            HeadShape hs = modelB ? HeadB : HeadA;
-            float H = a.altura; // cabeça mantém o tamanho normal (compensada acima)
-            float s = H / 1.8f;
-            Transform root = go.transform;
-            Vector3 up = root.up, fwd = root.forward, right = root.right;
-            Vector3 crown = head.position + up * hs.top * H + fwd * hs.fwd * H;
-            float rx = hs.rx * H, rz = hs.rz * H;
-
-            Material mat;
-            Color c = a.penteado == Penteado.Faixa ? new Color(0.95f, 0.95f, 0.95f) : a.corCabelo;
-            if (!hairMats.TryGetValue(c, out mat))
-            {
-                mat = new Material(propBase);
-                if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", c);
-                if (mat.HasProperty("_BaseMap")) mat.SetTexture("_BaseMap", null);
-                if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", a.penteado == Penteado.Faixa ? 0.2f : 0.35f);
-                hairMats[c] = mat;
-            }
-            Quaternion rot = root.rotation;
-            switch (a.penteado)
-            {
-                case Penteado.BlackPower:
-                    Prop(PrimitiveType.Sphere, head, crown - up * 0.05f * s - fwd * 0.04f * s, rot, new Vector3(rx * 2.5f, 0.2f * s, rz * 2.35f), mat, "BlackPower");
-                    break;
-                case Penteado.Moicano:
-                    Prop(PrimitiveType.Cube, head, crown - up * 0.022f * s - fwd * 0.015f * s, rot, new Vector3(0.045f * s, 0.06f * s, rz * 1.6f), mat, "Moicano");
-                    break;
-                case Penteado.Coque:
-                    Prop(PrimitiveType.Sphere, head, crown - up * 0.04f * s - fwd * rz * 0.95f, rot, Vector3.one * 0.085f * s, mat, "Coque");
-                    break;
-                case Penteado.Faixa:
-                    Prop(PrimitiveType.Cylinder, head, crown - up * 0.07f * s, rot, new Vector3(rx * 1.98f, 0.018f * s, rz * 1.98f), mat, "Faixa");
-                    break;
-            }
+            AplicarCabeca(go, a);
         }
 
-        static void Prop(PrimitiveType t, Transform parent, Vector3 pos, Quaternion rot, Vector3 worldScale, Material mat, string name)
+        // ------------------------------------------------------------ rosto (foto) e cabelo 3D
+
+        [System.Serializable] public class Rosto { public string id; public int visual; public float[] pele; public float[] cabelo; }
+        [System.Serializable] class Banco { public Rosto[] rostos; }
+        static readonly Dictionary<string, Rosto[]> bancos = new Dictionary<string, Rosto[]>();
+        static readonly MaterialPropertyBlock mpb = new MaterialPropertyBlock();
+        static readonly int BaseMap = Shader.PropertyToID("_BaseMap"), BaseColor = Shader.PropertyToID("_BaseColor");
+
+        /// <summary>Rostos disponíveis para o modelo ("Jogador" ou "Goleiro"), gerados por tools/rostos.py.</summary>
+        public static Rosto[] Rostos(string modelo)
         {
-            var go = GameObject.CreatePrimitive(t);
-            go.name = "Penteado_" + name;
-            var col = go.GetComponent<Collider>();
-            if (col != null) Object.Destroy(col);
-            go.transform.SetPositionAndRotation(pos, rot);
-            go.transform.localScale = worldScale;
-            go.transform.SetParent(parent, true);
-            var r = go.GetComponent<Renderer>();
-            r.sharedMaterial = mat;
-            r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+            Rosto[] r;
+            if (bancos.TryGetValue(modelo, out r)) return r;
+            var ta = Resources.Load<TextAsset>("Rostos/" + modelo + "/Rosto");
+            r = ta != null ? (JsonUtility.FromJson<Banco>(ta.text).rostos ?? new Rosto[0]) : new Rosto[0];
+            bancos[modelo] = r;
+            return r;
+        }
+
+        /// <summary>Rostos embaralhados (sem repetir dentro do time). soClaros: só tons do corpo que existem no uniforme sem variações (goleiro, árbitro).</summary>
+        public static List<Rosto> Embaralhar(string modelo, System.Random rng, bool soClaros)
+        {
+            var l = new List<Rosto>();
+            foreach (var r in Rostos(modelo)) if (!soClaros || !DarkSkin(false, r.visual)) l.Add(r);
+            for (int i = l.Count - 1; i > 0; i--) { int j = rng.Next(i + 1); var x = l[i]; l[i] = l[j]; l[j] = x; }
+            return l;
+        }
+
+        /// <summary>Usa o rosto escolhido na aparência (visual do corpo = tom de pele do rosto; cor do cabelo da foto).</summary>
+        public static void UsarRosto(Aparencia a, Rosto r, string modelo)
+        {
+            if (r == null) return;
+            a.rostoId = r.id;
+            a.modeloRosto = modelo;
+            a.visual = r.visual;
+            if (r.cabelo != null && r.cabelo.Length >= 3) a.corCabelo = new Color(r.cabelo[0], r.cabelo[1], r.cabelo[2]);
+            a.barba = "";
+        }
+
+        /// <summary>Renderer do corpo (recebe o uniforme)? A cabeça e os cabelos têm material próprio.</summary>
+        public static bool EhCorpo(Renderer r)
+        {
+            string n = r.name;
+            return n != "Cabeca" && !n.StartsWith("Cabelo_") && !n.StartsWith("Penteado_");
+        }
+
+        /// <summary>Foto do rosto na cabeça e o corte de cabelo escolhido (as demais malhas de cabelo ficam desligadas).</summary>
+        public static void AplicarCabeca(GameObject go, Aparencia a)
+        {
+            Texture2D face = string.IsNullOrEmpty(a.rostoId) ? null : Resources.Load<Texture2D>("Rostos/" + a.modeloRosto + "/Rosto_" + a.rostoId);
+            string corte = "Cabelo_" + a.penteado;
+            foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r.name == "Cabeca")
+                {
+                    if (face == null) continue;
+                    r.GetPropertyBlock(mpb);
+                    mpb.SetTexture(BaseMap, face);
+                    r.SetPropertyBlock(mpb);
+                    mpb.Clear();
+                }
+                else if (r.name.StartsWith("Cabelo_"))
+                {
+                    bool on = r.name == corte;
+                    r.enabled = on;
+                    if (!on) continue;
+                    // cor do cabelo (a faixa branca do estilo antigo virou só cor clara)
+                    Color c = a.corCabelo.maxColorComponent > 0.001f ? a.corCabelo : new Color(0.1f, 0.075f, 0.06f);
+                    r.GetPropertyBlock(mpb);
+                    mpb.SetColor(BaseColor, c * 1.6f);   // a textura de fios é clara (~0,65): compensa para chegar na cor da foto
+                    r.SetPropertyBlock(mpb);
+                    mpb.Clear();
+                }
+            }
         }
     }
 }

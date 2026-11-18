@@ -379,6 +379,12 @@ namespace Craquez.EditorTools
             // Smoothness = 1.0f porque o canal Alpha do mapa MetallicSmoothness já contém o inverso exato do Roughness do Meshy (1 - Roughness)
             d["Jogador"] = Lit("Jogador", T("Jogador_Albedo"), T("Jogador_Normal"), T("Jogador_MetallicSmoothness"), Color.white, 1.0f, 0f, 1.0f);
             d["Goleiro"] = Lit("Goleiro", T("Goleiro_Albedo"), T("Goleiro_Normal"), T("Goleiro_MetallicSmoothness"), Color.white, 1.0f, 0f, 1.0f);
+            // cabeça separada: rosto (foto sintética projetada, tools/rostos.py) e cabelos 3D (tools/blender/cabeca_cabelos.py)
+            var rostoPadrao = AssetDatabase.LoadAssetAtPath<Texture2D>(Root + "/Resources/Rostos/Jogador/Rosto_25.jpg");
+            var rostoPadraoGk = AssetDatabase.LoadAssetAtPath<Texture2D>(Root + "/Resources/Rostos/Goleiro/Rosto_25.jpg");
+            d["Rosto"] = faceJogador = Lit("Rosto", rostoPadrao, null, null, Color.white, 0.32f);
+            d["RostoGoleiro"] = faceGoleiro = Lit("RostoGoleiro", rostoPadraoGk, null, null, Color.white, 0.32f);
+            d["Cabelo"] = cabeloMat = Lit("Cabelo", T("Cabelo_Albedo"), T("Cabelo_Normal"), null, new Color(0.16f, 0.12f, 0.1f), 0.38f, 0f, 0.7f);
             d["Bola"] = Lit("Bola", T("Bola_Albedo"), T("Bola_Normal"), T("Bola_MetallicSmoothness"), Color.white, 0.75f);
             d["Estadio"] = Lit("Estadio", T("Estadio_Albedo"), T("Estadio_Normal"), T("Estadio_MetallicSmoothness"), Color.white, 0.4f, 0f, 0.8f);
             d["GramaClara"] = Lit("GramaClara", T("Grama_Albedo"), T("Grama_Normal"), null, new Color(0.92f, 1f, 0.9f), 0.12f, 0f, 0.6f);
@@ -840,17 +846,38 @@ namespace Craquez.EditorTools
 
         static Bounds RendererBounds(GameObject go)
         {
-            var rs = go.GetComponentsInChildren<Renderer>();
-            if (rs.Length == 0) return new Bounds(go.transform.position, Vector3.zero);
-            Bounds b = rs[0].bounds;
-            for (int i = 1; i < rs.Length; i++) b.Encapsulate(rs[i].bounds);
+            // corpo e cabeça (os cabelos não entram: um black power não pode "encolher" o jogador na normalização da altura)
+            Bounds b = new Bounds(go.transform.position, Vector3.zero);
+            bool first = true;
+            foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r.name.StartsWith("Cabelo_")) continue;
+                if (first) { b = r.bounds; first = false; } else b.Encapsulate(r.bounds);
+            }
             return b;
+        }
+
+        /// <summary>Materiais da cabeça (foto do rosto) e dos cabelos 3D; só o corte padrão fica ligado no prefab.</summary>
+        static Material faceJogador, faceGoleiro, cabeloMat;
+        static void AssignHeadMaterials(GameObject go, string modelName)
+        {
+            foreach (var r in go.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r.name == "Cabeca") r.sharedMaterial = modelName == "Goleiro" ? faceGoleiro : faceJogador;
+                else if (r.name.StartsWith("Cabelo_"))
+                {
+                    r.sharedMaterial = cabeloMat;
+                    r.enabled = r.name == "Cabelo_Curto";
+                    r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+                }
+            }
         }
 
         static void AssignMaterial(GameObject go, Material m)
         {
             foreach (var r in go.GetComponentsInChildren<Renderer>())
             {
+                if (r.name == "Cabeca" || r.name.StartsWith("Cabelo_")) continue;
                 int n = 1;
                 var smr = r as SkinnedMeshRenderer;
                 if (smr != null && smr.sharedMesh != null) n = smr.sharedMesh.subMeshCount;
@@ -883,6 +910,7 @@ namespace Craquez.EditorTools
             anim.applyRootMotion = false;
             anim.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             AssignMaterial(model, mat);
+            AssignHeadMaterials(model, modelName);
 
             // normaliza a altura e apoia os pés no chão
             Bounds b = RendererBounds(model);

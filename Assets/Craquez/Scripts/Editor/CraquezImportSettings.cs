@@ -13,7 +13,7 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 19;
+        public const int Version = 20;
 
         static readonly string[] LoopClips =
         {
@@ -204,6 +204,23 @@ namespace Craquez.EditorTools
                 ti.textureCompression = TextureImporterCompression.Uncompressed;
             }
             if (f == "Rede") ti.mipmapEnabled = true;
+            if (assetPath.Contains("/Rostos/"))
+            {
+                // rostos: a UV da cabeça dá a volta (costura atrás) -> repete em U; 512 px bastam
+                ti.maxTextureSize = 512;
+                ti.wrapModeU = TextureWrapMode.Repeat;
+                ti.wrapModeV = TextureWrapMode.Clamp;
+                ti.mipmapEnabled = true;
+                ti.anisoLevel = 4;
+                ti.textureCompression = TextureImporterCompression.CompressedHQ;
+            }
+            if (f.StartsWith("Cabelo_"))
+            {
+                ti.maxTextureSize = 512;
+                ti.wrapMode = TextureWrapMode.Repeat;
+                ti.anisoLevel = 4;
+                ti.mipmapEnabled = true;
+            }
             if (f.StartsWith("Icone_") || f.StartsWith("Logo_"))
             {
                 ti.textureType = TextureImporterType.Default;

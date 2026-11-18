@@ -33,7 +33,10 @@ namespace Craquez
         /// <summary>Sorteia e aplica um formato de rosto; devolve a descrição (para o HUD).</summary>
         public static string Aplicar(GameObject go, System.Random rng)
         {
-            var smr = go.GetComponentInChildren<SkinnedMeshRenderer>();
+            // a cabeça é uma malha própria ("Cabeca"); modelos antigos tinham tudo numa malha só
+            SkinnedMeshRenderer smr = null;
+            foreach (var x in go.GetComponentsInChildren<SkinnedMeshRenderer>(true)) if (x.name == "Cabeca") { smr = x; break; }
+            if (smr == null) smr = go.GetComponentInChildren<SkinnedMeshRenderer>();
             var anim = go.GetComponentInChildren<Animator>();
             if (smr == null || smr.sharedMesh == null || anim == null || !anim.isHuman) return "";
             Mesh src = smr.sharedMesh;
