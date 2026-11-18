@@ -93,6 +93,17 @@ namespace Craquez
         public static string Glyph(string action)
         {
             var t = ControleConectado;
+            if (t == TipoControle.Nenhum && Platform.IsTv)
+            {
+                switch (action)
+                {
+                    case "rasteiro":
+                    case "passe":
+                    case "confirmar": return "OK";
+                    case "voltar":
+                    case "pausa": return "Voltar";
+                }
+            }
             bool circle = GameSettings.Layout == LayoutControle.ChuteNoCirculo;
             bool ps = t == TipoControle.PlayStation;
             switch (action)
@@ -218,17 +229,17 @@ namespace Craquez
             }
         }
 
-        /// <summary>Chute rasteiro (segurar para força): ✕ / A, tecla Z.</summary>
+        /// <summary>Chute rasteiro (segurar para força): ✕ / A, tecla Z, ou OK do controle remoto na TV.</summary>
         public static bool LowShot
         {
             get
             {
                 bool v = VirtualLow;
 #if ENABLE_INPUT_SYSTEM
-                if (Keyboard.current != null && Keyboard.current.zKey.isPressed) v = true;
+                if (Keyboard.current != null && (Keyboard.current.zKey.isPressed || (Platform.IsTv && (Keyboard.current.enterKey.isPressed || Keyboard.current.numpadEnterKey.isPressed)))) v = true;
                 if (Pad != null && Pad.buttonSouth.isPressed) v = true;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-                if (Input.GetKey(KeyCode.Z) || Input.GetKey(KeyCode.JoystickButton0)) v = true;
+                if (Input.GetKey(KeyCode.Z) || Input.GetKey(KeyCode.JoystickButton0) || (Platform.IsTv && (Input.GetKey(KeyCode.Return) || Input.GetKey(KeyCode.KeypadEnter)))) v = true;
 #endif
                 return v;
             }
@@ -419,16 +430,16 @@ namespace Craquez
             return x > 0f ? 1 : -1;
         }
 
-        /// <summary>Confirmar no menu: Enter/Espaço, ✕ (PlayStation) / A (Xbox).</summary>
+        /// <summary>Confirmar no menu: Enter/Espaço, OK do controle remoto da TV, ✕ (PlayStation) / A (Xbox).</summary>
         public static bool ConfirmPressed
         {
             get
             {
 #if ENABLE_INPUT_SYSTEM
-                if (Keyboard.current != null && (Keyboard.current.enterKey.wasPressedThisFrame || Keyboard.current.spaceKey.wasPressedThisFrame)) return true;
+                if (Keyboard.current != null && (Keyboard.current.enterKey.wasPressedThisFrame || Keyboard.current.numpadEnterKey.wasPressedThisFrame || Keyboard.current.spaceKey.wasPressedThisFrame)) return true;
                 if (Pad != null && Pad.buttonSouth.wasPressedThisFrame) return true;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-                if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.JoystickButton0)) return true;
+                if (Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.JoystickButton0)) return true;
 #endif
                 return false;
             }

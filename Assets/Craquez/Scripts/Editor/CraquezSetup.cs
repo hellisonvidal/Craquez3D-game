@@ -377,8 +377,8 @@ namespace Craquez.EditorTools
         {
             var d = new Dictionary<string, Material>();
             // Smoothness = 1.0f porque o canal Alpha do mapa MetallicSmoothness já contém o inverso exato do Roughness do Meshy (1 - Roughness)
-            d["Jogador"] = Lit("Jogador", T("Jogador_Albedo"), T("Jogador_Normal"), T("Jogador_MetallicSmoothness"), Color.white, 1.0f, 0f, 1.0f);
-            d["Goleiro"] = Lit("Goleiro", T("Goleiro_Albedo"), T("Goleiro_Normal"), T("Goleiro_MetallicSmoothness"), Color.white, 1.0f, 0f, 1.0f);
+            d["Jogador"] = Lit("Jogador", T("Uniformes/A_Casa") ?? T("Jogador_Albedo"), T("Jogador_Normal"), T("Jogador_MetallicSmoothness"), Color.white, 1.0f, 0f, 1.0f);
+            d["Goleiro"] = Lit("Goleiro", T("Uniformes/B_GoleiroCasa") ?? T("Goleiro_Albedo"), T("Goleiro_Normal"), T("Goleiro_MetallicSmoothness"), Color.white, 1.0f, 0f, 1.0f);
             // cabeça separada: rosto (foto sintética projetada, tools/rostos.py) e cabelos 3D (tools/blender/cabeca_cabelos.py)
             var rostoPadrao = AssetDatabase.LoadAssetAtPath<Texture2D>(Root + "/Resources/Rostos/Jogador/Rosto_25.jpg");
             var rostoPadraoGk = AssetDatabase.LoadAssetAtPath<Texture2D>(Root + "/Resources/Rostos/Goleiro/Rosto_25.jpg");
@@ -1156,12 +1156,12 @@ namespace Craquez.EditorTools
             boot.keeperPrefabA = keeperA;
             boot.refereePrefab = referee;
             boot.refereePrefabB = refereeB;
-            // uniformes iguais para o time inteiro: casa azul, visitante branco (tools/make_kits.py)
+            // uniformes iguais para o time inteiro: casa azul, visitante branco (tools/uniformes.py)
             boot.kitA_Casa = T("Uniformes/A_Casa");
             boot.kitB_Casa = boot.kitA_Casa;
             boot.kitA_Visitante = T("Uniformes/A_Visitante");
             boot.kitB_Visitante = boot.kitA_Visitante;
-            boot.kitB_GoleiroCasa = T("Goleiro_Albedo");
+            boot.kitB_GoleiroCasa = T("Uniformes/B_GoleiroCasa") ?? T("Goleiro_Albedo");
             boot.kitA_GoleiroVisitante = T("Uniformes/B_GoleiroVisitante");
             boot.kitA_Arbitro = T("Uniformes/A_Arbitro");
             boot.kitB_Arbitro = boot.kitA_Arbitro;
@@ -1194,17 +1194,26 @@ namespace Craquez.EditorTools
             return major * 10000 + minor * 100 + patch;
         }
 
+        public static bool IsTvFlavor()
+        {
+            const string f = "Assets/Craquez/Resources/flavor.txt";
+            return File.Exists(f) && File.ReadAllText(f).Trim().Equals("tv", StringComparison.OrdinalIgnoreCase);
+        }
+
         public static void SetupPlayerSettings()
         {
             string version = ReadVersion();
+            bool tv = IsTvFlavor();
             PlayerSettings.companyName = "Craquez";
-            PlayerSettings.productName = "Craquez 3D";
+            PlayerSettings.productName = tv ? "Craquez 3D TV" : "Craquez 3D";
             PlayerSettings.bundleVersion = version;
             PlayerSettings.Android.bundleVersionCode = Mathf.Max(1, VersionCode(version));
-            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, "com.craquez.craquez3d");
+            PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, tv ? "com.craquez.craquez3d.tv" : "com.craquez.craquez3d");
             PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Standalone, "com.craquez.craquez3d");
             PlayerSettings.SetScriptingBackend(NamedBuildTarget.Android, ScriptingImplementation.IL2CPP);
-            PlayerSettings.Android.targetArchitectures = AndroidArchitecture.ARM64;
+            // versão TV: 32 e 64 bits (muitas TVs Google TV / Android TV, inclusive TCL, rodam o sistema em 32 bits)
+            PlayerSettings.Android.targetArchitectures = tv ? (AndroidArchitecture.ARMv7 | AndroidArchitecture.ARM64) : AndroidArchitecture.ARM64;
+            PlayerSettings.Android.androidTVCompatibility = true;
             PlayerSettings.Android.forceInternetPermission = true;
             PlayerSettings.colorSpace = ColorSpace.Linear;
             PlayerSettings.defaultInterfaceOrientation = UIOrientation.AutoRotation;
@@ -1217,12 +1226,45 @@ namespace Craquez.EditorTools
             PlayerSettings.stripEngineCode = false;
             PlayerSettings.SetManagedStrippingLevel(NamedBuildTarget.Android, ManagedStrippingLevel.Minimal);
             SetupIcons();
+            SetupTvBanner();
             PlayerSettings.SetUseDefaultGraphicsAPIs(BuildTarget.Android, false);
             PlayerSettings.SetGraphicsAPIs(BuildTarget.Android, new[] { GraphicsDeviceType.Vulkan, GraphicsDeviceType.OpenGLES3 });
 #if UNITY_2023_1_OR_NEWER
             // o atualizador usa UnityPlayer.currentActivity
             PlayerSettings.Android.applicationEntry = AndroidApplicationEntry.Activity;
 #endif
+        }
+
+        /// <summary>Banner 320x180 da tela inicial do Android TV / Google TV (Leanback).</summary>
+        public static void SetupTvBanner()
+        {
+            string path = IconDir + "Banner_TV.png";
+            var ti = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (ti != null && (ti.textureCompression != TextureImporterCompression.Uncompressed || ti.mipmapEnabled))
+            {
+                ti.textureCompression = TextureImporterCompression.Uncompressed;
+                ti.mipmapEnabled = false;
+                ti.npotScale = TextureImporterNPOTScale.None;
+                ti.SaveAndReimport();
+            }
+            var banner = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            var ps = Unsupported.GetSerializedAssetInterfaceSingleton("PlayerSettings");
+            if (banner != null && ps != null)
+            {
+                var so = new SerializedObject(ps);
+                var en = so.FindProperty("androidEnableBanner");
+                if (en != null) en.boolValue = true;
+                var b = so.FindProperty("m_AndroidBanners");
+                if (b != null && b.isArray)
+                {
+                    if (b.arraySize == 0) b.arraySize = 1;
+                    var e = b.GetArrayElementAtIndex(0);
+                    e.FindPropertyRelative("width").intValue = 320;
+                    e.FindPropertyRelative("height").intValue = 180;
+                    e.FindPropertyRelative("banner").objectReferenceValue = banner;
+                }
+                so.ApplyModifiedPropertiesWithoutUndo();
+            }
         }
 
         const string IconDir = Root + "/Textures/Icone/";
@@ -1277,6 +1319,15 @@ namespace Craquez.EditorTools
             string v = CraquezSetup.ReadVersion();
             PlayerSettings.bundleVersion = v;
             PlayerSettings.Android.bundleVersionCode = Mathf.Max(1, CraquezSetup.VersionCode(v));
+            if (report.summary.platform == BuildTarget.Android)
+            {
+                bool tv = CraquezSetup.IsTvFlavor();
+                PlayerSettings.productName = tv ? "Craquez 3D TV" : "Craquez 3D";
+                PlayerSettings.SetApplicationIdentifier(NamedBuildTarget.Android, tv ? "com.craquez.craquez3d.tv" : "com.craquez.craquez3d");
+                PlayerSettings.Android.targetArchitectures = tv ? (AndroidArchitecture.ARMv7 | AndroidArchitecture.ARM64) : AndroidArchitecture.ARM64;
+                PlayerSettings.Android.androidTVCompatibility = true;
+                CraquezSetup.SetupTvBanner();
+            }
         }
     }
 }

@@ -58,7 +58,7 @@ namespace Craquez
         void Awake()
         {
             buttons = new[] { shoot, finesse, low, chip, sprint, skill, knock };
-            visible = Application.isMobilePlatform;
+            visible = Application.isMobilePlatform && !Platform.IsTv;
         }
 
         void OnDisable() { ClearVirtual(); }

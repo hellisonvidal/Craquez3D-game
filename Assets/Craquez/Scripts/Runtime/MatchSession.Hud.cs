@@ -33,11 +33,11 @@ namespace Craquez
             DrawControlsHint(s);
             if (GameSettings.MiniMapa) DrawMiniMap(s, W, H);
 
-            // botões do topo
-            float bw = 190 * s, bh = 68 * s, gap = 12 * s;
-            float bx = W - bw - 20 * s;
-            if (Phase != Fase.Fim)
+            // botões do topo (em celulares/PC com toque; na TV usa o controle)
+            if (Phase != Fase.Fim && !Platform.IsTv)
             {
+                float bw = 190 * s, bh = 68 * s, gap = 12 * s;
+                float bx = W - bw - 20 * s;
                 if (TopButton(new Rect(bx, 18 * s, bw, bh), "PAUSA", UiKit.Red, s)) { if (OnPauseRequested != null) OnPauseRequested(); return; }
                 if (TopButton(new Rect(bx - (bw + gap), 18 * s, bw, bh), "CÂMERA", UiKit.Blue, s)) CycleCamera();
             }
@@ -169,7 +169,7 @@ namespace Craquez
         /// <summary>Nome do comando conforme o aparelho: botão do controle, tecla ou botão de toque.</summary>
         static string Key(string action, string tecla, string toque)
         {
-            if (InputBridge.ControleConectado != TipoControle.Nenhum) return InputBridge.Glyph(action);
+            if (InputBridge.ControleConectado != TipoControle.Nenhum || Platform.IsTv) return InputBridge.Glyph(action);
             return Application.isMobilePlatform ? toque : tecla;
         }
 

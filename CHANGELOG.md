@@ -2,6 +2,12 @@
 
 Formato: [Versionamento Semântico](https://semver.org/lang/pt-BR/). A versão do app vem do arquivo `VERSION`.
 
+## [1.6.0] — 2026-11-18
+
+- **Rostos e cabelos 3D novos:** a cabeça dos jogadores e dos goleiros agora é uma malha separada (`Cabeca`) com fotos sintéticas projetadas em 3D (`Resources/Rostos/Jogador` e `Goleiro`, sem repetir dentro da partida) e 6 cortes de cabelo 3D ajustados ao crânio (`Curto`, `BlackPower`, `Moicano`, `Topete`, `Raspado`, `Cacheado`, além de `Careca`), com a cor do cabelo e o tom de pele do corpo acompanhando o rosto (`tools/blender/cabeca_cabelos.py` e `tools/rostos.py`).
+- **Uniformes novos e trama de tecido:** camisa, calção, meiões e chuteiras pintados em 3D direto no corpo (`tools/uniformes.py`), contínuos entre as ilhas da UV e sem marcas antigas: Craquez FC azul com listras finas brancas, Atlético Celeste branco com faixa diagonal celeste, goleiro da casa verde, goleiro visitante laranja e arbitragem preta com detalhes amarelo-limão. Cada visual de pele tem sua própria cor de chuteira e a trama do tecido (`Fabric026`, CC0) foi somada ao normal map das regiões de pano.
+- **Versão para TV (`Craquez3D-TV-v1.6.0.apk`, Google TV / Android TV 4K):** pacote próprio (`com.craquez.craquez3d.tv`, nome "Craquez 3D TV"), 32 e 64 bits (ARMv7 + ARM64, compatível com TVs Google TV / Android TV de 32 bits como TCL), banner na tela inicial da TV (Leanback), funcionamento completo por controle remoto (setas + OK + Voltar) ou joystick Bluetooth/USB sem botões de toque na tela, renderização 3D escalada (720p/1080p/1440p) mantendo menus e placar nítidos em 4K nativo, e atualização pelo próprio app buscando o APK de TV.
+
 ## [1.5.0] — 2026-11-18
 
 - **Jogadas novas (animações próprias, para os dois lados):** finta de corpo (ameaça um lado e sai pelo outro), pedalada (a perna passa por cima da bola antes de sair), puxada com a sola, arrancada explosiva (primeiras passadas com o tronco à frente) e freada brusca vinda do sprint. Geradas com o kit de poses do projeto no esqueleto do próprio Jogador.fbx (`tools/blender/jogadoranim`).

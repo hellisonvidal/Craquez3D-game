@@ -406,19 +406,22 @@ namespace Craquez
                         change = d => GameSettings.Layout = GameSettings.Layout == LayoutControle.ChuteNoCirculo ? LayoutControle.ChuteNoQuadrado : LayoutControle.ChuteNoCirculo
                     });
                     items.Add(new Item { label = "Controle conectado", tipo = Tipo.Info, value = ControllerName });
-                    items.Add(new Item
+                    if (!Platform.IsTv)
                     {
-                        section = "TOQUE", label = "Analógico", tipo = Tipo.Lista,
-                        value = () => GameSettings.Joystick == ModoJoystick.Fixo ? "Fixo" : (GameSettings.Joystick == ModoJoystick.Ancorado ? "Ancorado" : "Flutuante"),
-                        change = d => GameSettings.Joystick = (ModoJoystick)(((int)GameSettings.Joystick + d + 3) % 3)
-                    });
-                    items.Add(new Item
-                    {
-                        label = "Tamanho dos botões", tipo = Tipo.Lista,
-                        value = () => GameSettings.TamanhoControles == 0 ? "Pequeno" : (GameSettings.TamanhoControles == 2 ? "Grande" : "Médio"),
-                        change = d => GameSettings.TamanhoControles = (GameSettings.TamanhoControles + d + 3) % 3
-                    });
-                    items.Add(new Item { label = "Correr no analógico (borda)", tipo = Tipo.Alternar, on = () => GameSettings.CorrerNoAnalogico, change = d => GameSettings.CorrerNoAnalogico = !GameSettings.CorrerNoAnalogico });
+                        items.Add(new Item
+                        {
+                            section = "TOQUE", label = "Analógico", tipo = Tipo.Lista,
+                            value = () => GameSettings.Joystick == ModoJoystick.Fixo ? "Fixo" : (GameSettings.Joystick == ModoJoystick.Ancorado ? "Ancorado" : "Flutuante"),
+                            change = d => GameSettings.Joystick = (ModoJoystick)(((int)GameSettings.Joystick + d + 3) % 3)
+                        });
+                        items.Add(new Item
+                        {
+                            label = "Tamanho dos botões", tipo = Tipo.Lista,
+                            value = () => GameSettings.TamanhoControles == 0 ? "Pequeno" : (GameSettings.TamanhoControles == 2 ? "Grande" : "Médio"),
+                            change = d => GameSettings.TamanhoControles = (GameSettings.TamanhoControles + d + 3) % 3
+                        });
+                        items.Add(new Item { label = "Correr no analógico (borda)", tipo = Tipo.Alternar, on = () => GameSettings.CorrerNoAnalogico, change = d => GameSettings.CorrerNoAnalogico = !GameSettings.CorrerNoAnalogico });
+                    }
                     items.Add(new Item
                     {
                         section = "CÂMERA", label = "Câmera padrão", tipo = Tipo.Lista,
@@ -474,7 +477,7 @@ namespace Craquez
                 case TipoControle.Xbox: return "Xbox";
                 case TipoControle.Nintendo: return "Nintendo";
                 case TipoControle.Generico: return "Genérico";
-                default: return "Nenhum";
+                default: return Platform.IsTv ? "Controle remoto" : "Nenhum";
             }
         }
 
@@ -566,7 +569,7 @@ namespace Craquez
             // só texto (sem moldura), aparece depois que o vídeo termina no logo
             float fade = Mathf.Clamp01((telaTime - 0.15f) / 0.6f);
             float pulse = 0.55f + 0.45f * Mathf.Sin(Time.unscaledTime * 3.2f);
-            string txt = InputBridge.ControleConectado != TipoControle.Nenhum && !Application.isMobilePlatform
+            string txt = Platform.IsTv || InputBridge.ControleConectado != TipoControle.Nenhum || !Application.isMobilePlatform
                 ? "PRESSIONE QUALQUER BOTÃO" : "TOQUE NA TELA PARA INICIAR";
             Rect tr = new Rect(0, H * LogoTextY, W, 70 * S);
             UiKit.Text(tr, txt, new GUIStyle(ui.Pill) { alignment = TextAnchor.MiddleCenter }, new Color(1f, 1f, 1f, fade * (0.55f + 0.45f * pulse)), 2 * S);
@@ -951,11 +954,11 @@ namespace Craquez
         {
             float h = 56 * S;
             string hint;
-            if (InputBridge.ControleConectado != TipoControle.Nenhum || !Application.isMobilePlatform)
+            if (Platform.IsTv || InputBridge.ControleConectado != TipoControle.Nenhum || !Application.isMobilePlatform)
                 hint = InputBridge.Glyph("confirmar") + " Selecionar     " + InputBridge.Glyph("voltar") + " Voltar     ‹ › Alterar";
             else hint = "Toque para escolher";
             UiKit.Text(new Rect(70 * S, H - h - 14 * S, W * 0.6f, h), hint, ui.Small, UiKit.A(Color.white, 0.75f), 0f);
-            string right = "v" + Application.version;
+            string right = (Platform.TvBuild ? "TV  •  v" : "v") + Application.version;
             var ctl = InputBridge.ControleConectado;
             if (ctl != TipoControle.Nenhum) right = "Controle " + ControllerName() + " conectado     " + right;
             UiKit.Text(new Rect(W * 0.4f, H - h - 14 * S, W * 0.6f - 50 * S, h), right, new GUIStyle(ui.Small) { alignment = TextAnchor.MiddleRight }, UiKit.A(Color.white, 0.6f), 0f);

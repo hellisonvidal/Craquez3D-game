@@ -126,14 +126,14 @@ namespace Craquez
             {
                 new TimeInfo
                 {
-                    nome = "Craquez FC", sigla = "CRQ", cor = new Color(0.86f, 0.12f, 0.12f), corSecundaria = new Color(0.08f, 0.08f, 0.09f),
+                    nome = "Craquez FC", sigla = "CRQ", cor = new Color(0.12f, 0.31f, 0.82f), corSecundaria = new Color(0.95f, 0.95f, 0.95f),
                     indice = 0, attackDir = 1f, formacao = forms[rng.Next(forms.Length)],
                     pressao = 0.6f, linhaDefensiva = 0.55f, largura = 0.85f, verticalidade = 0.55f,
                     kitA = kitA_Casa, kitB = kitB_Casa, kitGoleiro = kitB_GoleiroCasa, goleiroModeloA = false
                 },
                 new TimeInfo
                 {
-                    nome = "Atlético Celeste", sigla = "ATC", cor = new Color(0.15f, 0.5f, 0.97f), corSecundaria = new Color(0.94f, 0.95f, 0.97f),
+                    nome = "Atlético Celeste", sigla = "ATC", cor = new Color(0.36f, 0.72f, 0.91f), corSecundaria = new Color(0.95f, 0.95f, 0.95f),
                     indice = 1, attackDir = -1f, formacao = forms[rng.Next(forms.Length)],
                     pressao = 0.45f, linhaDefensiva = 0.45f, largura = 0.9f, verticalidade = 0.45f,
                     kitA = kitA_Visitante, kitB = kitB_Visitante, kitGoleiro = kitA_GoleiroVisitante, goleiroModeloA = false

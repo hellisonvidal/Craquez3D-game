@@ -1,7 +1,7 @@
-# Gera o APK Android na nuvem e publica uma Release no GitHub.
+# Gera os APKs Android (celular e TV) na nuvem e publica uma Release no GitHub.
 # - Automático: a cada push na main que altere o arquivo VERSION.
 # - Manual: aba Actions -> "Android: build e Release" -> Run workflow (qualquer branch).
-# A Release (tag vX.Y.Z + APK) é o que o atualizador dentro do app baixa.
+# A Release (tag vX.Y.Z + Craquez3D-vX.Y.Z.apk + Craquez3D-TV-vX.Y.Z.apk) é o que o atualizador dentro do app baixa.
 name: "Android: build e Release"
 
 on:
@@ -11,7 +11,7 @@ on:
   workflow_dispatch:
     inputs:
       publicar:
-        description: "Publicar Release (se desmarcado, só gera o APK como artefato)"
+        description: "Publicar Release (se desmarcado, só gera os APKs como artefatos)"
         type: boolean
         default: true
 
@@ -24,8 +24,21 @@ concurrency:
 
 jobs:
   android:
+    name: "Android (${{ matrix.nome }})"
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - nome: Celular
+            prefixo: Craquez3D
+            tv: false
+          # versão para TV (Google TV / Android TV 4K, ex.: TCL C6K): pacote próprio (com.craquez.craquez3d.tv),
+          # 32 e 64 bits (ARMv7 + ARM64), banner de TV e escala de resolução 4K
+          - nome: TV
+            prefixo: Craquez3D-TV
+            tv: true
     steps:
       - name: Conferir segredos
         env:
@@ -58,10 +71,11 @@ jobs:
           IFS=. read -r MA MI PA <<< "$V"
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "code=$((MA*10000 + MI*100 + PA))" >> "$GITHUB_OUTPUT"
-          # pula só se a Release já tiver o arquivo desta plataforma (Android e Windows dividem a mesma Release)
-          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null | grep -q '\.apk$'; then
+          ARQ="${{ matrix.prefixo }}-v$V.apk"
+          # pula só se a Release já tiver este arquivo específico (Celular, TV e Windows dividem a mesma Release)
+          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null | grep -Fxq "$ARQ"; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::A Release v$V já tem o arquivo .apk. O APK será gerado só como artefato; aumente o arquivo VERSION para publicar outra."
+            echo "::warning::A Release v$V já tem o arquivo $ARQ. O APK será gerado só como artefato; aumente o arquivo VERSION para publicar outra."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
@@ -83,7 +97,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: Library
-          key: Library-Android-v2-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+          key: Library-Android-${{ matrix.prefixo }}-v2-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
+
+      - name: Configurar variante TV
+        if: matrix.tv
+        run: |
+          mkdir -p Assets/Craquez/Resources
+          echo tv > Assets/Craquez/Resources/flavor.txt
 
       - name: Build Android (Unity)
         uses: game-ci/unity-builder@v4
@@ -92,8 +112,9 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
+          allowDirtyBuild: ${{ matrix.tv }}
           targetPlatform: Android
-          buildName: Craquez3D
+          buildName: ${{ matrix.prefixo }}
           buildMethod: Craquez.EditorTools.CraquezCI.BuildAndroid
           versioning: Custom
           version: ${{ steps.v.outputs.version }}
@@ -111,15 +132,16 @@ jobs:
           APK=$(sudo find build -name '*.apk' | head -n1)
           if [ -z "$APK" ]; then echo "::error::Nenhum APK gerado"; exit 1; fi
           mkdir -p saida
-          sudo cp "$APK" "saida/Craquez3D-v${{ steps.v.outputs.version }}.apk"
+          ARQ="${{ matrix.prefixo }}-v${{ steps.v.outputs.version }}.apk"
+          sudo cp "$APK" "saida/$ARQ"
           sudo chown -R "$(id -u):$(id -g)" saida
-          echo "file=saida/Craquez3D-v${{ steps.v.outputs.version }}.apk" >> "$GITHUB_OUTPUT"
+          echo "file=saida/$ARQ" >> "$GITHUB_OUTPUT"
           ls -lh saida
 
       - name: Guardar APK (artefato)
         uses: actions/upload-artifact@v4
         with:
-          name: Craquez3D-v${{ steps.v.outputs.version }}-android
+          name: ${{ matrix.prefixo }}-v${{ steps.v.outputs.version }}-android
           path: ${{ steps.apk.outputs.file }}
           retention-days: 30
 

@@ -1,4 +1,6 @@
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace Craquez
 {
@@ -138,10 +140,19 @@ namespace Craquez
             Application.targetFrameRate = q == QualidadeGrafica.Baixa ? 30 : 60;
             // qualidade baixa: texturas na metade da resolução (menos memória e banda nos celulares fracos)
             QualitySettings.globalTextureMipmapLimit = q == QualidadeGrafica.Baixa ? 1 : 0;
-            if (Application.isMobilePlatform)
+            var urp = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+            if (Platform.IsTv)
+            {
+                // TV (Google TV / Android TV 4K): mantém a tela na resolução nativa (menus e placar nítidos em 4K)
+                // e desenha o 3D em 720p/1080p/1440p pelo renderScale do URP (leve para o processador da TV)
+                int h = Screen.height > 0 ? Screen.height : 1080;
+                if (urp != null) urp.renderScale = Mathf.Clamp((float)Platform.TvMaxRenderHeight(q) / h, 0.35f, 1f);
+            }
+            else if (Application.isMobilePlatform)
             {
                 if (baseW == 0) { baseW = Screen.width; baseH = Screen.height; }
                 float s = q == QualidadeGrafica.Baixa ? 0.7f : (q == QualidadeGrafica.Media ? 0.85f : 1f);
+                if (urp != null) urp.renderScale = 1f;
                 Screen.SetResolution(Mathf.RoundToInt(baseW * s), Mathf.RoundToInt(baseH * s), true);
             }
             if (RenderSettings.sun != null)

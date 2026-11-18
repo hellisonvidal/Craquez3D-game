@@ -228,11 +228,14 @@ namespace Craquez
             DrawWindArrow(new Vector2(info.x + 330 * s, info.y + 66 * s), 34 * s);
             UiKit.Text(new Rect(info.x + 24 * s, info.y + 80 * s, 400 * s, 28 * s), "Câmera: " + CameraRig.Nome(cameraRig.mode), ui.Tiny, UiKit.A(UiKit.TextDim, 0.85f), 0f);
 
-            // botões do topo
-            float bw = 190 * s, bh = 68 * s, gap = 12 * s;
-            float bx = W - bw - 20 * s;
-            if (TopButton(new Rect(bx, 18 * s, bw, bh), "PAUSA", UiKit.Red, s)) { if (OnPauseRequested != null) OnPauseRequested(); return; }
-            if (TopButton(new Rect(bx - (bw + gap), 18 * s, bw, bh), "CÂMERA", UiKit.Blue, s)) cameraRig.Cycle();
+            // botões do topo (em celulares/PC com toque; na TV usa o controle)
+            if (!Platform.IsTv)
+            {
+                float bw = 190 * s, bh = 68 * s, gap = 12 * s;
+                float bx = W - bw - 20 * s;
+                if (TopButton(new Rect(bx, 18 * s, bw, bh), "PAUSA", UiKit.Red, s)) { if (OnPauseRequested != null) OnPauseRequested(); return; }
+                if (TopButton(new Rect(bx - (bw + gap), 18 * s, bw, bh), "CÂMERA", UiKit.Blue, s)) cameraRig.Cycle();
+            }
 
             // barra de força
             if (player.Charging && Role == PapelControle.Atacante)
@@ -307,10 +310,10 @@ namespace Craquez
         string Hint()
         {
             var t = InputBridge.ControleConectado;
-            if (t != TipoControle.Nenhum)
+            if (t != TipoControle.Nenhum || Platform.IsTv)
             {
                 if (Role == PapelControle.Goleiro)
-                    return "Analógico: mover   " + InputBridge.Glyph("chute") + " + direção: mergulhar   " + InputBridge.Glyph("colocado") + ": defesa   " +
+                    return "Analógico/Setas: mover   " + InputBridge.Glyph("chute") + " + direção: mergulhar   " + InputBridge.Glyph("colocado") + ": defesa   " +
                            InputBridge.Glyph("cavadinha") + ": saltar   " + InputBridge.Glyph("correr") + ": sair do gol   " + InputBridge.Glyph("camera") + ": câmera   " + InputBridge.Glyph("pausa") + ": pausa";
                 return InputBridge.Glyph("correr") + " correr   " + InputBridge.Glyph("chute") + " chute   " + InputBridge.Glyph("colocado") + " colocado   " +
                        InputBridge.Glyph("cavadinha") + " cavadinha   " + InputBridge.Glyph("rasteiro") + " rasteiro (segure = força)   " +

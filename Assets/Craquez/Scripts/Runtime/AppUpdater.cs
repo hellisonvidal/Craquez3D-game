@@ -95,7 +95,8 @@ namespace Craquez
                         if (a == null || string.IsNullOrEmpty(a.name)) continue;
                         string n = a.name.ToLowerInvariant();
 #if UNITY_ANDROID
-                        if (n.EndsWith(".apk")) { downloadUrl = a.browser_download_url; break; }
+                        // a versão de TV se atualiza com o APK de TV (32 e 64 bits); o celular, com o APK de celular
+                        if (n.EndsWith(".apk") && Platform.TvBuild == n.Contains("-tv")) { downloadUrl = a.browser_download_url; break; }
 #else
                         if (n.EndsWith(".zip") || n.EndsWith(".exe")) { downloadUrl = a.browser_download_url; break; }
 #endif

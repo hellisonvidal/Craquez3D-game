@@ -85,7 +85,7 @@ def corpo(npz, ref, cloth_fn):
         if reg.sum() < 100: continue
         l = ndimage.gaussian_filter(np.where(reg, lum, np.median(lum[reg])), 5)
         sombra = np.where(reg, np.clip(l / max(np.median(lum[reg]), 1e-3), 0.8, 1.12), sombra)
-    return dict(P=P, X=X, Y=Y, Z=Z, NY=P[..., 7], B=B, bone=bone, J=J, R=R, camisa=camisa, calcao=calcao, meiao=meiao,
+    return dict(P=P, X=X, Y=Y, Z=Z, NX=P[..., 4], NY=P[..., 5], B=B, bone=bone, J=J, R=R, camisa=camisa, calcao=calcao, meiao=meiao,
                 pe=pe, pele=pele, mao=mao, sombra=sombra, bainha=bainha, zj=zj, zt=zt, zo=zo, lum=lum)
 
 
@@ -107,7 +107,7 @@ def pintar(c, kit):
         k = (z1 - z0) / (x1 - x0)
         dist = np.abs((Z - z0) - k * (X - x0)) / np.sqrt(1 + k * k)
         cam[tronco & (dist < lar / 2)] = cor
-    if kit.get('ombros'):
+    if kit.get('ombros') is not None:
         cam[c['camisa'] & (Z > c['zo'] - 0.05) & (np.abs(X) > 0.11)] = kit['ombros']
     # gola e punhos
     gola = c['camisa'] & (Z > c['J']['Neck'][2] - 0.035)
@@ -117,15 +117,15 @@ def pintar(c, kit):
         xmax = np.abs(X[braco]).max()
         cam[braco & (np.abs(X) > xmax - 0.025)] = kit['gola']
     # laterais (faixa sob o braço, até a barra)
-    if kit.get('lateral'):
-        side = tronco & (np.abs(c['P'][..., 6]) > 0.75) & (Z < c['zo'] - 0.08)
+    if kit.get('lateral') is not None:
+        side = tronco & (np.abs(c['NX']) > 0.75) & (Z < c['zo'] - 0.08)
         cam[side] = kit['lateral']
     out[c['camisa']] = cam[c['camisa']]
     # ---- calção
     cal = np.zeros((N, N, 3), np.float32) + kit['calcao']
     reg = c['calcao']
     if reg.any() and kit.get('calcao_faixa') is not None:
-        lado = reg & (np.abs(c['P'][..., 6]) > 0.8)
+        lado = reg & (np.abs(c['NX']) > 0.8)
         cal[lado] = kit['calcao_faixa']
         cal[reg & (Z < c['zj'] + 0.27) & (Z > c['zj'] + 0.255)] = kit['calcao_faixa']   # barra
     out[reg] = cal[reg]
