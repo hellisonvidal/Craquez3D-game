@@ -75,12 +75,13 @@ jobs:
           docker-images: false
           swap-storage: false
 
+      # só cache com a chave exata: restaurar a Library de uma versão anterior fazia a Unity ser morta
+      # (exit 137) ao recarregar os scripts em alguns builds (v1.1.4, v1.5.0)
       - name: Cache da pasta Library
         uses: actions/cache@v4
         with:
           path: Library
           key: Library-Windows-v2-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}
-          restore-keys: Library-Windows-v2-
 
       - name: Build Windows (Unity)
         uses: game-ci/unity-builder@v4
