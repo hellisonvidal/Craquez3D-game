@@ -45,7 +45,7 @@ namespace Craquez
 
         [Header("Chute")]
         [Tooltip("Tempo para carregar o chute totalmente (s)")]
-        public float chargeTime = 0.85f;
+        public float chargeTime = 0.7f;
 
         public bool InputEnabled { get; set; }
 
@@ -356,6 +356,14 @@ namespace Craquez
                     accelRate = deceleration * 1.15f * grip;
                 }
             }
+            // freada brusca vinda de um sprint: animação própria (corpo para trás, perna da frente travando)
+            if (currentSpeed > 6f && targetSpeed < 1f && !kicking && !Sliding && !fallen && Time.time > freadaCooldown && anim != null &&
+                anim.GetCurrentAnimatorStateInfo(0).IsName("Locomocao") && !anim.IsInTransition(0))
+            {
+                freadaCooldown = Time.time + 1.5f;
+                Play("Freada", 0.1f);
+            }
+            UpdatePendingCut();
             if (!Sliding && !fallen) velocity = Vector3.MoveTowards(velocity, target, accelRate * dt);
 
             Vector3 p = transform.position + velocity * dt;
@@ -725,9 +733,11 @@ namespace Craquez
             }
             Vector3 wd = w.normalized;
             float dot = Vector3.Dot(wd, fwd);
+            bool toRight = Vector3.Dot(Vector3.Cross(Vector3.up, fwd), wd) >= 0f;
             if (dot < -0.45f)
             {
                 // Puxada (meia-lua para trás): bola volta com rotação compatível, jogador gira
+                Play(toRight ? "PuxadaDir" : "PuxadaEsq", 0.08f);
                 Vector3 vPull = new Vector3(wd.x * 3.2f, bv.y, wd.z * 3.2f);
                 Compat.SetVelocity(ball.Body, vPull);
                 ball.Body.angularVelocity = Vector3.Cross(Vector3.up, wd) * (3.2f / Arena.BallRadius);
@@ -738,22 +748,69 @@ namespace Craquez
             }
             else
             {
-                // Corte lateral / finta de corpo: bola e corpo saem juntos para o lado
                 Vector3 side = Vector3.Cross(Vector3.up, fwd);
                 if (Vector3.Dot(side, wd) < 0f) side = -side;
                 Vector3 dir = (side * 0.85f + fwd * 0.45f).normalized;
-                float sp = Mathf.Max(velocity.magnitude * 0.8f, 3.2f);
-                Vector3 vCut = new Vector3(dir.x * (sp + 2.2f), bv.y, dir.z * (sp + 2.2f));
-                Compat.SetVelocity(ball.Body, vCut);
-                ball.Body.angularVelocity = Vector3.Cross(Vector3.up, dir) * ((sp + 2.2f) / Arena.BallRadius);
-                velocity = dir * sp;
-                burstUntil = Time.time + 0.45f;
-                StartTouchDecay(dir, 2.2f, 0.45f);
-                if (anim != null) anim.CrossFadeInFixedTime("Drible", 0.08f, 0, 0f);
-                Move("CORTE");
+                if (velocity.magnitude < 2.5f)
+                {
+                    // devagar: corte seco, bola e corpo saem juntos para o lado
+                    ExecuteCut(dir);
+                    if (anim != null) anim.CrossFadeInFixedTime("Drible", 0.08f, 0, 0f);
+                    Move("CORTE");
+                }
+                else
+                {
+                    // em velocidade: finta de corpo ou pedalada; a bola sai para o lado depois da finta
+                    bool pedalada = Random.value < 0.45f;
+                    string st = (pedalada ? "Pedalada" : "FintaCorpo") + (toRight ? "Dir" : "Esq");
+                    if (anim != null && anim.HasState(0, Animator.StringToHash(st)))
+                    {
+                        Play(st, 0.08f);
+                        cutDir = dir;
+                        cutAt = Time.time + (pedalada ? 0.5f : 0.4f);  // ~quadro em que o pé de saída leva a bola (ritmo 1,3x)
+                        velocity *= 0.8f;
+                        skillCooldown = Time.time + 0.9f; // a jogada inteira dura ~0,8 s
+                        Move(pedalada ? "PEDALADA" : "FINTA DE CORPO");
+                    }
+                    else
+                    {
+                        ExecuteCut(dir);
+                        if (anim != null) anim.CrossFadeInFixedTime("Drible", 0.08f, 0, 0f);
+                        Move("CORTE");
+                    }
+                }
             }
             lastTouchAt = Time.time;
             nextTouchAt = Time.time + 0.3f;
+        }
+
+        // finta/pedalada em andamento: direção e instante em que a bola sai para o lado
+        Vector3 cutDir;
+        float cutAt = -1f, freadaCooldown;
+
+        /// <summary>Bola e corpo saem juntos na direção do drible (corte, ou o fim da finta/pedalada).</summary>
+        void ExecuteCut(Vector3 dir)
+        {
+            if (ball == null) return;
+            Vector3 bv = ball.Velocity;
+            float sp = Mathf.Max(velocity.magnitude * 0.8f, 3.2f);
+            Vector3 vCut = new Vector3(dir.x * (sp + 2.2f), bv.y, dir.z * (sp + 2.2f));
+            Compat.SetVelocity(ball.Body, vCut);
+            ball.Body.angularVelocity = Vector3.Cross(Vector3.up, dir) * ((sp + 2.2f) / Arena.BallRadius);
+            velocity = dir * sp;
+            burstUntil = Time.time + 0.45f;
+            StartTouchDecay(dir, 2.2f, 0.45f);
+            lastTouchAt = Time.time;
+            nextTouchAt = Time.time + 0.3f;
+        }
+
+        void UpdatePendingCut()
+        {
+            if (cutAt < 0f || Time.time < cutAt) return;
+            cutAt = -1f;
+            if (ball == null || Incapacitated || Sliding) return;
+            Vector3 to = ball.Body.position - transform.position; to.y = 0f;
+            if (to.magnitude < 1.4f && ball.Body.position.y < 0.5f) ExecuteCut(cutDir); // perdeu a bola na finta: não corta
         }
 
         void StartTouchDecay(Vector3 dir, float extra, float duration)
@@ -926,6 +983,7 @@ namespace Craquez
                 ball.Body.angularVelocity = Vector3.Cross(Vector3.up, wd) * (vk.magnitude / Arena.BallRadius) * 0.75f;
                 StartTouchDecay(wd, extraK, 3.4f);
                 burstUntil = now + 1.4f;
+                Play("Arrancada", 0.08f);
                 Move("ARRANCADA");
             }
             else
@@ -953,6 +1011,8 @@ namespace Craquez
         Vector3 ComputeShot(TipoChute t, float power, Vector2 aim, float offFoot, out Vector3 spin)
         {
             Vector3 from = ball.Body.position;
+            // força efetiva: um toque rápido já sai com ~40% (antes ~10%: chute "mascado") e a curva cresce rápido no começo
+            float pw = Mathf.Lerp(0.4f, 1f, Mathf.Sqrt(Mathf.Clamp01(power)));
             Vector3 fwd = transform.forward;
             float dirX = attackDir >= 0f ? 1f : -1f;
             float goalX = dirX * (Arena.HalfLength + 0.25f);
@@ -972,7 +1032,7 @@ namespace Craquez
 
             if (!towardGoal)
             {
-                speed = Mathf.Lerp(10f, 28f, power);
+                speed = Mathf.Lerp(12f, 30f, pw);
                 Vector3 dir = aimW.sqrMagnitude > 0.06f ? aimW.normalized : fwd;
                 float elev = t == TipoChute.Cavadinha ? 35f : (t == TipoChute.Colocado ? 9f : (t == TipoChute.Rasteiro ? 1.5f : Mathf.Lerp(3f, 16f, power)));
                 v = Quaternion.AngleAxis(-elev, Vector3.Cross(Vector3.up, dir)) * dir * speed;
@@ -992,9 +1052,9 @@ namespace Craquez
             float ty;
             switch (t)
             {
-                case TipoChute.Forte: ty = Mathf.Lerp(0.25f, 2.0f, Mathf.Pow(power, 1.5f)); speed = Mathf.Lerp(14f, 33f, power); break;
-                case TipoChute.Colocado: ty = Mathf.Lerp(0.5f, 1.75f, power); speed = Mathf.Lerp(12f, 24f, power); break;
-                case TipoChute.Rasteiro: ty = 0.14f; speed = Mathf.Lerp(15f, 29f, power); break;
+                case TipoChute.Forte: ty = Mathf.Lerp(0.25f, 2.0f, Mathf.Pow(power, 1.5f)); speed = Mathf.Lerp(15f, 34f, pw); break;
+                case TipoChute.Colocado: ty = Mathf.Lerp(0.5f, 1.75f, power); speed = Mathf.Lerp(13f, 26f, pw); break;
+                case TipoChute.Rasteiro: ty = 0.14f; speed = Mathf.Lerp(15f, 30f, pw); break;
                 default: ty = 2.0f; speed = 0f; break;
             }
             Vector3 T = new Vector3(goalX, ty, tz);
@@ -1189,15 +1249,17 @@ namespace Craquez
             if (!passLofted)
             {
                 float roll = ws != null ? ws.RollingDeceleration : 1.1f;
-                float arrive = Mathf.Lerp(4.5f, 7.5f, Mathf.Clamp01(D / 40f));
+                // a bola chega ao companheiro a 7,5–11 m/s (antes 4,5–7,5: passe lento, fácil de cortar);
+                // um passe de 20 m sai a ~13 m/s, como no futebol profissional
+                float arrive = Mathf.Lerp(7.5f, 11f, Mathf.Clamp01(D / 40f));
                 float v0 = Mathf.Sqrt(arrive * arrive + 2f * roll * 1.7f * D) * lenErr;
-                v0 = Mathf.Clamp(v0, 5f, 25f);
+                v0 = Mathf.Clamp(v0, 8f, 28f);
                 v = dir * v0 + Vector3.up * 0.35f;
                 spin = Vector3.Cross(Vector3.up, dir) * (v0 / Arena.BallRadius) * 0.8f;
             }
             else
             {
-                float T = Mathf.Clamp(D / 17f, 0.75f, 2.5f);
+                float T = Mathf.Clamp(D / 20f, 0.7f, 2.2f);      // lançamento mais tenso (antes D/17, até 2,5 s no ar)
                 float g = -Physics.gravity.y;
                 float horiz = D / T * 1.08f * lenErr;            // compensa o arrasto do ar
                 v = dir * horiz + Vector3.up * (0.5f * g * T + 0.2f);
@@ -1246,6 +1308,7 @@ namespace Craquez
 
         void CancelActions()
         {
+            cutAt = -1f;
             Charging = false; Charge = 0f;
             kickPending = false; passPending = false;
             HasPossession = false;
