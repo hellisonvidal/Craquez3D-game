@@ -18,7 +18,7 @@ namespace Craquez
     /// </summary>
     public class AppUpdater : MonoBehaviour
     {
-        public const string Repository = "hellisonvidal/Craquez-3D";
+        public const string Repository = "hellisonvidal/Craquez3D-game";
 
         public enum Estado { Ocioso, Verificando, EmDia, Disponivel, Baixando, Pronto, Instalando, Erro, SemConexao }
 
