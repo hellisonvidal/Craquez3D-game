@@ -32,6 +32,8 @@ namespace Craquez
 
         /// <summary>Disparado sempre que a bola é chutada.</summary>
         public static event Action<ShotInfo> OnShot;
+        /// <summary>Disparado quando a bola explode na trave ou travessão (força normalizada 0..1).</summary>
+        public static event Action<float> OnPostHit;
         /// <summary>Disparado quando a bola bate em algo com força (posição, velocidade de impacto, collider).</summary>
         public event Action<Vector3, float, Collider> OnImpact;
 
@@ -49,12 +51,13 @@ namespace Craquez
         float splashCooldown;
         float bounceTarget = 0.62f;
         float knuckleSeed;
+        Vector3 prevStepVel, prevStepSpin;
+        int lastBounceFrame = -10;
 
         // Particle & Audio integration
         ParticleSystem ballTrail;
         bool trailActive;
         float lastImpactTime;
-        float lastBounceTime;
 
         void Awake()
         {
@@ -227,13 +230,20 @@ namespace Craquez
             Superficie surf = pf != null ? pf.SurfaceAt(Body.position, out depth) : Superficie.Grama;
             float wet = ws != null && ws.P != null ? ws.P.wetness : 0f;
 
-            // --- quique (resolvido aqui; o collider do chão não tem atrito nem restituição)
-            if (v.y < -0.35f && Body.position.y + v.y * dt <= Arena.BallRadius + 0.004f)
+            // --- quique exato no plano do gramado (inclui gravidade do passo e corrige sub-passo para não quicar no ar nem ser absorvido pelo PhysX)
+            float vEndY = v.y + Physics.gravity.y * dt;
+            float nextY = Body.position.y + vEndY * dt;
+            if (vEndY < -0.35f && nextY <= Arena.BallRadius + 0.008f)
             {
-                v = Bounce(v, ref w, surf, depth, wet);
+                float tHit = Mathf.Clamp((Body.position.y - Arena.BallRadius) / Mathf.Max(0.01f, -vEndY), 0f, dt);
+                Vector3 contactPos = Body.position + new Vector3(v.x, vEndY, v.z) * tHit;
+                contactPos.y = Arena.BallRadius + 0.002f;
+                v = Bounce(new Vector3(v.x, vEndY, v.z), ref w, surf, depth, wet);
+                Body.position = contactPos + new Vector3(v.x, Mathf.Max(0f, v.y), v.z) * (dt - tHit);
                 Compat.SetVelocity(Body, v);
                 Body.angularVelocity = w;
                 grounded = true;
+                lastBounceFrame = Time.frameCount;
             }
 
             InPuddle = surf == Superficie.Poca && grounded;
@@ -294,6 +304,8 @@ namespace Craquez
                 Body.angularVelocity = w * Mathf.Exp(-0.05f * dt);
             }
 
+            prevStepVel = Compat.GetVelocity(Body);
+            prevStepSpin = Body.angularVelocity;
             GoalNet.ConstrainAll(this, dt);
         }
 
@@ -403,31 +415,59 @@ namespace Craquez
 
         void OnCollisionEnter(Collision c)
         {
+            string colName = c.collider != null ? c.collider.name : "";
+            bool isGround = colName == "ChaoFisico";
+
+            // Resgate caso o PhysX tenha absorvido um quique entre sub-passos
+            if (isGround && !Body.isKinematic && lastBounceFrame != Time.frameCount && prevStepVel.y < -0.55f)
+            {
+                PuddleField pf = PuddleField.Instance;
+                float depth = 0f;
+                Superficie surf = pf != null ? pf.SurfaceAt(Body.position, out depth) : Superficie.Grama;
+                WeatherSystem ws = WeatherSystem.Instance;
+                float wet = ws != null && ws.P != null ? ws.P.wetness : 0f;
+                Vector3 w = prevStepSpin;
+                Vector3 bv = Bounce(prevStepVel, ref w, surf, depth, wet);
+                Compat.SetVelocity(Body, bv);
+                Body.angularVelocity = w;
+                lastBounceFrame = Time.frameCount;
+            }
+
             float speed = c.relativeVelocity.magnitude;
             if (speed < 1.5f) return;
             Vector3 point = c.contactCount > 0 ? c.GetContact(0).point : transform.position;
             GoalNetPanel panel = c.collider.GetComponent<GoalNetPanel>();
+            bool isGoalNet = panel != null;
+            bool isPost = colName.StartsWith("Trave") || colName.StartsWith("Travessao");
+
             if (panel != null && panel.net != null) panel.net.Bulge(point, c.relativeVelocity);
             if (OnImpact != null) OnImpact(point, speed, c.collider);
 
-            // Particle & Audio: Impact effects
-            if (Time.time - lastImpactTime > 0.1f) // Throttle impact effects
+            // Particle & Audio: Impact effects (funciona tanto no Treino quanto no Jogo-treino 11x11)
+            if (Time.time - lastImpactTime > 0.08f)
             {
                 lastImpactTime = Time.time;
 
-                bool isGround = c.collider.CompareTag("Ground") || c.collider.CompareTag("Pitch");
-                bool isGoalNet = panel != null;
-                bool isPlayer = c.collider.GetComponent<PlayerController>() != null || c.collider.GetComponent<GoalkeeperAI>() != null;
-                bool isPost = c.collider.CompareTag("GoalPost") || c.collider.CompareTag("GoalCrossbar");
+                var au = ProceduralAudio.Instance;
+                if (au != null && OnImpact == null)
+                {
+                    if (isPost) au.Post(point, speed / 20f);
+                    else if (isGoalNet) au.Net(point, speed / 15f);
+                    else if (isGround && speed > 2.5f) au.Bounce(point, speed / 15f);
+                }
+
+                if (isPost)
+                {
+                    if (OnImpact == null) GameSettings.Vibrar();
+                    if (OnPostHit != null) OnPostHit(Mathf.Clamp01(speed / 26f));
+                }
 
                 // Particles
                 if (ParticleEffectsManager.Instance != null)
                 {
-                    // Impact particles at collision point
                     Vector3 impactDir = c.relativeVelocity.normalized;
                     ParticleEffectsManager.Instance.PlayKickImpact(point, impactDir, Mathf.Clamp01(speed / 25f));
 
-                    // Grass scorch for high-speed ground impacts
                     if (isGround && speed > 20f && point.y < 0.5f)
                         ParticleEffectsManager.Instance.PlayGrassScorch(point);
                 }

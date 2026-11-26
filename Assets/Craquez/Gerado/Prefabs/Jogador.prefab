@@ -163,15 +163,15 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Craquez.PlayerController
   ball: {fileID: 0}
   cameraTransform: {fileID: 0}
-  jogSpeed: 6.8
-  sprintSpeed: 10.4
-  acceleration: 24
-  deceleration: 28
-  lowSpeedTurnRate: 540
-  sprintTurnRate: 300
-  possessionRadius: 0.65
-  kickFootReach: 0.92
-  chargeTime: 0.95
+  jogSpeed: 5.5
+  sprintSpeed: 9
+  acceleration: 13
+  deceleration: 15
+  lowSpeedTurnRate: 560
+  sprintTurnRate: 310
+  possessionRadius: 0.56
+  kickFootReach: 1.05
+  chargeTime: 0.7
   aiControlled: 0
 --- !u!114 &7187274776728931553
 MonoBehaviour:

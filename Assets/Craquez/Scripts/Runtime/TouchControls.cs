@@ -41,7 +41,7 @@ namespace Craquez
         readonly Button low = new Button { label = "RASTEIRO", gkLabel = "", atkLabel = "PASSE", defLabel = "DESARME", center = new Vector2(0.38f, 0.32f), radius = 0.066f, color = new Color(0.55f, 0.35f, 0.95f), attackerOnly = true };
         readonly Button chip = new Button { label = "CAVADINHA", gkLabel = "SALTAR", atkLabel = "LANÇAR", defLabel = "", center = new Vector2(0.2f, 0.44f), radius = 0.066f, color = UiKit.Yellow };
         readonly Button sprint = new Button { label = "CORRER", gkLabel = "SAIR", atkLabel = "CORRER", defLabel = "CORRER", center = new Vector2(0.6f, 0.11f), radius = 0.075f, color = UiKit.Green };
-        readonly Button skill = new Button { label = "DRIBLE", gkLabel = "", atkLabel = "DRIBLE", defLabel = "", center = new Vector2(0.58f, 0.3f), radius = 0.062f, color = new Color(1f, 0.55f, 0.15f), attackerOnly = true };
+        readonly Button skill = new Button { label = "DRIBLE", gkLabel = "", atkLabel = "DRIBLE", defLabel = "CERCAR", center = new Vector2(0.58f, 0.3f), radius = 0.062f, color = new Color(1f, 0.55f, 0.15f), attackerOnly = true };
         readonly Button knock = new Button { label = "ARRANCADA", gkLabel = "", atkLabel = "ARRANCADA", defLabel = "TROCAR", center = new Vector2(0.43f, 0.5f), radius = 0.058f, color = new Color(0.2f, 0.8f, 0.85f), attackerOnly = true };
         Button[] buttons;
 
@@ -72,13 +72,20 @@ namespace Craquez
 
         bool Active(Button b)
         {
+            if (b.finger != int.MinValue) return true; // preserva botão já pressionado durante transição de posse
             if (matchMode) return !string.IsNullOrEmpty(Label(b));
             return !(goalkeeperMode && b.attackerOnly);
         }
 
         string Label(Button b)
         {
-            if (matchMode) return matchHasBall != null && matchHasBall() ? b.atkLabel : b.defLabel;
+            if (matchMode)
+            {
+                bool atk = matchHasBall != null && matchHasBall();
+                string lbl = atk ? b.atkLabel : b.defLabel;
+                if (string.IsNullOrEmpty(lbl) && b.finger != int.MinValue) return b.atkLabel;
+                return lbl;
+            }
             return goalkeeperMode ? b.gkLabel : b.label;
         }
 
@@ -91,6 +98,12 @@ namespace Craquez
         float ButtonRadius(Button b) { return b.radius * Screen.height * Scale; }
 
         float StickRadius { get { return Screen.height * 0.12f * Scale; } }
+
+        static bool InTopHudBar(Vector2 pos)
+        {
+            float s = Screen.height / 1080f;
+            return pos.y > Screen.height - 96f * s && pos.x > Screen.width - 440f * s;
+        }
 
         void Update()
         {
@@ -113,7 +126,8 @@ namespace Craquez
                 foreach (var b in buttons)
                     if (b.finger == p.id) { b.held = true; claimed = true; break; }
                 if (claimed) continue;
-                // novo toque: botão mais próximo dentro da área (área de toque 35% maior que o desenho)
+                if (InTopHudBar(p.position)) continue;
+                // novo toque: botão mais próximo dentro da área (área de toque 50% maior que o desenho)
                 Button best = null; float bestD = float.MaxValue;
                 foreach (var b in buttons)
                 {
@@ -122,7 +136,7 @@ namespace Craquez
                     if (d < ButtonRadius(b) * 1.5f && d < bestD) { best = b; bestD = d; }
                 }
                 if (best != null) { best.finger = p.id; best.held = true; continue; }
-                if (stickFinger == int.MinValue && p.position.x < Screen.width * 0.45f && p.position.y < Screen.height * 0.82f)
+                if (stickFinger == int.MinValue && p.position.x < Screen.width * 0.48f && p.position.y < Screen.height * 0.84f)
                 {
                     stickFinger = p.id; stickPos = p.position; stickAlive = true; stickSprint = false;
                     // fixo: a base fica sempre no canto; flutuante/ancorado: nasce onde o dedo encostou

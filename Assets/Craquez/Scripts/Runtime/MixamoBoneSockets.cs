@@ -48,7 +48,11 @@ namespace Craquez
         public bool lockHipsHorizontalInPlace = true;
 
         Vector3 hipsRestLocalPos;
-        bool hipsRestCaptured;
+        Quaternion modelBaseLocalRot = Quaternion.identity;
+        bool hipsRestCaptured, modelRotCaptured;
+        float lastSpeed01;
+        float leanRoll, leanPitch;
+        float targetRoll, targetPitch;
 
         public Vector3 RightFootContactPosition
         {
@@ -118,6 +122,12 @@ namespace Craquez
         {
             if (animator == null) animator = GetComponentInChildren<Animator>();
             if (animator != null && modelTransform == null) modelTransform = animator.transform;
+
+            if (modelTransform != null && !modelRotCaptured)
+            {
+                modelBaseLocalRot = modelTransform.localRotation;
+                modelRotCaptured = true;
+            }
 
             BindMixamoBones();
             CreateVirtualSockets();
@@ -201,49 +211,74 @@ namespace Craquez
         }
 
         /// <summary>
-        /// Atualiza a projeção do BallControlPoint (0,28 m a 0,36 m conforme velocidade)
+        /// Atualiza a projeção do BallControlPoint (0,28 m a 0,38 m conforme velocidade)
         /// e centraliza o GK_CatchSocket entre Hand_L e Hand_R à frente do mixamorig:Spine2.
         /// </summary>
         public void UpdateSockets(float normalizedSpeed01)
         {
+            lastSpeed01 = Mathf.Clamp01(normalizedSpeed01);
             if (BallControlPoint != null)
             {
-                float d = Mathf.Lerp(0.28f, 0.36f, Mathf.Clamp01(normalizedSpeed01)); // antes 0,35–0,45 m: bola longe do pé
+                float d = Mathf.Lerp(0.28f, 0.38f, lastSpeed01);
                 ballControlDistance = d;
                 BallControlPoint.localPosition = new Vector3(0f, Arena.BallRadius, d);
             }
+            RefreshCatchSocket();
+        }
 
-            if (GK_CatchSocket != null)
+        /// <summary>Inclinação natural do corpo em curvas (roll lateral) e aceleração/frenagem (pitch frontal), em graus.</summary>
+        public void SetProceduralLean(float rollDeg, float pitchDeg, bool instant = false)
+        {
+            targetRoll = Mathf.Clamp(rollDeg, -11f, 11f);
+            targetPitch = Mathf.Clamp(pitchDeg, -6f, 7f);
+            if (instant)
             {
-                if (Hand_L != null && Hand_R != null)
+                leanRoll = targetRoll;
+                leanPitch = targetPitch;
+            }
+        }
+
+        void RefreshCatchSocket()
+        {
+            if (GK_CatchSocket == null) return;
+            if (Hand_L != null && Hand_R != null)
+            {
+                Vector3 handsCenter = (LeftPalmCenter + RightPalmCenter) * 0.5f;
+                if (Chest != null)
                 {
-                    Vector3 handsCenter = (LeftPalmCenter + RightPalmCenter) * 0.5f;
-                    if (Chest != null)
-                    {
-                        Vector3 chestFront = Chest.position + transform.forward * 0.28f;
-                        GK_CatchSocket.position = Vector3.Lerp(handsCenter, chestFront, 0.25f);
-                    }
-                    else
-                    {
-                        GK_CatchSocket.position = handsCenter;
-                    }
-                    GK_CatchSocket.rotation = transform.rotation;
-                }
-                else if (Chest != null)
-                {
-                    GK_CatchSocket.position = Chest.position + transform.forward * 0.34f;
-                    GK_CatchSocket.rotation = transform.rotation;
+                    Vector3 chestFront = Chest.position + transform.forward * 0.28f;
+                    GK_CatchSocket.position = Vector3.Lerp(handsCenter, chestFront, 0.25f);
                 }
                 else
                 {
-                    GK_CatchSocket.localPosition = new Vector3(0f, 1.15f, 0.38f);
-                    GK_CatchSocket.localRotation = Quaternion.identity;
+                    GK_CatchSocket.position = handsCenter;
                 }
+                GK_CatchSocket.rotation = transform.rotation;
+            }
+            else if (Chest != null)
+            {
+                GK_CatchSocket.position = Chest.position + transform.forward * 0.34f;
+                GK_CatchSocket.rotation = transform.rotation;
+            }
+            else
+            {
+                GK_CatchSocket.localPosition = new Vector3(0f, 1.15f, 0.38f);
+                GK_CatchSocket.localRotation = Quaternion.identity;
             }
         }
 
         void LateUpdate()
         {
+            float dt = Mathf.Max(Time.deltaTime, 1e-4f);
+            if (modelTransform != null)
+            {
+                if (!modelRotCaptured) { modelBaseLocalRot = modelTransform.localRotation; modelRotCaptured = true; }
+                float smooth = 1f - Mathf.Exp(-11f * dt);
+                leanRoll = Mathf.Lerp(leanRoll, lockHipsHorizontalInPlace ? targetRoll : 0f, smooth);
+                leanPitch = Mathf.Lerp(leanPitch, lockHipsHorizontalInPlace ? targetPitch : 0f, smooth);
+                modelTransform.localRotation = modelBaseLocalRot * Quaternion.Euler(leanPitch, 0f, leanRoll);
+            }
+
             if (lockHipsHorizontalInPlace && Hips != null && modelTransform != null)
             {
                 // Mantém o quadril alinhado horizontalmente apenas contra desvios extremos (> 0.35m) sem entortar o tronco
@@ -258,7 +293,7 @@ namespace Craquez
                 }
             }
 
-            UpdateSockets(0f);
+            RefreshCatchSocket();
         }
 
         /// <summary>Menor distância entre os pés mapeados (Foot_R/Toe_R ou Foot_L/Toe_L) e um ponto no mundo.</summary>

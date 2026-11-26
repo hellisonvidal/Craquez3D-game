@@ -145,15 +145,24 @@ namespace Craquez
         {
             // Escala SEMPRE uniforme na raiz: antes a largura (porte) ia só em X/Z do corpo inteiro e os ossos que giram
             // (braços, pernas, tronco inclinado) eram esticados ou achatados conforme o ângulo, deformando a postura.
-            // O porte agora alarga só o tronco (escala uniforme da coluna), com cabeça e braços compensados.
+            // O porte agora alarga só o tronco (escala uniforme da coluna), com pescoço, cabeça e braços compensados suavemente.
             float w = a.Largura;
             float torso = 1f + (w - 1f) * 0.6f;           // ±8% no tronco já mostra magro/forte/pesado
             const float torsoShare = 0.28f;               // fração da altura entre a coluna e o pescoço
             float k = a.altura / prefabHeight / (1f + torsoShare * (torso - 1f));
             go.transform.localScale = Vector3.one * k;
+
+            var cap = go.GetComponent<CapsuleCollider>();
+            if (cap != null)
+            {
+                float baseR = go.GetComponent<GoalkeeperAI>() != null ? 0.25f : 0.24f;
+                cap.radius = baseR * Mathf.Lerp(1f, w, 0.65f);
+            }
+
             var anim = go.GetComponentInChildren<Animator>();
             if (anim == null || !anim.isHuman) return;
             Transform head = anim.GetBoneTransform(HumanBodyBones.Head);
+            Transform neck = anim.GetBoneTransform(HumanBodyBones.Neck);
             Transform spine = anim.GetBoneTransform(HumanBodyBones.Spine);
             if (spine != null && Mathf.Abs(torso - 1f) > 0.005f)
             {
@@ -164,7 +173,16 @@ namespace Craquez
                     var arm = anim.GetBoneTransform(hb);
                     if (arm != null) arm.localScale = arm.localScale * inv; // braços com o comprimento normal
                 }
-                if (head != null) head.localScale = head.localScale * inv; // cabeça proporcional
+                if (neck != null && head != null)
+                {
+                    float halfInv = Mathf.Sqrt(inv);
+                    neck.localScale = neck.localScale * halfInv; // transição suave entre colarinho e cabeça
+                    head.localScale = head.localScale * halfInv;
+                }
+                else if (head != null)
+                {
+                    head.localScale = head.localScale * inv;
+                }
             }
             if (head == null) return;
             AplicarCabeca(go, a);

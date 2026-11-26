@@ -36,6 +36,7 @@ namespace Craquez.EditorTools
         public static void Run()
         {
             if (!Configure(true)) return;
+            CraquezAutoSetup.MarkCurrent();
             EditorSceneManager.OpenScene(ScenePath);
             EditorUtility.DisplayDialog("Craquez 3D", "Arena de treino pronta!\n\nAperte Play para jogar.\nVersão: " + PlayerSettings.bundleVersion, "Bora!");
         }
@@ -1293,19 +1294,30 @@ namespace Craquez.EditorTools
         }
     }
 
-    /// <summary>Executa o setup automaticamente na primeira vez que o projeto é aberto.</summary>
+    /// <summary>Executa o setup automaticamente na primeira vez ou quando a versão do projeto avança.</summary>
     [InitializeOnLoad]
     static class CraquezAutoSetup
     {
+        const int SetupSchema = 2;
+
+        static string Key() { return "craquez.setup.stamp." + Application.dataPath.GetHashCode(); }
+        static string Stamp() { return CraquezSetup.ReadVersion() + "#" + SetupSchema; }
+        public static void MarkCurrent() { EditorPrefs.SetString(Key(), Stamp()); }
+
         static CraquezAutoSetup()
         {
             EditorApplication.delayCall += () =>
             {
                 if (Application.isBatchMode || EditorApplication.isPlayingOrWillChangePlaymode) return;
-                if (File.Exists("Assets/Craquez/Scenes/ArenaTreino.unity")) return;
+                bool upToDate = File.Exists("Assets/Craquez/Scenes/ArenaTreino.unity") && EditorPrefs.GetString(Key(), "") == Stamp();
+                if (upToDate) return;
                 if (SessionState.GetBool("craquez.setup.ran", false)) return;
                 SessionState.SetBool("craquez.setup.ran", true);
-                CraquezSetup.Run();
+                if (CraquezSetup.Configure(true))
+                {
+                    MarkCurrent();
+                    EditorSceneManager.OpenScene(CraquezSetup.Scene);
+                }
             };
         }
     }

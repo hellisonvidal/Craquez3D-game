@@ -104,12 +104,17 @@ namespace Craquez
 
         // ------------------------------------------------------------ nomes sobre os jogadores
 
+        GUIStyle nameTagStyle, arrowStyle;
+
         void DrawNameTags(float s)
         {
             var cam = mainCamera;
             if (cam == null) return;
-            var st = new GUIStyle(ui.Tiny) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold, fontSize = ui.R(19) };
+            if (nameTagStyle == null) nameTagStyle = new GUIStyle(ui.Tiny) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+            if (arrowStyle == null) arrowStyle = new GUIStyle(ui.Tiny) { alignment = TextAnchor.MiddleCenter, fontStyle = FontStyle.Bold };
+            int baseFont = ui.R(19);
             bool pov = cameraRig.mode == CameraRig.Modo.VisaoJogador;
+            MatchPlayer nextSw = (Phase == Fase.Jogo && !HumanAttackingContext()) ? NextSwitchCandidate(true) : null;
             foreach (var m in all)
             {
                 if (m == null || m.expulso || !m.gameObject.activeInHierarchy) continue;
@@ -123,17 +128,19 @@ namespace Craquez
                 float w = (label.Length * 10.5f + 22f) * s * k, hh = 30 * s * k;
                 Rect r = new Rect(g.x - w * 0.5f, g.y - hh, w, hh);
                 bool me = m == Human;
-                UiKit.RoundRect(r, UiKit.A(me ? UiKit.Yellow : UiKit.Navy, me ? 0.92f : 0.6f), hh * 0.5f);
+                bool isNext = !me && m == nextSw;
+                UiKit.RoundRect(r, UiKit.A(me ? UiKit.Yellow : UiKit.Navy, me ? 0.92f : (isNext ? 0.78f : 0.6f)), hh * 0.5f);
+                if (isNext) UiKit.RoundBorder(r, UiKit.A(Color.white, 0.55f), hh * 0.5f, Mathf.Max(1f, 1.5f * s * k));
                 UiKit.Fill(new Rect(r.x + hh * 0.35f, r.yMax - 3 * s * k, r.width - hh * 0.7f, 3 * s * k), m.time.cor);
-                int keep = st.fontSize;
-                st.fontSize = Mathf.Max(9, Mathf.RoundToInt(keep * k));
-                UiKit.Text(r, label, st, me ? UiKit.Navy : Color.white, 0f);
-                st.fontSize = keep;
-                if (me)
+                nameTagStyle.fontSize = Mathf.Max(9, Mathf.RoundToInt(baseFont * k));
+                UiKit.Text(r, label, nameTagStyle, me ? UiKit.Navy : Color.white, 0f);
+                if (me || isNext)
                 {
-                    // seta do jogador controlado
+                    // seta cheia no jogador controlado; seta vazada discreta no próximo candidato à troca
                     float aw = 16 * s * k;
-                    UiKit.Text(new Rect(g.x - aw, r.yMax - 2 * s, aw * 2f, aw * 1.4f), "▼", new GUIStyle(st) { fontSize = Mathf.RoundToInt(22 * s * k) }, UiKit.Yellow, 1f);
+                    arrowStyle.fontSize = Mathf.RoundToInt((me ? 22f : 19f) * s * k);
+                    UiKit.Text(new Rect(g.x - aw, r.yMax - 2 * s, aw * 2f, aw * 1.4f), me ? "▼" : "▽", arrowStyle,
+                               me ? UiKit.Yellow : UiKit.A(Color.white, 0.78f), 1f);
                 }
             }
         }
@@ -181,14 +188,14 @@ namespace Craquez
         {
             var h = Human;
             if (h == null || Phase != Fase.Jogo) return;
-            bool hasBall = Owner == h;
+            bool hasBall = HumanAttackingContext();
             if (hasBall != hintHadBall) { hintHadBall = hasBall; hintChanged = Time.time; }
             float since = Time.time - hintChanged;
             string[] linhas = hasBall
                 ? new[]
                 {
-                    Key("rasteiro", "Z", "PASSE") + "  passe",
-                    Key("cavadinha", "Q", "LANÇAR") + "  lançamento",
+                    Key("passe", "Z", "PASSE") + "  passe",
+                    Key("lancamento", "Q", "LANÇAR") + "  lançamento",
                     Key("chute", "Espaço", "CHUTE") + "  chute (segure)",
                     Key("colocado", "E", "COLOCADO") + "  colocado",
                     Key("drible", "F", "DRIBLE") + "  drible",
@@ -197,9 +204,10 @@ namespace Craquez
                 }
                 : new[]
                 {
-                    Key("rasteiro", "Z", "DESARME") + "  desarme",
-                    Key("chute", "Espaço", "CARRINHO") + "  carrinho",
-                    Key("arrancada", "X", "TROCAR") + "  trocar jogador",
+                    Key("desarme", "Z", "DESARME") + "  desarme",
+                    Key("cercar", "F", "CERCAR") + "  cercar",
+                    Key("carrinho", "Espaço", "CARRINHO") + "  carrinho",
+                    Key("trocar", "X", "TROCAR") + "  trocar jogador",
                     Key("correr", "Shift", "CORRER") + "  correr",
                 };
             Color accent = hasBall ? UiKit.Green : UiKit.Red;

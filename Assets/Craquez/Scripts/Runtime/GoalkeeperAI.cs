@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 using Random = UnityEngine.Random;
 
@@ -1148,7 +1148,9 @@ namespace Craquez
                 {
                     repoReleased = true;
                     Vector3 d = FieldDirection();
-                    Vector3 throwPos = transform.position + transform.forward * 0.5f + Vector3.up * 1.5f;
+                    Vector3 throwPos = rHand != null ? rHand.position + transform.forward * 0.16f : transform.position + transform.forward * 0.5f + Vector3.up * 1.5f;
+                    throwPos.y = Mathf.Max(throwPos.y, 1.25f);
+                    ball.PlaceAt(throwPos);
                     float up = Random.Range(4.5f, 6.5f);
                     float tFlight = 2f * up / 9.81f + 0.15f;
                     ball.Deflect(d * RepoSpeed(Random.Range(12f, 16f), tFlight) + Vector3.up * up, Vector3.zero);
@@ -1213,37 +1215,38 @@ namespace Craquez
             if (OnSave != null) OnSave(true);
         }
 
+        static readonly Collider[] gkOverlapBuf = new Collider[12];
+
         /// <summary>
-        /// Resolve colisão entre jogadores para evitar sobreposição de cápsulas.
-        /// Aplica uma força de repulsão simples quando as cápsulas dos jogadores se intersectam.
+        /// Resolve colisão entre jogadores sem alocar memória na heap e respeitando escala e orientação real da cápsula.
         /// </summary>
         Vector3 ResolvePlayerCollisions(Vector3 proposedPos)
         {
             if (bodyCapsule == null) return proposedPos;
-
-            Collider[] hits = Physics.OverlapCapsule(
-                proposedPos + bodyCapsule.center,
-                proposedPos + bodyCapsule.center + Vector3.up * (bodyCapsule.height - bodyCapsule.radius * 2f),
-                bodyCapsule.radius,
-                1 << Arena.LayerPlayerBody
-            );
+            float sc = Mathf.Max(0.5f, transform.lossyScale.y);
+            float r = bodyCapsule.radius * sc;
+            float h = bodyCapsule.height * sc;
+            Vector3 a = proposedPos + Vector3.up * (r + 0.05f);
+            Vector3 b = proposedPos + Vector3.up * Mathf.Max(r + 0.06f, h - r);
+            int n = Physics.OverlapCapsuleNonAlloc(a, b, r, gkOverlapBuf, 1 << Arena.LayerPlayerBody, QueryTriggerInteraction.Ignore);
 
             Vector3 result = proposedPos;
-            foreach (var hit in hits)
+            for (int i = 0; i < n; i++)
             {
-                if (hit == bodyCapsule) continue;
+                var hit = gkOverlapBuf[i];
+                if (hit == bodyCapsule || hit == null) continue;
                 if (hit.attachedRigidbody != null && hit.attachedRigidbody.isKinematic)
                 {
-                    // Calcula direção de repulsão
-                    Vector3 dir = (proposedPos - hit.bounds.center);
+                    Vector3 dir = result - hit.transform.position;
                     dir.y = 0f;
-                    if (dir.sqrMagnitude < 1e-4f) dir = transform.right;
-
-                    float overlap = (bodyCapsule.radius + hit.bounds.extents.x) - dir.magnitude;
+                    if (dir.sqrMagnitude < 1e-4f) dir = transform.right * 0.01f;
+                    float osc = Mathf.Max(0.5f, hit.transform.lossyScale.y);
+                    float otherR = hit is CapsuleCollider cc && cc.direction == 1 ? cc.radius * osc : hit.bounds.extents.x;
+                    float dist = dir.magnitude;
+                    float overlap = (r + otherR) - dist;
                     if (overlap > 0f)
                     {
-                        dir.Normalize();
-                        result += dir * (overlap + 0.02f); // Pequeno buffer extra
+                        result += (dir / dist) * (overlap + 0.015f);
                     }
                 }
             }

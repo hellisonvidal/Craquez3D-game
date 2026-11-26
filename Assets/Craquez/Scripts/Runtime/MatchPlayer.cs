@@ -88,6 +88,7 @@ namespace Craquez
             UpdateStamina(dt);
             ApplyPhysical();
             if (Humano) { Acao = "Você"; return; }
+            pc.jockeyMode = false;
             if (pc.Incapacitated || pc.Sliding) { Stop(); return; }
             tackleCooldown -= dt;
 
@@ -303,6 +304,7 @@ namespace Craquez
             Vector3 ball = m.BallPos;
             bool sprint = false;
             float urgency = 0.7f;
+            bool jockey = false;
 
             int pressRank = m.PresserRank(this);
             if (owner != null && pressRank >= 0)
@@ -311,10 +313,11 @@ namespace Craquez
                 Vector3 toGoal = (time.OwnGoal - op); toGoal.y = 0f; toGoal.Normalize();
                 if (pressRank == 0)
                 {
-                    // primeiro homem: fica entre o portador e o gol, encosta e dá o bote
+                    // primeiro homem: fica entre o portador e o gol, cerca encarando a bola e dá o bote
                     float d = Vector3.Distance(Pos, op);
                     target = op + toGoal * Mathf.Lerp(1.1f, 0.6f, men.agressividade) + owner.Vel * 0.25f;
                     sprint = d > 3.5f && stamina > 0.2f;
+                    jockey = d < 3.6f;
                     urgency = 1f;
                     Acao = "Pressionando";
                     if (d < 1.7f && tackleCooldown <= 0f)
@@ -358,6 +361,7 @@ namespace Craquez
                     urgency = 1f;
                 }
             }
+            pc.jockeyMode = jockey;
             MoveTo(target, urgency, sprint, ball);
         }
 
@@ -365,9 +369,10 @@ namespace Craquez
 
         void SetPieceTick(MatchSession m)
         {
+            pc.jockeyMode = false;
             Vector3 t = m.RestartSpot(this);
             bool taker = m.Restart.taker == this;
-            MoveTo(t, taker ? 0.8f : 0.6f, Vector3.Distance(Pos, t) > 15f, taker ? m.Restart.aim : m.BallPos, 0.25f);
+            MoveTo(t, taker ? 0.8f : 0.6f, Vector3.Distance(Pos, t) > 15f, taker ? m.Restart.aim : m.BallPos, 0.25f, false);
             Acao = taker ? "Cobrador" : "Posicionando";
         }
 
@@ -399,8 +404,8 @@ namespace Craquez
 
         // ------------------------------------------------------------ movimento
 
-        /// <summary>Anda/corre até o alvo, desviando dos companheiros, chegando devagar e encarando um ponto.</summary>
-        public void MoveTo(Vector3 target, float urgency, bool sprint, Vector3 face, float arriveRadius = 0.45f)
+        /// <summary>Anda/corre até o alvo, desviando dos companheiros em movimento, chegando suavemente sem oscilar e encarando o lance.</summary>
+        public void MoveTo(Vector3 target, float urgency, bool sprint, Vector3 face, float arriveRadius = 0.45f, bool allowSeparation = true)
         {
             if (pc == null) return;
             Vector3 pos = Pos;
@@ -410,23 +415,26 @@ namespace Craquez
             Vector3 d = target - pos; d.y = 0f;
             float dist = d.magnitude;
 
-            // separação: não amontoar com os companheiros
+            // separação suave: só atua quando em movimento (evita "sambar" na barreira ou no ponto de chegada)
             Vector3 sep = Vector3.zero;
-            foreach (var o in time.jogadores)
+            if (allowSeparation && dist > arriveRadius * 0.85f)
             {
-                if (o == this || o.expulso) continue;
-                Vector3 r = pos - o.Pos; r.y = 0f;
-                float rd = r.magnitude;
-                if (rd < 3.2f && rd > 0.01f) sep += r / rd * (3.2f - rd) / 3.2f;
+                foreach (var o in time.jogadores)
+                {
+                    if (o == this || o.expulso) continue;
+                    Vector3 r = pos - o.Pos; r.y = 0f;
+                    float rd = r.magnitude;
+                    if (rd < 2.4f && rd > 0.01f) sep += r / rd * (2.4f - rd) / 2.4f;
+                }
             }
 
             Vector3 move = Vector3.zero;
             if (dist > arriveRadius)
             {
-                float speed01 = Mathf.Clamp01(dist / 3f);
+                float speed01 = Mathf.Clamp01((dist - arriveRadius * 0.5f) / 2.8f);
                 move = d / dist * speed01 * Mathf.Lerp(0.5f, 1f, urgency);
+                move += sep * (0.55f * Mathf.Clamp01(dist / 1.8f));
             }
-            move += sep * 0.6f;
             pc.aiMoveWorld = Vector3.ClampMagnitude(move, 1f);
             pc.aiSprint = sprint && dist > 2f && stamina > 0.12f;
             pc.aiFace = true;

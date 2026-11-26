@@ -83,10 +83,11 @@ namespace Craquez
         bool keeperWasHolding;
         MatchPlayer keeperReleaser;
         float lastSwitch;
-        bool prevLow, prevChip, prevShoot, prevKnock;
-        // comandos apertados um pouco antes de a bola chegar (passe de primeira) continuam valendo
-        float bufLow = -9f, bufChip = -9f;
-        const float InputBuffer = 0.3f;
+        bool prevLow, prevChip, prevShoot, prevFinesse, prevKnock;
+        // comandos apertados um pouco antes de a bola chegar (passe ou finalização de primeira) continuam valendo
+        float bufLow = -9f, bufChip = -9f, bufShoot = -9f, bufFinesse = -9f;
+        float humanTackleCooldown;
+        const float InputBuffer = 0.34f;
         float resumeAt = -1f;
         Action afterPause;
         readonly HashSet<MatchPlayer> offsideCandidates = new HashSet<MatchPlayer>();
@@ -155,7 +156,7 @@ namespace Craquez
                 touch.enabled = true;
                 touch.goalkeeperMode = false;
                 touch.matchMode = true;
-                touch.matchHasBall = () => Human != null && Owner == Human;
+                touch.matchHasBall = () => Human != null && HumanAttackingContext();
             }
             if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.SetCrowd(0.55f);
 
@@ -181,9 +182,10 @@ namespace Craquez
             var gkGo = Instantiate(gkPrefab, t.OwnGoal + t.Forward * 1.2f, Quaternion.LookRotation(t.Forward));
             spawned.Add(gkGo);
             var gkAtr = GeradorJogador.Atributos(Funcao.Zagueiro, rng, nivel);
-            var gkRostos = PlayerLook.Embaralhar("Goleiro", rng, true);   // o uniforme do goleiro só existe com pele clara
+            if (rostosGoleiroPartida == null || rostosGoleiroPartida.Count == 0)
+                rostosGoleiroPartida = PlayerLook.Embaralhar("Goleiro", rng, true); // lista única: os dois goleiros nunca repetem o mesmo rosto
             var gkLook = PlayerLook.Sortear(Funcao.Goleiro, !t.goleiroModeloA, 0, gkAtr, rng);
-            if (gkRostos.Count > 0) PlayerLook.UsarRosto(gkLook, gkRostos[t.indice % gkRostos.Count], "Goleiro");
+            if (rostosGoleiroPartida.Count > 0) PlayerLook.UsarRosto(gkLook, rostosGoleiroPartida[rostoGkIdx++ % rostosGoleiroPartida.Count], "Goleiro");
             // uniforme antes do penteado: senão o cabelo 3D (black power, coque, faixa) recebe a textura do uniforme
             ApplyKit(gkGo, KitMaterial(gkPrefab, t.kitGoleiro));
             PlayerLook.Aplicar(gkGo, gkLook, t.goleiroModeloA ? 1.87f : 1.90f, !t.goleiroModeloA, propMaterial, hairMats);
@@ -308,8 +310,8 @@ namespace Craquez
 
         readonly Dictionary<string, Material> kitCache = new Dictionary<string, Material>();
         readonly Dictionary<Color, Material> hairMats = new Dictionary<Color, Material>();
-        List<PlayerLook.Rosto> rostosPartida;
-        int rostoIdx;
+        List<PlayerLook.Rosto> rostosPartida, rostosGoleiroPartida;
+        int rostoIdx, rostoGkIdx;
 
         static int[] Shuffled(System.Random rng)
         {
@@ -373,6 +375,7 @@ namespace Craquez
             foreach (var m in hairMats.Values) Destroy(m);
             hairMats.Clear();
             rostosPartida = null; rostoIdx = 0;
+            rostosGoleiroPartida = null; rostoGkIdx = 0;
             if (ParticleEffectsManager.Instance != null) ParticleEffectsManager.Instance.ClearAllEffects();
             // texturas de pele/cabelo (Resources/Visuais) e materiais da partida liberados da memória
             Resources.UnloadUnusedAssets();
@@ -402,12 +405,14 @@ namespace Craquez
             if (p == null || p == Human || p.pc == null) return;
             if (Human != null && Human.pc != null)
             {
+                Human.pc.jockeyMode = false;
                 Human.pc.InputEnabled = false;
                 Human.pc.aiControlled = true;
             }
             Human = p;
             p.pc.aiControlled = false;
             p.pc.InputEnabled = true;
+            p.pc.jockeyMode = false;
             p.pc.aiMoveWorld = Vector3.zero;
             p.pc.BlockInput(0.12f);
             lastSwitch = Time.time;
@@ -415,6 +420,21 @@ namespace Craquez
             cameraRig.attackDir = p.time.attackDir;
             cameraRig.povHead = p.pc.Sockets != null ? p.pc.Sockets.Head : null;
             cameraRig.keeper = OpponentOf(p.time).goleiro != null ? OpponentOf(p.time).goleiro.transform : null;
+        }
+
+        /// <summary>
+        /// Verdadeiro quando o jogador humano está atacando com a bola (posse ativa, bola adiantada na condução/arrancada
+        /// ou passe do próprio time chegando a ele): evita trocar de jogador ou dar carrinho acidental na própria jogada.
+        /// </summary>
+        public bool HumanAttackingContext()
+        {
+            if (Human == null || Human.pc == null) return false;
+            if (Owner == Human) return true;
+            if (Owner != null || KeeperHolding != null) return false;
+            if (LastPossession != Human.time) return false;
+            if (Human.pc.HasPossession || Time.time - Human.pc.LastTouchTime < 1.25f) return true;
+            if (Time.time < Human.expectingPassUntil) return true;
+            return Flat(BallPos - Human.Pos).magnitude < 3.4f;
         }
 
         bool CanHumanShoot(MatchPlayer p)
@@ -427,19 +447,22 @@ namespace Craquez
             if (Owner == p) return true;
             Vector3 cp = p.pc.ControlPoint;
             Vector3 b = BallPos;
-            return Owner == null && KeeperHolding == null && Flat(b - cp).magnitude < 1.5f && b.y < 2.3f;
+            float maxReach = LastPossession == p.time ? 2.1f : 1.55f;
+            return Owner == null && KeeperHolding == null && Flat(b - cp).magnitude < maxReach && b.y < 2.35f;
         }
 
         void UpdateHumanInput()
         {
-            bool low = InputBridge.LowShot, chip = InputBridge.Chip, shoot = InputBridge.Shoot, knock = InputBridge.KnockOn;
-            bool lowDown = low && !prevLow, chipDown = chip && !prevChip, shootDown = shoot && !prevShoot, knockDown = knock && !prevKnock;
-            prevLow = low; prevChip = chip; prevShoot = shoot; prevKnock = knock;
+            bool low = InputBridge.LowShot, chip = InputBridge.Chip, shoot = InputBridge.Shoot, finesse = InputBridge.Finesse, knock = InputBridge.KnockOn;
+            bool lowDown = low && !prevLow, chipDown = chip && !prevChip, shootDown = shoot && !prevShoot, finesseDown = finesse && !prevFinesse, knockDown = knock && !prevKnock;
+            prevLow = low; prevChip = chip; prevShoot = shoot; prevFinesse = finesse; prevKnock = knock;
             if (Human == null || Human.pc == null || Time.timeScale == 0f) return;
             if (Human.expulso) { SetHuman(ClosestTo(Human.time, BallPos, true)); return; }
+            humanTackleCooldown -= Time.deltaTime;
 
             if (Phase == Fase.BolaParada)
             {
+                Human.pc.jockeyMode = false;
                 if (Restart != null && Restart.waitingHuman && Restart.taker == Human)
                 {
                     if (lowDown || chipDown) ExecuteRestartHuman(chipDown);
@@ -447,32 +470,76 @@ namespace Craquez
                 }
                 return;
             }
-            if (Phase != Fase.Jogo) return;
+            if (Phase != Fase.Jogo) { Human.pc.jockeyMode = false; return; }
 
             if (lowDown) bufLow = Time.time;
             if (chipDown) bufChip = Time.time;
-            if (Owner == Human)
+            if (shootDown) bufShoot = Time.time;
+            if (finesseDown) bufFinesse = Time.time;
+
+            bool attacking = HumanAttackingContext();
+            if (attacking)
             {
+                Human.pc.jockeyMode = false;
                 bool wantLow = Time.time - bufLow < InputBuffer, wantChip = Time.time - bufChip < InputBuffer;
-                if (wantLow || wantChip)
+                if (Owner == Human && (wantLow || wantChip))
                 {
                     if (Human.pc.Busy) return;          // espera o domínio terminar e passa logo em seguida
                     bool lofted = wantChip && (!wantLow || bufChip > bufLow);
                     bufLow = bufChip = -9f;
                     HumanPass(lofted);
+                    return;
+                }
+                // chute/voleio/cabeceio de primeira apertado um instante antes de a bola chegar
+                bool wantShoot = Time.time - bufShoot < InputBuffer, wantFinesse = Time.time - bufFinesse < InputBuffer;
+                if ((wantShoot || wantFinesse) && !Human.pc.Charging && !Human.pc.Busy && CanHumanShoot(Human))
+                {
+                    bool useFinesse = wantFinesse && (!wantShoot || bufFinesse > bufShoot);
+                    bufShoot = bufFinesse = -9f;
+                    float zAim = HumanQuickShotZ();
+                    if (Human.pc.AIShoot(useFinesse ? TipoChute.Colocado : TipoChute.Forte, useFinesse ? 0.62f : 0.68f, zAim))
+                        NotifyShot(Human);
                 }
                 return;
             }
-            // sem a bola: ✕ = desarme, ○ = carrinho, L1 = trocar de jogador
-            if (knockDown && Owner != Human) { SwitchToBest(true); return; }
-            if (lowDown)
+
+            // sem a bola (defesa): R1/F = cercar (jockey), ✕ = desarme, ○ = carrinho, L1 = trocar de jogador
+            bool holdingJockey = InputBridge.Skill;
+            Human.pc.jockeyMode = holdingJockey;
+            if (holdingJockey && humanTackleCooldown <= 0f && Owner != null && Owner.time != Human.time &&
+                Vector3.Distance(Human.Pos, BallPos) < 1.35f)
             {
-                if (Owner != null && Owner.time != Human.time && Vector3.Distance(Human.Pos, Owner.Pos) < 2.8f) TryTackle(Human, false);
+                TryTackle(Human, false);
+                humanTackleCooldown = 0.65f;
+            }
+
+            if (knockDown) { SwitchToBest(true); return; }
+            if (lowDown && humanTackleCooldown <= 0f)
+            {
+                if ((Owner != null && Owner.time != Human.time && Vector3.Distance(Human.Pos, Owner.Pos) < 2.9f) ||
+                    (Owner == null && Vector3.Distance(Human.Pos, BallPos) < 2.2f))
+                {
+                    TryTackle(Human, false);
+                    humanTackleCooldown = 0.45f;
+                }
             }
             else if (shootDown && !CanHumanShoot(Human))
             {
-                if (Vector3.Distance(Human.Pos, BallPos) < 5.5f) TryTackle(Human, true);
+                if (Vector3.Distance(Human.Pos, BallPos) < 5.2f) TryTackle(Human, true);
             }
+        }
+
+        float HumanQuickShotZ()
+        {
+            Vector2 mv = InputBridge.Move;
+            if (mv.sqrMagnitude > 0.06f && mainCamera != null)
+            {
+                Vector3 f = Flat(mainCamera.transform.forward).normalized, r = Flat(mainCamera.transform.right).normalized;
+                Vector3 aimW = f * mv.y + r * mv.x;
+                return Mathf.Clamp(aimW.z * 1.35f, -1f, 1f) * (Arena.GoalHalfWidth - 0.45f);
+            }
+            float gkz = OpponentKeeperZ(Human.time);
+            return (gkz >= 0f ? -1f : 1f) * (Arena.GoalHalfWidth - 0.85f);
         }
 
         void HumanPass(bool lofted)
@@ -514,18 +581,51 @@ namespace Craquez
             if (h.pc.Pass(target, lofted || Vector3.Distance(h.Pos, target) > 34f, err)) NotifyPass(h, best, target);
         }
 
-        void SwitchToBest(bool manual)
+        /// <summary>Próximo companheiro que receberá o controle ao apertar Trocar (leva em conta a bola prevista e o analógico).</summary>
+        public MatchPlayer NextSwitchCandidate(bool useStickDirection)
         {
             var team = UserTeam;
+            if (team == null) return null;
             MatchPlayer best = null; float bt = float.MaxValue;
-            Vector3 b = BallPos;
+            Vector3 b = PredictBall(0.32f);
+            Vector3 stickDir = Vector3.zero;
+            if (useStickDirection && Human != null && mainCamera != null)
+            {
+                Vector2 mv = InputBridge.Move;
+                if (mv.sqrMagnitude > 0.2f)
+                {
+                    Vector3 f = Flat(mainCamera.transform.forward).normalized, r = Flat(mainCamera.transform.right).normalized;
+                    stickDir = (f * mv.y + r * mv.x).normalized;
+                }
+            }
             foreach (var m in team.jogadores)
             {
                 if (!m.Disponivel || m == Human) continue;
-                float t = Vector3.Distance(m.Pos, b) / 8f;
-                if (manual && Human != null && Vector3.Dot(Flat(m.Pos - Human.Pos), Flat(b - Human.Pos)) < 0f) t += 0.6f;
+                float spd = m.pc != null ? Mathf.Max(5f, m.pc.sprintSpeed * m.pc.speedScale) : 8f;
+                float t = Vector3.Distance(m.Pos, b) / spd;
+                // favorece defensor posicionado entre a bola e o próprio gol
+                if (team.Fwd(m.Pos) < team.Fwd(b) + 1.5f) t -= 0.18f;
+                if (stickDir.sqrMagnitude > 0.1f && Human != null)
+                {
+                    Vector3 fromH = Flat(m.Pos - Human.Pos);
+                    if (fromH.sqrMagnitude > 1f)
+                    {
+                        float align = Vector3.Dot(fromH.normalized, stickDir);
+                        if (align > 0.45f) t -= align * 0.85f;
+                    }
+                }
+                else if (useStickDirection && Human != null && Vector3.Dot(Flat(m.Pos - Human.Pos), Flat(b - Human.Pos)) < 0f)
+                {
+                    t += 0.5f;
+                }
                 if (t < bt) { bt = t; best = m; }
             }
+            return best;
+        }
+
+        void SwitchToBest(bool manual)
+        {
+            var best = NextSwitchCandidate(manual);
             if (best != null) SetHuman(best);
         }
 
@@ -534,15 +634,16 @@ namespace Craquez
             if (UserTeam == null) return;
             if (Human == null || Human.expulso) { SetHuman(ClosestTo(UserTeam, BallPos, true)); return; }
             if (Owner != null && Owner.time == UserTeam && Owner != Human && !Owner.IsKeeper) { SetHuman(Owner); return; }
-            if (Time.time - lastSwitch < 1.3f || Owner == Human) return;
+            if (Time.time - lastSwitch < 1.3f || HumanAttackingContext()) return;
             if (Human.pc != null && (Human.pc.Busy || Human.pc.Charging)) return;
-            // defendendo/bola solta: passa o controle para quem está bem mais perto da bola
-            float th = Vector3.Distance(Human.Pos, BallPos);
-            var near = ClosestTo(UserTeam, BallPos, true);
+            // defendendo/bola solta: passa o controle para quem está bem mais perto da trajetória da bola
+            Vector3 pb = PredictBall(0.3f);
+            float th = Vector3.Distance(Human.Pos, pb);
+            var near = ClosestTo(UserTeam, pb, true);
             if (near != null && near != Human)
             {
-                float tn = Vector3.Distance(near.Pos, BallPos);
-                if (th > tn * 1.8f + 6f) SetHuman(near);
+                float tn = Vector3.Distance(near.Pos, pb);
+                if (th > tn * 1.75f + 5.5f) SetHuman(near);
             }
         }
 
@@ -716,6 +817,7 @@ namespace Craquez
                 ball.Deflect(dv + Vector3.up * Random.Range(0.2f, 1.2f), Vector3.zero);
                 controlCooldown[best] = Time.time + 0.45f;
                 LastToucher = best;
+                if (offsideTeam != null && best.time != offsideTeam) ClearOffside(); // tentativa deliberada de domínio do defensor zera o impedimento
                 return;
             }
             if (b.y > 0.55f)
@@ -802,7 +904,7 @@ namespace Craquez
             LastToucher = m;
         }
 
-        /// <summary>Só o dono da bola (ou o cobrador) pode mexer nela.</summary>
+        /// <summary>Só o dono da bola, o cobrador ou quem está batendo de primeira em bola solta pode mexer nela.</summary>
         void UpdateAuthorities()
         {
             foreach (var m in all)
@@ -811,7 +913,7 @@ namespace Craquez
                 bool auth;
                 // na bola parada o cobrador só mexe na bola quando o chute/passe já começou (a bola não "gruda" no pé antes)
                 if (Phase == Fase.BolaParada) auth = Restart != null && Restart.taker == m && (Restart.executing || (Restart.waitingHuman && m.pc.Busy));
-                else if (Phase == Fase.Jogo) auth = m == Owner;
+                else if (Phase == Fase.Jogo) auth = m == Owner || (Owner == null && KeeperHolding == null && m.pc.Busy && !m.pc.Incapacitated && !m.pc.Sliding);
                 else auth = false;
                 m.pc.ballAuthority = auth;
             }
@@ -865,7 +967,8 @@ namespace Craquez
                 Show(caught ? "DEFESAÇA!" : "ESPALMOU!", new Color(0.6f, 0.9f, 1f), 1.4f);
                 if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.CrowdReaction(0.6f);
             }
-            ClearOffside();
+            // Pela Regra 11, rebote/espalmada do goleiro NÃO habilita atacante que já estava impedido no chute; só o encaixe zera
+            if (caught) ClearOffside();
         }
 
         // ============================================================ impedimento

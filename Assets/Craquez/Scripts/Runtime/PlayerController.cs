@@ -27,19 +27,19 @@ namespace Craquez
         [Tooltip("Velocidade de sprint (m/s). Com os atributos: ~7,7 a ~9,9 m/s (antes chegava a 11 m/s, acima de qualquer velocista).")]
         public float sprintSpeed = 9.0f;
         [Tooltip("Aceleração saindo do parado (m/s²); cai conforme o jogador se aproxima da velocidade máxima.")]
-        public float acceleration = 12f;
+        public float acceleration = 13f;
         [Tooltip("Velocidade (m/s) do clipe mais rápido da locomoção, medida no setup: acima dela a animação acelera.")]
         public float locoTopSpeed = 10.2f;
         [Tooltip("Desaceleração/frenagem (m/s²): um atleta para de um sprint em ~1 s.")]
-        public float deceleration = 14f;
+        public float deceleration = 15f;
         [Tooltip("Taxa de rotação em baixa velocidade (graus/s)")]
-        public float lowSpeedTurnRate = 540f;
+        public float lowSpeedTurnRate = 560f;
         [Tooltip("Taxa de rotação durante sprint (graus/s)")]
-        public float sprintTurnRate = 300f;
+        public float sprintTurnRate = 310f;
 
         [Header("Domínio e Condução Magnética")]
-        [Tooltip("Raio de domínio para condução magnética rumo ao BallControlPoint (0,28-0,36 m à frente).")]
-        public float possessionRadius = 0.55f;
+        [Tooltip("Raio de domínio para condução magnética rumo ao BallControlPoint (0,28-0,38 m à frente).")]
+        public float possessionRadius = 0.56f;
         [Tooltip("Alcance máximo do pé no frame de impacto do chute.")]
         public float kickFootReach = 1.05f;
 
@@ -71,6 +71,8 @@ namespace Craquez
         /// <summary>Ponto que a IA quer encarar quando está parada ou devagar (ex.: a bola).</summary>
         [NonSerialized] public Vector3 aiFacePoint;
         [NonSerialized] public bool aiFace;
+        /// <summary>Modo cercar (jockey defensivo): encara a bola com agilidade lateral reforçada.</summary>
+        [NonSerialized] public bool jockeyMode;
         /// <summary>Alvo lateral (z) da finalização da IA; NaN = escolhe pela direção do corpo.</summary>
         [NonSerialized] public float aiShotTargetZ = float.NaN;
         /// <summary>Trombada com outro corpo: (outro jogador ou null, normal empurrando este jogador, velocidade de aproximação).</summary>
@@ -258,7 +260,11 @@ namespace Craquez
             fallen = false; hurt = false; getUpUntil = 0f; slideUntil = 0f;
             if (grounder != null) grounder.grounding = true;
             HasPossession = false;
-            if (sockets != null) sockets.UpdateSockets(0f);
+            if (sockets != null)
+            {
+                sockets.SetProceduralLean(0f, 0f, true);
+                sockets.UpdateSockets(0f);
+            }
             if (anim != null)
             {
                 anim.SetFloat(SpeedHash, 0f);
@@ -277,6 +283,7 @@ namespace Craquez
         void Update()
         {
             float dt = Time.deltaTime;
+            if (dt <= 0f) return;
             float grip = Grip();
 
             if (ball != null && ball.Sphere != null && bodyCapsule != null)
@@ -293,6 +300,7 @@ namespace Craquez
             }
             Vector3 wish = disabled ? Vector3.zero : (aiControlled ? Vector3.ClampMagnitude(aiMoveWorld, 1f) : camF * mv.y + camR * mv.x);
             bool sprint = !disabled && (aiControlled ? aiSprint : (InputEnabled && InputBridge.Sprint));
+            bool jockey = !disabled && !HasPossession && jockeyMode && !sprint;
             wishWorld = wish;
             sprintHeld = sprint;
             bool kicking = Time.time < lockMoveUntil;
@@ -305,9 +313,9 @@ namespace Craquez
                     wish = Vector3.Slerp(wish.normalized, tb.normalized, 0.32f) * wish.magnitude;
             }
 
-            float max = (sprint ? sprintSpeed : jogSpeed) * speedScale;
+            float max = (jockey ? jogSpeed * 0.78f : (sprint ? sprintSpeed : jogSpeed)) * speedScale;
             if (HasPossession) max *= sprint ? 0.95f : 0.92f;
-            if (Time.time < burstUntil) max += 1.1f;
+            if (Time.time < burstUntil) max += 1.15f;
 
             var pfSurf = PuddleField.Instance;
             float surfDepth = 0f;
@@ -322,8 +330,24 @@ namespace Craquez
                 grip *= Mathf.Lerp(1f, 0.88f, surfDepth);
             }
 
-            Vector3 target = (kicking || Time.time < staggerUntil) ? Vector3.zero : wish * max;
-            if (Charging) target *= 0.65f;
+            Vector3 target;
+            if (Time.time < staggerUntil) target = Vector3.zero;
+            else if (kickPending)
+            {
+                // Na preparação do chute em corrida, mantém o embalo até a bola (evita furar bolas quicando/adiantadas)
+                Vector3 carry = velocity * 0.58f;
+                if (ball != null)
+                {
+                    Vector3 toB = ball.Body.position - (transform.position + transform.forward * 0.38f);
+                    toB.y = 0f;
+                    if (toB.magnitude < 1.9f) carry += Vector3.ClampMagnitude(toB * 3.8f, 3.2f);
+                }
+                target = Vector3.ClampMagnitude(carry, max * 0.75f);
+            }
+            else if (kicking) target = Vector3.zero;
+            else target = wish * max;
+
+            if (Charging) target *= 0.68f;
             if (Sliding)
             {
                 // carrinho: o corpo desliza na grama (mais longe com o gramado molhado) e freia sozinho
@@ -337,23 +361,24 @@ namespace Craquez
                 target = velocity;
             }
 
-            // --- 2. Física Cinemática dos Jogadores de Linha (Curva de Aceleração = 18 m/s² e Frenagem = 25 m/s²)
+            // --- 2. Física Cinemática dos Jogadores de Linha (saída ágil + inércia realista em alta velocidade)
+            Vector3 prevVel = velocity;
             float currentSpeed = velocity.magnitude;
             float targetSpeed = target.magnitude;
             bool isBraking = targetSpeed < currentSpeed - 0.05f ||
                              (currentSpeed > 0.5f && targetSpeed > 0.05f && Vector3.Dot(velocity.normalized, target.normalized) < 0.15f);
-            // aceleração humana: forte saindo do parado e menor perto da velocidade máxima (antes era constante)
             float topSpeed = Mathf.Max(0.5f, sprintSpeed * speedScale);
-            float accelCurve = Mathf.Lerp(1f, 0.3f, Mathf.Clamp01(currentSpeed / topSpeed));
+            float accelCurve = Mathf.Lerp(1.12f, 0.32f, Mathf.Clamp01(currentSpeed / topSpeed));
             float accelRate = (isBraking ? deceleration : acceleration * accelScale * accelCurve) * grip;
+            if (jockey) accelRate *= 1.28f;
 
             if (currentSpeed > 1.2f && target.sqrMagnitude > 0.01f)
             {
                 float turnDot = Vector3.Dot(velocity / currentSpeed, target.normalized);
-                if (turnDot < 0.1f)
+                if (turnDot < 0.15f)
                 {
                     // Corte brusco / pivô usa taxa de frenagem reforçada para eliminar "patinação no gelo"
-                    accelRate = deceleration * 1.15f * grip;
+                    accelRate = deceleration * 1.22f * grip;
                 }
             }
             // freada brusca vinda de um sprint: animação própria (corpo para trás, perna da frente travando)
@@ -377,12 +402,18 @@ namespace Craquez
 
             transform.position = p;
 
-            // --- Turn Rate Dinâmico: 540°/s em baixa velocidade/proteção de bola; 300°/s durante Sprint
+            // --- Turn Rate Dinâmico: 560°/s em baixa velocidade/proteção de bola; 310°/s durante Sprint
             float speedRatio = Mathf.Clamp01(velocity.magnitude / Mathf.Max(0.1f, sprintSpeed));
             float dynamicTurnRate = Mathf.Lerp(lowSpeedTurnRate, sprintTurnRate, speedRatio) * Mathf.Lerp(0.75f, 1f, grip);
 
+            Quaternion prevRot = transform.rotation;
             Vector3 face = velocity.sqrMagnitude > 0.04f ? velocity : (wish.sqrMagnitude > 0.04f ? wish : transform.forward);
-            if (aiControlled && aiFace && velocity.sqrMagnitude < 2.3f && !kicking && !Charging)
+            if (jockey && ball != null && velocity.sqrMagnitude < 16f && !kicking && !Charging)
+            {
+                Vector3 tb = ball.transform.position - transform.position; tb.y = 0f;
+                if (tb.sqrMagnitude > 0.04f) face = tb;
+            }
+            else if (aiControlled && aiFace && velocity.sqrMagnitude < 5.5f && !kicking && !Charging)
             {
                 Vector3 tf = aiFacePoint - transform.position; tf.y = 0f;
                 if (tf.sqrMagnitude > 0.04f) face = tf;
@@ -403,10 +434,22 @@ namespace Craquez
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, q, dynamicTurnRate * dt);
             }
 
-            // Atualiza a projeção do BallControlPoint (0.35m a 0.45m à frente do Root)
+            // Inclinação procedural do corpo nas curvas e acelerações + projeção dinâmica do BallControlPoint
             if (sockets != null)
             {
-                sockets.lockHipsHorizontalInPlace = !kicking && !Incapacitated && !Sliding;
+                bool freeLoco = !kicking && !Incapacitated && !Sliding;
+                sockets.lockHipsHorizontalInPlace = freeLoco;
+                if (freeLoco)
+                {
+                    float yawDeltaDeg = Mathf.DeltaAngle(prevRot.eulerAngles.y, transform.eulerAngles.y);
+                    float yawRateRad = (yawDeltaDeg * Mathf.Deg2Rad) / dt;
+                    float rollDeg = -yawRateRad * velocity.magnitude * 1.15f;
+                    Vector3 worldAccel = (velocity - prevVel) / dt;
+                    float fwdAccel = Vector3.Dot(worldAccel, transform.forward);
+                    float pitchDeg = fwdAccel * 0.35f;
+                    sockets.SetProceduralLean(rollDeg, pitchDeg);
+                }
+                else sockets.SetProceduralLean(0f, 0f);
                 sockets.UpdateSockets(speedRatio);
             }
 
@@ -613,10 +656,12 @@ namespace Craquez
             }
 
             bool footForward = true;
-            if (activeKickState != "Cabeceio" && rToe != null)
+            if (activeKickState != "Cabeceio" && activeKickState != "Voleio" && (rToe != null || lToe != null))
             {
-                Vector3 footRel = rToe.position - transform.position;
-                footForward = Vector3.Dot(footRel, transform.forward) > 0.14f;
+                float thr = 0.11f * Mathf.Max(0.75f, transform.lossyScale.y);
+                float fR = rToe != null ? Vector3.Dot(rToe.position - transform.position, transform.forward) : -1f;
+                float fL = lToe != null ? Vector3.Dot(lToe.position - transform.position, transform.forward) : -1f;
+                footForward = Mathf.Max(fR, fL) > thr;
             }
 
             if ((inImpactWindow && footForward) || Time.time >= kickFallbackContactAt + 0.08f)
@@ -848,13 +893,13 @@ namespace Craquez
             bool recentlyKicked = now - ball.LastKickTime < 0.35f;
             bool controlled = InputEnabled || aiControlled;
 
-            // Preparando chute: mantém a bola na zona de impacto à frente do pé de apoio (sem puxar para trás no recuo da perna)
-            if (kickPending && low && distFromRoot < 2.2f)
+            // Preparando chute: mantém a bola na zona de impacto à frente do pé de apoio (inclusive quicando até meia-altura)
+            if (kickPending && bp.y < 0.85f && distFromRoot < 2.2f)
             {
                 HasPossession = true;
-                Vector3 strikeSpot = pos + transform.forward * 0.42f + transform.right * 0.08f;
+                Vector3 strikeSpot = pos + transform.forward * (0.42f * Mathf.Max(0.8f, transform.lossyScale.y)) + transform.right * 0.08f;
                 strikeSpot.y = bp.y;
-                Vector3 desired = velocity * 0.35f + (strikeSpot - bp) * 12f; desired.y = 0f;
+                Vector3 desired = velocity * 0.45f + (strikeSpot - bp) * 12f; desired.y = 0f;
                 Vector3 nv = Vector3.MoveTowards(flatBv, desired, 42f * Mathf.Lerp(0.75f, 1f, Grip()) * dt);
                 Compat.SetVelocity(ball.Body, new Vector3(nv.x, bv.y, nv.z));
                 ball.Body.angularVelocity = Vector3.Cross(Vector3.up, nv) / Arena.BallRadius;
@@ -1177,15 +1222,17 @@ namespace Craquez
         }
 
         /// <summary>
-        /// Contato corpo a corpo: separa as cápsulas, troca quantidade de movimento conforme a massa de cada um
-        /// (o mais pesado/rápido empurra o outro) e avisa a partida (equilíbrio, falta, contusão).
+        /// Contato corpo a corpo: separa as cápsulas considerando a escala real de cada jogador (altura e porte),
+        /// troca quantidade de movimento bilateralmente conforme a massa de cada um e avisa a partida.
         /// </summary>
         Vector3 ResolvePlayerCollisions(Vector3 proposedPos)
         {
             if (bodyCapsule == null) return proposedPos;
-            float r = bodyCapsule.radius;
+            float sc = Mathf.Max(0.5f, transform.lossyScale.y);
+            float r = bodyCapsule.radius * sc;
+            float h = bodyCapsule.height * sc;
             Vector3 a = proposedPos + Vector3.up * (r + 0.05f);
-            Vector3 b = proposedPos + Vector3.up * Mathf.Max(r + 0.06f, bodyCapsule.height - r);
+            Vector3 b = proposedPos + Vector3.up * Mathf.Max(r + 0.06f, h - r);
             int n = Physics.OverlapCapsuleNonAlloc(a, b, r, overlapBuf, 1 << Arena.LayerPlayerBody, QueryTriggerInteraction.Ignore);
 
             Vector3 result = proposedPos;
@@ -1196,17 +1243,16 @@ namespace Craquez
                 if (hit.attachedRigidbody == null || !hit.attachedRigidbody.isKinematic) continue;
 
                 Vector3 oc = hit.transform.position;
-                Vector3 dir = proposedPos - oc;
+                Vector3 dir = result - oc;
                 dir.y = 0f;
                 if (dir.sqrMagnitude < 1e-4f) dir = transform.right * 0.01f;
-                float otherR = hit is CapsuleCollider cc && cc.direction == 1 ? cc.radius : hit.bounds.extents.x;
+                float osc = Mathf.Max(0.5f, hit.transform.lossyScale.y);
+                float otherR = hit is CapsuleCollider cc && cc.direction == 1 ? cc.radius * osc : hit.bounds.extents.x;
                 float dist = dir.magnitude;
                 float overlap = (r + otherR) - dist;
                 if (overlap <= 0f) continue;
                 Vector3 nrm = dir / dist;
-                result += nrm * (overlap + 0.01f);
 
-                // troca de quantidade de movimento (choque parcialmente inelástico)
                 var otherPc = hit.GetComponent<PlayerController>();
                 Component other = otherPc;
                 Vector3 ov = Vector3.zero;
@@ -1217,20 +1263,49 @@ namespace Craquez
                     var gk = hit.GetComponent<GoalkeeperAI>();
                     if (gk != null) { ov = gk.Velocity; om = 85f; other = gk; }
                 }
+
+                float share = om / Mathf.Max(1f, bodyMass + om);
+                if (otherPc != null && !otherPc.Incapacitated)
+                {
+                    // Separação dividida pela razão inversa das massas (o mais pesado cede menos terreno)
+                    result += nrm * ((overlap + 0.01f) * share);
+                    Vector3 otherPos = otherPc.transform.position - nrm * ((overlap + 0.01f) * (1f - share));
+                    otherPos.x = Mathf.Clamp(otherPos.x, -(Arena.FenceX - 1f), Arena.FenceX - 1f);
+                    otherPos.z = Mathf.Clamp(otherPos.z, -(Arena.FenceZ - 1f), Arena.FenceZ - 1f);
+                    otherPos.y = 0f;
+                    otherPc.transform.position = otherPos;
+                }
+                else
+                {
+                    result += nrm * (overlap + 0.01f);
+                }
+
+                // Troca bilateral de quantidade de movimento (choque parcialmente inelástico)
                 float closing = Vector3.Dot(velocity - ov, -nrm);
-                if (closing > 0f && !fallen)
+                if (closing > 0f)
                 {
-                    float share = om / (bodyMass + om);
-                    velocity += nrm * closing * share * 1.05f;
+                    if (!fallen) velocity += nrm * (closing * share * 1.02f);
+                    if (otherPc != null && !otherPc.fallen) otherPc.ReceiveBodyImpulse(-nrm * (closing * (1f - share) * 1.02f));
                 }
-                float last;
-                if (closing > 0.6f && (!lastContact.TryGetValue(hit, out last) || Time.time - last > 0.45f))
-                {
-                    lastContact[hit] = Time.time;
-                    if (OnBodyContact != null) OnBodyContact(otherPc, other, nrm, closing);
-                }
+                NotifyContactPair(hit, otherPc, other, nrm, closing);
+                if (otherPc != null) otherPc.NotifyContactPair(bodyCapsule, this, this, -nrm, closing);
             }
             return result;
+        }
+
+        internal void ReceiveBodyImpulse(Vector3 dv)
+        {
+            velocity += dv;
+        }
+
+        internal void NotifyContactPair(Collider hit, PlayerController otherPc, Component other, Vector3 nrm, float closing)
+        {
+            float last;
+            if (closing > 0.6f && (!lastContact.TryGetValue(hit, out last) || Time.time - last > 0.45f))
+            {
+                lastContact[hit] = Time.time;
+                if (OnBodyContact != null) OnBodyContact(otherPc, other, nrm, closing);
+            }
         }
 
         // ------------------------------------------------------------ Passe

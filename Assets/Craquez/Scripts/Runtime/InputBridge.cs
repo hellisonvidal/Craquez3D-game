@@ -89,7 +89,7 @@ namespace Craquez
             }
         }
 
-        /// <summary>Nome do botão para exibir na tela, conforme o controle conectado. Ações: chute, colocado, cavadinha, correr, confirmar, voltar.</summary>
+        /// <summary>Nome do botão para exibir na tela, conforme o controle conectado.</summary>
         public static string Glyph(string action)
         {
             var t = ControleConectado;
@@ -99,25 +99,55 @@ namespace Craquez
                 {
                     case "rasteiro":
                     case "passe":
+                    case "desarme":
                     case "confirmar": return "OK";
                     case "voltar":
                     case "pausa": return "Voltar";
                 }
             }
             bool circle = GameSettings.Layout == LayoutControle.ChuteNoCirculo;
+            if (t == TipoControle.Nintendo)
+            {
+                switch (action)
+                {
+                    case "chute":
+                    case "carrinho": return circle ? "A" : "Y";
+                    case "colocado": return circle ? "Y" : "A";
+                    case "cavadinha":
+                    case "lancamento": return "X";
+                    case "correr": return "ZR";
+                    case "rasteiro":
+                    case "passe":
+                    case "desarme":
+                    case "confirmar": return "B";
+                    case "drible":
+                    case "cercar": return "R";
+                    case "arrancada":
+                    case "trocar": return "L";
+                    case "voltar": return "A";
+                    case "camera": return "RS";
+                    case "novabola": return "-";
+                    case "pausa": return "+";
+                }
+            }
             bool ps = t == TipoControle.PlayStation;
             switch (action)
             {
-                case "chute": return ps ? (circle ? "○" : "□") : (circle ? "B" : "X");
+                case "chute":
+                case "carrinho": return ps ? (circle ? "○" : "□") : (circle ? "B" : "X");
                 case "colocado": return ps ? (circle ? "□" : "○") : (circle ? "X" : "B");
-                case "cavadinha": return ps ? "△" : "Y";
+                case "cavadinha":
+                case "lancamento": return ps ? "△" : "Y";
                 case "correr": return ps ? "R2" : "RT";
-                case "rasteiro": return ps ? "✕" : "A";
-                case "drible": return ps ? "R1" : "RB";
-                case "arrancada": return ps ? "L1" : "LB";
-                case "passe": return ps ? "R1" : "RB";
-                case "profundidade": return ps ? "L1" : "LB";
-                case "cruzamento": return ps ? "R1+L1" : "RB+LB";
+                case "rasteiro":
+                case "passe":
+                case "desarme": return ps ? "✕" : "A";
+                case "drible":
+                case "cercar": return ps ? "R1" : "RB";
+                case "arrancada":
+                case "trocar": return ps ? "L1" : "LB";
+                case "profundidade": return ps ? "△" : "Y";
+                case "cruzamento": return ps ? "△" : "Y";
                 case "confirmar": return ps ? "✕" : "A";
                 case "voltar": return ps ? "○" : "B";
                 case "camera": return ps ? "R3" : "RS";
@@ -127,7 +157,7 @@ namespace Craquez
             return action;
         }
 
-        // ------------------------------------------------------------ movimento
+        // ------------------------------------------------------------ movimento e visão
 
         public static Vector2 Move
         {
@@ -148,7 +178,11 @@ namespace Craquez
                 {
                     Vector2 s = gp.leftStick.ReadValue();
                     float mag = s.magnitude;
-                    if (mag > 0.12f) m += s / mag * Mathf.Clamp01((mag - 0.12f) / 0.8f); // zona morta radial reescalada
+                    if (mag > 0.11f)
+                    {
+                        float t = Mathf.Clamp01((mag - 0.11f) / 0.81f);
+                        m += (s / mag) * Mathf.Pow(t, 1.12f); // zona morta radial reescalada com precisão fina no centro
+                    }
                     m += gp.dpad.ReadValue();
                 }
 #elif ENABLE_LEGACY_INPUT_MANAGER
@@ -161,6 +195,24 @@ namespace Craquez
             }
         }
 
+        /// <summary>Analógico direito do controle físico: permite espiar o campo com a câmera.</summary>
+        public static Vector2 Look
+        {
+            get
+            {
+#if ENABLE_INPUT_SYSTEM
+                var gp = Pad;
+                if (gp != null)
+                {
+                    Vector2 s = gp.rightStick.ReadValue();
+                    float mag = s.magnitude;
+                    if (mag > 0.16f) return (s / mag) * Mathf.Clamp01((mag - 0.16f) / 0.78f);
+                }
+#endif
+                return Vector2.zero;
+            }
+        }
+
         public static bool Sprint
         {
             get
@@ -169,7 +221,7 @@ namespace Craquez
 #if ENABLE_INPUT_SYSTEM
                 if (Keyboard.current != null && (Keyboard.current.leftShiftKey.isPressed || Keyboard.current.rightShiftKey.isPressed)) v = true;
                 var gp = Pad;
-                if (gp != null && (gp.rightTrigger.ReadValue() > 0.4f || gp.leftStickButton.isPressed)) v = true;
+                if (gp != null && (gp.rightTrigger.ReadValue() > 0.35f || gp.leftStickButton.isPressed)) v = true;
 #elif ENABLE_LEGACY_INPUT_MANAGER
                 if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) v = true;
 #endif
@@ -213,7 +265,7 @@ namespace Craquez
             }
         }
 
-        /// <summary>Cavadinha. No modo goleiro: saltar (bola alta).</summary>
+        /// <summary>Cavadinha / Lançamento na partida. No modo goleiro: saltar (bola alta).</summary>
         public static bool Chip
         {
             get
@@ -229,7 +281,7 @@ namespace Craquez
             }
         }
 
-        /// <summary>Chute rasteiro (segurar para força): ✕ / A, tecla Z, ou OK do controle remoto na TV.</summary>
+        /// <summary>Chute rasteiro / Passe / Desarme: ✕ / A, tecla Z, ou OK do controle remoto na TV.</summary>
         public static bool LowShot
         {
             get
@@ -245,55 +297,16 @@ namespace Craquez
             }
         }
 
-        /// <summary>Passe curto: tecla C. Gamepad: R1/RB (toque rápido).</summary>
-        public static bool Pass
-        {
-            get
-            {
-                bool v = VirtualPass;
-#if ENABLE_INPUT_SYSTEM
-                if (Keyboard.current != null && Keyboard.current.cKey.isPressed) v = true;
-                if (Pad != null && Pad.rightShoulder.isPressed) v = true;
-#elif ENABLE_LEGACY_INPUT_MANAGER
-                if (Input.GetKey(KeyCode.C) || Input.GetKey(KeyCode.JoystickButton5)) v = true;
-#endif
-                return v;
-            }
-        }
+        /// <summary>Alias compatível de passe curto (usa LowShot sem conflitar com a tecla C da câmera).</summary>
+        public static bool Pass { get { return VirtualPass || LowShot; } }
 
-        /// <summary>Passe em profundidade / passe longo: tecla V. Gamepad: L1/LB (toque rápido).</summary>
-        public static bool ThroughBall
-        {
-            get
-            {
-                bool v = VirtualThroughBall;
-#if ENABLE_INPUT_SYSTEM
-                if (Keyboard.current != null && Keyboard.current.vKey.isPressed) v = true;
-                if (Pad != null && Pad.leftShoulder.isPressed) v = true;
-#elif ENABLE_LEGACY_INPUT_MANAGER
-                if (Input.GetKey(KeyCode.V) || Input.GetKey(KeyCode.JoystickButton4)) v = true;
-#endif
-                return v;
-            }
-        }
+        /// <summary>Alias compatível de lançamento (usa Chip).</summary>
+        public static bool ThroughBall { get { return VirtualThroughBall || Chip; } }
 
-        /// <summary>Cruzamento / passe alto: tecla B. Gamepad: R1/RB + L1/LB simultâneos.</summary>
-        public static bool Cross
-        {
-            get
-            {
-                bool v = VirtualCross;
-#if ENABLE_INPUT_SYSTEM
-                if (Keyboard.current != null && Keyboard.current.bKey.isPressed) v = true;
-                if (Pad != null && Pad.rightShoulder.isPressed && Pad.leftShoulder.isPressed) v = true;
-#elif ENABLE_LEGACY_INPUT_MANAGER
-                if (Input.GetKey(KeyCode.B) || (Input.GetKey(KeyCode.JoystickButton5) && Input.GetKey(KeyCode.JoystickButton4))) v = true;
-#endif
-                return v;
-            }
-        }
+        /// <summary>Alias compatível de cruzamento.</summary>
+        public static bool Cross { get { return VirtualCross || Chip; } }
 
-        /// <summary>Drible: com direção = corte/finta; para trás = puxada; sem direção = parar a bola. R1 / RB, tecla F.</summary>
+        /// <summary>Drible (com a bola) / Cercar (sem a bola): R1 / RB, tecla F.</summary>
         public static bool Skill
         {
             get
@@ -309,7 +322,7 @@ namespace Craquez
             }
         }
 
-        /// <summary>Arrancada (toque longo para frente e disparada). L1 / LB, tecla X.</summary>
+        /// <summary>Arrancada (com a bola) / Trocar jogador (sem a bola): L1 / LB, tecla X.</summary>
         public static bool KnockOn
         {
             get
@@ -344,10 +357,10 @@ namespace Craquez
             get
             {
 #if ENABLE_INPUT_SYSTEM
-                if (Keyboard.current != null && Keyboard.current.cKey.wasPressedThisFrame) return true;
+                if (Keyboard.current != null && (Keyboard.current.cKey.wasPressedThisFrame || Keyboard.current.vKey.wasPressedThisFrame || Keyboard.current.tabKey.wasPressedThisFrame)) return true;
                 if (Pad != null && Pad.rightStickButton.wasPressedThisFrame) return true;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-                if (Input.GetKeyDown(KeyCode.C) || Input.GetKeyDown(KeyCode.JoystickButton9)) return true;
+                if (Input.GetKeyDown(KeyCode.C) || Input.GetKeyDown(KeyCode.V) || Input.GetKeyDown(KeyCode.Tab) || Input.GetKeyDown(KeyCode.JoystickButton9)) return true;
 #endif
                 return false;
             }
