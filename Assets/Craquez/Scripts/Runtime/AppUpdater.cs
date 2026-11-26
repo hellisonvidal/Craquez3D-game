@@ -90,6 +90,7 @@ namespace Craquez
                 downloadUrl = null;
                 if (rel.assets != null)
                 {
+                    string fallbackZip = null;
                     foreach (var a in rel.assets)
                     {
                         if (a == null || string.IsNullOrEmpty(a.name)) continue;
@@ -98,9 +99,13 @@ namespace Craquez
                         // a versão de TV se atualiza com o APK de TV (32 e 64 bits); o celular, com o APK de celular
                         if (n.EndsWith(".apk") && Platform.TvBuild == n.Contains("-tv")) { downloadUrl = a.browser_download_url; break; }
 #else
-                        if (n.EndsWith(".zip") || n.EndsWith(".exe")) { downloadUrl = a.browser_download_url; break; }
+                        if (n.EndsWith(".exe")) { downloadUrl = a.browser_download_url; break; }
+                        if (n.EndsWith(".zip") && fallbackZip == null) fallbackZip = a.browser_download_url;
 #endif
                     }
+#if !UNITY_ANDROID
+                    if (downloadUrl == null) downloadUrl = fallbackZip;
+#endif
                 }
                 // Android e Windows dividem a Release: sem o arquivo desta plataforma (build ainda em andamento
                 // ou falhou) não há o que instalar. Antes o Android baixava a página HTML como se fosse o APK.

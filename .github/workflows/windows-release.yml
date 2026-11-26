@@ -56,10 +56,10 @@ jobs:
           IFS=. read -r MA MI PA <<< "$V"
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "code=$((MA*10000 + MI*100 + PA))" >> "$GITHUB_OUTPUT"
-          # pula só se a Release já tiver o arquivo desta plataforma (Android e Windows dividem a mesma Release)
-          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null | grep -q '\.zip$'; then
+          # pula só se a Release já tiver o instalador desta plataforma (Android e Windows dividem a mesma Release)
+          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null | grep -q -- '-setup\.exe$'; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "::warning::A Release v$V já tem o arquivo .zip. O build será gerado só como artefato; aumente o arquivo VERSION para publicar outra."
+            echo "::warning::A Release v$V já tem o instalador -setup.exe. O build será gerado só como artefato; aumente o arquivo VERSION para publicar outra."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
@@ -96,8 +96,8 @@ jobs:
           versioning: Custom
           version: ${{ steps.v.outputs.version }}
 
-      - name: Compactar build Windows
-        id: zip
+      - name: Gerar instalador (.exe) e pacote (.zip) Windows
+        id: pkg
         run: |
           EXE=$(sudo find build -name 'Craquez3D.exe' | head -n1)
           if [ -z "$EXE" ]; then echo "::error::Build Windows não encontrado"; exit 1; fi
@@ -105,17 +105,27 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" build
           # não vai para o jogador: símbolos de depuração gerados pela Unity
           rm -rf "$BUILD_DIR"/*_BurstDebugInformation_DoNotShip "$BUILD_DIR"/*_BackUpThisFolder_ButDontShipItWithYourGame
+          sudo apt-get update -qq && sudo apt-get install -y -qq nsis python3-pil
           mkdir -p saida
-          ZIP="$PWD/saida/Craquez3D-v${{ steps.v.outputs.version }}-windows.zip"
+          V="${{ steps.v.outputs.version }}"
+          SETUP="$PWD/saida/Craquez3D-v${V}-setup.exe"
+          ZIP="$PWD/saida/Craquez3D-v${V}-windows.zip"
+          python3 tools/installer/build_windows_installer.py \
+            --build-dir "$BUILD_DIR" \
+            --version "$V" \
+            --output "$SETUP"
           (cd "$BUILD_DIR" && zip -qr "$ZIP" .)
           ls -lh saida
-          echo "file=saida/Craquez3D-v${{ steps.v.outputs.version }}-windows.zip" >> "$GITHUB_OUTPUT"
+          echo "setup=saida/Craquez3D-v${V}-setup.exe" >> "$GITHUB_OUTPUT"
+          echo "zip=saida/Craquez3D-v${V}-windows.zip" >> "$GITHUB_OUTPUT"
 
-      - name: Guardar build (artefato)
+      - name: Guardar instalador e build (artefatos)
         uses: actions/upload-artifact@v4
         with:
           name: Craquez3D-v${{ steps.v.outputs.version }}-windows
-          path: ${{ steps.zip.outputs.file }}
+          path: |
+            ${{ steps.pkg.outputs.setup }}
+            ${{ steps.pkg.outputs.zip }}
           retention-days: 30
 
       - name: Publicar Release
@@ -131,7 +141,7 @@ jobs:
             on { print }
           ' CHANGELOG.md > notas.md
           [ -s notas.md ] || echo "Craquez 3D v$V" > notas.md
-          # cria a Release ou, se o outro workflow já criou, só anexa o arquivo
+          # cria a Release ou, se o outro workflow já criou, só anexa os arquivos
           if ! gh release view "v$V" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release create "v$V" \
               --repo "$GITHUB_REPOSITORY" \
@@ -140,4 +150,4 @@ jobs:
               --notes-file notas.md \
               --latest || true
           fi
-          gh release upload "v$V" "${{ steps.zip.outputs.file }}" --repo "$GITHUB_REPOSITORY" --clobber
+          gh release upload "v$V" "${{ steps.pkg.outputs.setup }}" "${{ steps.pkg.outputs.zip }}" --repo "$GITHUB_REPOSITORY" --clobber

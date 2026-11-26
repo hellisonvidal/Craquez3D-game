@@ -46,17 +46,17 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
-          ANDROID_KEYALIAS_NAME: ${{ secrets.ANDROID_KEYALIAS_NAME }}
-          ANDROID_KEYALIAS_PASS: ${{ secrets.ANDROID_KEYALIAS_PASS }}
         run: |
           faltando=""
-          for s in UNITY_LICENSE UNITY_EMAIL UNITY_PASSWORD ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASS ANDROID_KEYALIAS_NAME ANDROID_KEYALIAS_PASS; do
+          for s in UNITY_LICENSE UNITY_EMAIL UNITY_PASSWORD; do
             [ -z "${!s}" ] && faltando="$faltando $s"
           done
           if [ -n "$faltando" ]; then
-            echo "::error::Faltam segredos em Settings > Secrets and variables > Actions:$faltando (veja o README, seção 'Build automático no GitHub')."
+            echo "::error::Faltam segredos obrigatórios da Unity em Settings > Secrets and variables > Actions:$faltando (veja o README, seção 'Build automático no GitHub')."
             exit 1
+          fi
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "::warning::ANDROID_KEYSTORE_BASE64 não configurado: o APK será assinado com chave padrão (para permitir atualização automática futura sem desinstalar, configure a keystore em Secrets)."
           fi
 
       - uses: actions/checkout@v4
@@ -120,7 +120,7 @@ jobs:
           version: ${{ steps.v.outputs.version }}
           androidVersionCode: ${{ steps.v.outputs.code }}
           androidExportType: androidPackage
-          androidKeystoreName: craquez.keystore
+          androidKeystoreName: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' && 'craquez.keystore' || '' }}
           androidKeystoreBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           androidKeystorePass: ${{ secrets.ANDROID_KEYSTORE_PASS }}
           androidKeyaliasName: ${{ secrets.ANDROID_KEYALIAS_NAME }}
