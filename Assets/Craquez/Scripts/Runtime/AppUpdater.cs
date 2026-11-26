@@ -90,7 +90,9 @@ namespace Craquez
                 downloadUrl = null;
                 if (rel.assets != null)
                 {
+#if !UNITY_ANDROID
                     string fallbackZip = null;
+#endif
                     foreach (var a in rel.assets)
                     {
                         if (a == null || string.IsNullOrEmpty(a.name)) continue;
