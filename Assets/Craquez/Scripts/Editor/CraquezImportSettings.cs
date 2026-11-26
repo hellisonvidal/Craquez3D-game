@@ -13,16 +13,18 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 21;
+        public const int Version = 22;
 
         static readonly string[] LoopClips =
         {
-            "Idle", "Andar", "Trote", "Correr", "Disparada", "GK_Pronto", "GK_DeslocarEsq", "GK_DeslocarDir", "GK_Andar", "GK_Correr", "GK_Recuar", "GK_Espera", "GK_Caido"
+            "Idle", "Parado", "Andar", "Trote", "Correr", "Disparada", "CaidoDor",
+            "GK_Pronto", "GK_Parado", "GK_DeslocarEsq", "GK_DeslocarDir", "GK_Andar", "GK_Correr", "GK_Recuar", "GK_Espera", "GK_Caido"
         };
 
-        // Clipes de ação vertical/solo do goleiro: preservam a altura Y real do salto/mergulho/queda sem achatar nos pés
+        // Clipes de ação vertical/solo: preservam a altura Y real do salto/mergulho/queda acima do gramado sem achatar nos pés
         static readonly string[] FreeHeightClips =
         {
+            "Queda", "QuedaCostas", "CaidoDor", "Levantar",
             "GK_Salto", "GK_Mergulho", "GK_Soco", "GK_Caido", "GK_Levantar"
         };
 
@@ -91,7 +93,7 @@ namespace Craquez.EditorTools
             }
         }
 
-        /// <summary>Clipes da Quaternius em que o corpo sai do chão (queda, carrinho, levantar): mantêm a altura real.</summary>
+        /// <summary>Clipes da Quaternius em que o corpo sai do chão (queda, carrinho, levantar): mantêm a altura real na pose (lockRootHeightY = true, heightFromFeet = false).</summary>
         static readonly string[] QuaterniusFreeHeight = { "Death01", "LayToIdle", "Slide_Start", "Slide_Loop", "Slide_Exit", "Hit_Knockback", "Roll", "Jump_Start", "Jump_Loop", "Jump_Land" };
 
         public static string TakeName(string n)
@@ -119,7 +121,9 @@ namespace Craquez.EditorTools
                     c.loopPose = loopQ;
                     c.lockRootRotation = true;
                     c.keepOriginalOrientation = true;
-                    c.lockRootHeightY = !free;
+                    // CRÍTICO: applyRootMotion é false em tempo de execução; lockRootHeightY DEVE ser true para que a
+                    // curva vertical seja gravada na pose (caso contrário a Unity subtrai ~0,88m e enterra o jogador no chão!)
+                    c.lockRootHeightY = true;
                     c.keepOriginalPositionY = true;
                     c.lockRootPositionXZ = true;
                     c.keepOriginalPositionXZ = false;

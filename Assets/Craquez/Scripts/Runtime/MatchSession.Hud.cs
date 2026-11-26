@@ -74,25 +74,39 @@ namespace Craquez
         void DrawScoreboard(float s)
         {
             var a = Times[0]; var b = Times[1];
-            Rect r = new Rect(20 * s, 18 * s, 470 * s, 70 * s);
+            Rect r = new Rect(20 * s, 18 * s, 486 * s, 70 * s);
             UiKit.RoundRect(r, UiKit.A(UiKit.Navy, 0.82f), 16 * s);
-            float cw = 120 * s;
+            float cw = 118 * s;
             Rect ca = new Rect(r.x + 10 * s, r.y + 10 * s, cw, r.height - 20 * s);
-            Rect cb = new Rect(r.x + 10 * s + cw + 110 * s, r.y + 10 * s, cw, r.height - 20 * s);
+            Rect cb = new Rect(r.x + 10 * s + cw + 118 * s, r.y + 10 * s, cw, r.height - 20 * s);
             TeamChip(ca, a, s);
             TeamChip(cb, b, s);
-            UiKit.Text(new Rect(ca.xMax, r.y, 110 * s, r.height), a.gols + "  x  " + b.gols, new GUIStyle(ui.H1) { alignment = TextAnchor.MiddleCenter }, Color.white, 2 * s);
-            string clock = MatchMinute.ToString("00") + "'";
-            string half = Phase == Fase.Intervalo ? "INT" : (Phase == Fase.Fim ? "FIM" : Half + "ºT");
+            string scoreTxt = (Phase == Fase.DisputaPenaltis || ShootoutFinished)
+                ? a.gols + " (" + a.penaltisConvertidos + ") x (" + b.penaltisConvertidos + ") " + b.gols
+                : a.gols + "  x  " + b.gols;
+            var scoreStyle = new GUIStyle(Phase == Fase.DisputaPenaltis || ShootoutFinished ? ui.H2 : ui.H1) { alignment = TextAnchor.MiddleCenter };
+            UiKit.Text(new Rect(ca.xMax, r.y, 118 * s, r.height), scoreTxt, scoreStyle, Color.white, 2 * s);
+            string clock = ClockLabel;
+            string half = Phase == Fase.Intervalo ? "INT" : (Phase == Fase.Fim ? "FIM" : (Phase == Fase.DisputaPenaltis ? "DISPUTA" : Half + "ºT"));
             Rect cr = new Rect(cb.xMax + 8 * s, r.y + 8 * s, r.xMax - cb.xMax - 16 * s, r.height - 16 * s);
             UiKit.RoundRect(cr, UiKit.A(UiKit.NavyLight, 0.9f), 10 * s);
-            UiKit.Text(new Rect(cr.x, cr.y, cr.width, cr.height * 0.6f), clock, new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, UiKit.Yellow, 0f);
+            UiKit.Text(new Rect(cr.x, cr.y, cr.width, cr.height * 0.6f), clock, new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter, fontSize = clock.Length > 4 ? ui.R(20) : ui.H2.fontSize }, UiKit.Yellow, 0f);
             UiKit.Text(new Rect(cr.x, cr.y + cr.height * 0.52f, cr.width, cr.height * 0.48f), half, new GUIStyle(ui.Tiny) { alignment = TextAnchor.MiddleCenter }, UiKit.TextDim, 0f);
-            // posse
-            float pa = a.tempoPosse + b.tempoPosse > 1f ? a.tempoPosse / (a.tempoPosse + b.tempoPosse) : 0.5f;
-            Rect pr = new Rect(r.x + 12 * s, r.yMax + 6 * s, r.width - 24 * s, 6 * s);
-            UiKit.Fill(new Rect(pr.x, pr.y, pr.width * pa, pr.height), a.cor);
-            UiKit.Fill(new Rect(pr.x + pr.width * pa, pr.y, pr.width * (1f - pa), pr.height), b.cor);
+            if (Phase == Fase.DisputaPenaltis)
+            {
+                Rect pr = new Rect(r.x + 10 * s, r.yMax + 6 * s, r.width - 20 * s, 28 * s);
+                UiKit.RoundRect(pr, UiKit.A(UiKit.Navy, 0.78f), 8 * s);
+                UiKit.Text(new Rect(pr.x + 8 * s, pr.y, pr.width * 0.48f, pr.height), a.sigla + ": " + PenHistoryA, ui.Tiny, Color.white, 0f);
+                UiKit.Text(new Rect(pr.x + pr.width * 0.5f, pr.y, pr.width * 0.48f - 8 * s, pr.height), b.sigla + ": " + PenHistoryB, new GUIStyle(ui.Tiny) { alignment = TextAnchor.MiddleRight }, Color.white, 0f);
+            }
+            else
+            {
+                // posse
+                float pa = a.tempoPosse + b.tempoPosse > 1f ? a.tempoPosse / (a.tempoPosse + b.tempoPosse) : 0.5f;
+                Rect pr = new Rect(r.x + 12 * s, r.yMax + 6 * s, r.width - 24 * s, 6 * s);
+                UiKit.Fill(new Rect(pr.x, pr.y, pr.width * pa, pr.height), a.cor);
+                UiKit.Fill(new Rect(pr.x + pr.width * pa, pr.y, pr.width * (1f - pa), pr.height), b.cor);
+            }
         }
 
         void TeamChip(Rect r, TimeInfo t, float s)
@@ -229,6 +243,7 @@ namespace Craquez
 
         void DrawMiniMap(float s, float W, float H)
         {
+            if (Phase == Fase.DisputaPenaltis) return;
             float mw = Mathf.Min(W * 0.3f, 460 * s);
             float mh = mw * (Arena.Width / Arena.Length);
             Rect r = new Rect((W - mw) * 0.5f, H - mh - 18 * s, mw, mh);
@@ -307,20 +322,40 @@ namespace Craquez
 
         void DrawRestartPrompt(float s, float W, float H)
         {
+            if (Phase == Fase.DisputaPenaltis)
+            {
+                string pTxt = shootoutWaitingHuman
+                    ? "PÊNALTI: " + InputBridge.Glyph("chute") + "/" + InputBridge.Glyph("colocado") + " chute (segure p/ força) + direção"
+                    : (UserTeam != null && UserTeam.goleiro != null && UserTeam.goleiro.humanControlled
+                        ? "GOLEIRO: direção + " + InputBridge.Glyph("chute") + " mergulhar"
+                        : null);
+                if (!string.IsNullOrEmpty(pTxt))
+                {
+                    Rect pr = new Rect((W - 920 * s) * 0.5f, H * 0.36f, 920 * s, 56 * s);
+                    UiKit.RoundRect(pr, UiKit.A(UiKit.Navy, 0.78f), 28 * s);
+                    UiKit.Text(pr, pTxt, ui.Pill, UiKit.Yellow, 0f);
+                }
+                return;
+            }
             if (Phase != Fase.BolaParada || Restart == null || !Restart.waitingHuman || Restart.taker != Human) return;
             string tipo;
             switch (Restart.tipo)
             {
                 case TipoReinicio.Penalti: tipo = "PÊNALTI: " + InputBridge.Glyph("chute") + " chute (segure p/ força) + direção"; break;
-                case TipoReinicio.Falta: tipo = "FALTA: " + InputBridge.Glyph("chute") + "/" + InputBridge.Glyph("colocado") + " chute   ✕ passe   △ lançamento"; break;
+                case TipoReinicio.Falta:
+                    tipo = Restart.indirect
+                        ? "TIRO LIVRE INDIRETO: ✕ passe   △ lançamento (exige 2º toque p/ gol)"
+                        : "FALTA DIRETA: " + InputBridge.Glyph("chute") + "/" + InputBridge.Glyph("colocado") + " chute   ✕ passe   △ lançamento";
+                    break;
                 case TipoReinicio.Lateral: tipo = "LATERAL: direção + ✕ para cobrar"; break;
                 case TipoReinicio.Escanteio: tipo = "ESCANTEIO: △ cruzamento   ✕ passe curto"; break;
                 case TipoReinicio.Saida: tipo = "SAÍDA DE BOLA: ✕ passe"; break;
+                case TipoReinicio.BolaAoChao: tipo = "BOLA AO CHÃO: ✕ passe   △ lançamento"; break;
                 default: tipo = "✕ passe   △ lançamento"; break;
             }
             if (InputBridge.ControleConectado == TipoControle.Nenhum)
                 tipo = tipo.Replace("✕", "Z/PASSE").Replace("△", "Q/LANÇAR");
-            Rect r = new Rect((W - 900 * s) * 0.5f, H * 0.36f, 900 * s, 56 * s);
+            Rect r = new Rect((W - 940 * s) * 0.5f, H * 0.36f, 940 * s, 56 * s);
             UiKit.RoundRect(r, UiKit.A(UiKit.Navy, 0.75f), 28 * s);
             UiKit.Text(r, tipo, ui.Pill, UiKit.Yellow, 0f);
         }
@@ -330,46 +365,72 @@ namespace Craquez
         void DrawEndPanel(float s, float W, float H)
         {
             var a = Times[0]; var b = Times[1];
-            float pw = Mathf.Min(980 * s, W * 0.86f), ph = 620 * s;
+            bool tied = TiedAtFullTime;
+            float pw = Mathf.Min(1040 * s, W * 0.88f), ph = 660 * s;
             Rect p = new Rect((W - pw) * 0.5f, (H - ph) * 0.5f, pw, ph);
             UiKit.Fill(new Rect(0, 0, W, H), UiKit.A(UiKit.Navy, 0.55f));
             UiKit.ShadowRect(p, 30 * s, 0.7f);
             UiKit.RoundRect(p, UiKit.A(UiKit.Navy, 0.96f), 28 * s);
             UiKit.RoundBorder(p, UiKit.A(UiKit.Blue, 0.8f), 28 * s, 2 * s);
-            UiKit.Text(new Rect(p.x, p.y + 20 * s, pw, 60 * s), "FIM DE JOGO", new GUIStyle(ui.Title) { alignment = TextAnchor.MiddleCenter }, Color.white, 3 * s);
-            UiKit.Text(new Rect(p.x, p.y + 90 * s, pw, 70 * s), a.nome + "   " + a.gols + "  x  " + b.gols + "   " + b.nome,
+            UiKit.Text(new Rect(p.x, p.y + 18 * s, pw, 56 * s), ShootoutFinished ? "FIM DOS PÊNALTIS" : "FIM DE JOGO", new GUIStyle(ui.Title) { alignment = TextAnchor.MiddleCenter }, Color.white, 3 * s);
+            string scoreHeadline = ShootoutFinished
+                ? a.nome + "   " + a.gols + " (" + a.penaltisConvertidos + ")  x  (" + b.penaltisConvertidos + ") " + b.gols + "   " + b.nome
+                : a.nome + "   " + a.gols + "  x  " + b.gols + "   " + b.nome;
+            UiKit.Text(new Rect(p.x, p.y + 82 * s, pw, 66 * s), scoreHeadline,
                        new GUIStyle(ui.H1) { alignment = TextAnchor.MiddleCenter }, UiKit.Yellow, 2 * s);
             float tp = a.tempoPosse + b.tempoPosse;
             int posA = tp > 1f ? Mathf.RoundToInt(a.tempoPosse / tp * 100f) : 50;
             string[] rows =
             {
                 "Posse de bola|" + posA + "%|" + (100 - posA) + "%",
-                "Finalizações|" + a.chutes + "|" + b.chutes,
-                "No gol|" + a.chutesNoGol + "|" + b.chutesNoGol,
+                "Finalizações (no gol)|" + a.chutes + " (" + a.chutesNoGol + ")|" + b.chutes + " (" + b.chutesNoGol + ")",
                 "Escanteios|" + a.escanteios + "|" + b.escanteios,
                 "Faltas|" + a.faltas + "|" + b.faltas,
                 "Impedimentos|" + a.impedimentos + "|" + b.impedimentos,
                 "Cartões (A/V)|" + a.amarelos + " / " + a.vermelhos + "|" + b.amarelos + " / " + b.vermelhos,
+                "Substituições|" + a.substituicoes + "/" + TimeInfo.MaxSubstituicoes + "|" + b.substituicoes + "/" + TimeInfo.MaxSubstituicoes,
             };
-            float y = p.y + 170 * s;
+            float y = p.y + 160 * s;
             foreach (var row in rows)
             {
                 var c = row.Split('|');
-                UiKit.Text(new Rect(p.x + 60 * s, y, 200 * s, 40 * s), c[1], new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 0f);
-                UiKit.Text(new Rect(p.x, y, pw, 40 * s), c[0], new GUIStyle(ui.Body) { alignment = TextAnchor.MiddleCenter }, UiKit.TextDim, 0f);
-                UiKit.Text(new Rect(p.xMax - 260 * s, y, 200 * s, 40 * s), c[2], new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 0f);
-                y += 44 * s;
+                UiKit.Text(new Rect(p.x + 60 * s, y, 220 * s, 38 * s), c[1], new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 0f);
+                UiKit.Text(new Rect(p.x, y, pw, 38 * s), c[0], new GUIStyle(ui.Body) { alignment = TextAnchor.MiddleCenter }, UiKit.TextDim, 0f);
+                UiKit.Text(new Rect(p.xMax - 280 * s, y, 220 * s, 38 * s), c[2], new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 0f);
+                y += 42 * s;
             }
-            float bw = 360 * s, bh = 80 * s;
-            Rect again = new Rect(p.center.x - bw - 12 * s, p.yMax - bh - 26 * s, bw, bh);
-            Rect menu = new Rect(p.center.x + 12 * s, p.yMax - bh - 26 * s, bw, bh);
-            UiKit.RoundRect(again, UiKit.Red, bh * 0.5f);
-            UiKit.Text(again, "JOGAR DE NOVO", new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 0f);
-            UiKit.RoundRect(menu, UiKit.A(UiKit.NavyLight, 0.95f), bh * 0.5f);
-            UiKit.RoundBorder(menu, UiKit.A(Color.white, 0.5f), bh * 0.5f, 2 * s);
-            UiKit.Text(menu, "MENU PRINCIPAL", new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 0f);
-            if (ui.Hit(again) || (phaseTime > 3.5f && InputBridge.ConfirmPressed)) { RequestRestartMatch(); return; }
-            if (ui.Hit(menu) || (phaseTime > 3.5f && InputBridge.BackPressed)) RequestExit();
+            float bh = 78 * s;
+            if (tied)
+            {
+                float bw = (pw - 100 * s) / 3f;
+                Rect penBtn = new Rect(p.x + 32 * s, p.yMax - bh - 24 * s, bw, bh);
+                Rect again = new Rect(penBtn.xMax + 18 * s, penBtn.y, bw, bh);
+                Rect menu = new Rect(again.xMax + 18 * s, penBtn.y, bw, bh);
+                UiKit.RoundRect(penBtn, UiKit.Green, bh * 0.5f);
+                UiKit.RoundBorder(penBtn, UiKit.Yellow, bh * 0.5f, 3 * s);
+                UiKit.Text(penBtn, "PÊNALTIS", new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, UiKit.Navy, 0f);
+                UiKit.RoundRect(again, UiKit.Red, bh * 0.5f);
+                UiKit.Text(again, "JOGAR DE NOVO", new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 0f);
+                UiKit.RoundRect(menu, UiKit.A(UiKit.NavyLight, 0.95f), bh * 0.5f);
+                UiKit.RoundBorder(menu, UiKit.A(Color.white, 0.5f), bh * 0.5f, 2 * s);
+                UiKit.Text(menu, "MENU", new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 0f);
+                if (ui.Hit(penBtn) || (phaseTime > 3.5f && InputBridge.ConfirmPressed)) { StartPenaltyShootout(); return; }
+                if (ui.Hit(again)) { RequestRestartMatch(); return; }
+                if (ui.Hit(menu) || (phaseTime > 3.5f && InputBridge.BackPressed)) RequestExit();
+            }
+            else
+            {
+                float bw = 360 * s;
+                Rect again = new Rect(p.center.x - bw - 12 * s, p.yMax - bh - 24 * s, bw, bh);
+                Rect menu = new Rect(p.center.x + 12 * s, p.yMax - bh - 24 * s, bw, bh);
+                UiKit.RoundRect(again, UiKit.Red, bh * 0.5f);
+                UiKit.Text(again, "JOGAR DE NOVO", new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 0f);
+                UiKit.RoundRect(menu, UiKit.A(UiKit.NavyLight, 0.95f), bh * 0.5f);
+                UiKit.RoundBorder(menu, UiKit.A(Color.white, 0.5f), bh * 0.5f, 2 * s);
+                UiKit.Text(menu, "MENU PRINCIPAL", new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 0f);
+                if (ui.Hit(again) || (phaseTime > 3.5f && InputBridge.ConfirmPressed)) { RequestRestartMatch(); return; }
+                if (ui.Hit(menu) || (phaseTime > 3.5f && InputBridge.BackPressed)) RequestExit();
+            }
         }
     }
 }

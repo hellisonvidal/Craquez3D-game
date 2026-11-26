@@ -367,13 +367,26 @@ namespace Craquez
 
         // ------------------------------------------------------------ bola parada e comemoração
 
+        bool settled;
+
         void SetPieceTick(MatchSession m)
         {
             pc.jockeyMode = false;
             Vector3 t = m.RestartSpot(this);
-            bool taker = m.Restart.taker == this;
-            MoveTo(t, taker ? 0.8f : 0.6f, Vector3.Distance(Pos, t) > 15f, taker ? m.Restart.aim : m.BallPos, 0.25f, false);
-            Acao = taker ? "Cobrador" : "Posicionando";
+            bool taker = m.Restart != null && m.Restart.taker == this;
+            float dist = Vector3.Distance(Pos, t);
+            if (taker)
+            {
+                // Cobrador vai caminhando/trotando naturalmente até a bola para fazer a cobrança
+                Vector3 look = dist > 0.95f ? m.Restart.spot : m.Restart.aim;
+                MoveTo(t, dist > 7f ? 0.52f : 0.26f, false, look, 0.30f, dist > 2.2f);
+                Acao = dist > 0.85f ? "Indo cobrar" : "Cobrador";
+            }
+            else
+            {
+                MoveTo(t, 0.55f, dist > 16f, m.BallPos, 0.42f, dist > 1.8f);
+                Acao = "Posicionando";
+            }
         }
 
         void CelebrateTick(MatchSession m)
@@ -415,9 +428,13 @@ namespace Craquez
             Vector3 d = target - pos; d.y = 0f;
             float dist = d.magnitude;
 
+            if (arriveRadius < 0.2f) settled = false;
+            else if (dist <= arriveRadius) settled = true;
+            else if (settled && dist > arriveRadius + 0.52f) settled = false;
+
             // separação suave: só atua quando em movimento (evita "sambar" na barreira ou no ponto de chegada)
             Vector3 sep = Vector3.zero;
-            if (allowSeparation && dist > arriveRadius * 0.85f)
+            if (!settled && allowSeparation && dist > arriveRadius * 0.85f)
             {
                 foreach (var o in time.jogadores)
                 {
@@ -429,14 +446,14 @@ namespace Craquez
             }
 
             Vector3 move = Vector3.zero;
-            if (dist > arriveRadius)
+            if (!settled && dist > arriveRadius)
             {
                 float speed01 = Mathf.Clamp01((dist - arriveRadius * 0.5f) / 2.8f);
-                move = d / dist * speed01 * Mathf.Lerp(0.5f, 1f, urgency);
+                move = d / dist * speed01 * Mathf.Lerp(0.45f, 1f, urgency);
                 move += sep * (0.55f * Mathf.Clamp01(dist / 1.8f));
             }
             pc.aiMoveWorld = Vector3.ClampMagnitude(move, 1f);
-            pc.aiSprint = sprint && dist > 2f && stamina > 0.12f;
+            pc.aiSprint = !settled && sprint && dist > 2f && stamina > 0.12f;
             pc.aiFace = true;
             pc.aiFacePoint = face;
         }

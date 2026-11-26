@@ -100,6 +100,8 @@ namespace Craquez
 
         // ------------------------------------------------------------ ciclo (chamado pela partida)
 
+        bool settled;
+
         public void Tick(float dt)
         {
             if (match == null || !match.Active) return;
@@ -109,13 +111,17 @@ namespace Craquez
 
             Vector3 to = target - transform.position; to.y = 0f;
             float dist = to.magnitude;
+            if (dist <= 0.55f) settled = true;
+            else if (settled && dist > 1.2f) settled = false;
+
             float max = dist > 14f ? 6.8f : (dist > 4f ? 4.2f : 1.6f);
             if (papel == Papel.Assistente) max = dist > 8f ? 7f : (dist > 2f ? 4f : 1.5f);
-            Vector3 desired = dist > 0.5f ? to / dist * Mathf.Min(max, dist * 1.4f) : Vector3.zero;
+            Vector3 desired = (!settled && dist > 0.55f) ? to / dist * Mathf.Min(max, dist * 1.4f) : Vector3.zero;
             bool gesturing = Time.time < gestureUntil;
             if (gesturing) desired = Vector3.zero;
             float accel = desired.magnitude > velocity.magnitude ? 8f : 12f;
             velocity = Vector3.MoveTowards(velocity, desired, accel * dt);
+            if (desired.sqrMagnitude < 1e-4f && velocity.sqrMagnitude < 0.008f) velocity = Vector3.zero;
             Vector3 p = transform.position + velocity * dt;
             p.y = 0f;
             transform.position = p;

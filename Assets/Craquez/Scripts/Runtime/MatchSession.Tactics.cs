@@ -520,12 +520,34 @@ namespace Craquez
                     }
                 case TipoReinicio.TiroDeMeta:
                     {
-                        if (!attacking && InPenaltyArea(p, OpponentOf(t))) p = new Vector3((Mathf.Abs(p.x) > 30f ? Mathf.Sign(p.x) * 33f : p.x), 0f, p.z);
+                        // Regra 16 atual: companheiros podem receber dentro da própria área; adversários ficam fora da grande área até o toque
+                        if (attacking && (m.funcao == Funcao.Zagueiro || m.funcao == Funcao.Lateral))
+                        {
+                            float sideZ = Mathf.Sign(m.slot.z == 0f ? 1f : -m.slot.z * t.attackDir) * (m.funcao == Funcao.Zagueiro ? 11f : 22f);
+                            p = t.OwnGoal + t.Forward * (m.funcao == Funcao.Zagueiro ? 10.5f : 18f) + new Vector3(0f, 0f, sideZ);
+                        }
+                        else if (!attacking && InPenaltyArea(p, r.time))
+                        {
+                            float safeX = (Arena.HalfLength - 17.5f) * Mathf.Sign(r.time.OwnGoal.x);
+                            p = new Vector3(safeX, 0f, p.z);
+                        }
+                        break;
+                    }
+                case TipoReinicio.BolaAoChao:
+                    {
+                        // Regra 8 atual (Bola ao chão): todos os demais atletas de ambos os times a pelo menos 4 m da bola
+                        if (Vector3.Distance(p, spot) < 4.4f)
+                        {
+                            Vector3 away = Flat(p - spot);
+                            if (away.sqrMagnitude < 0.01f) away = -t.Forward;
+                            p = spot + away.normalized * 4.6f;
+                        }
                         break;
                     }
                 case TipoReinicio.Lateral:
                     {
-                        if (!attacking && Vector3.Distance(p, spot) < 2.5f) p = spot + new Vector3(0f, 0f, -Mathf.Sign(spot.z) * 3f);
+                        // Regra 15: adversários a pelo menos 2 m do ponto de cobrança na linha lateral
+                        if (!attacking && Vector3.Distance(p, spot) < 2.6f) p = spot + new Vector3(0f, 0f, -Mathf.Sign(spot.z) * 3f);
                         break;
                     }
             }

@@ -115,9 +115,24 @@ namespace Craquez
         }
     }
 
+    /// <summary>Jogador do banco de reservas pronto para substituição (Regra 3 IFAB: até 5 substituições em 3 janelas + intervalo).</summary>
+    public class ReservaInfo
+    {
+        public int numero;
+        public string nome;
+        public Funcao funcao;
+        public Atributos atr;
+        public Mentalidade men;
+        public Aparencia aparencia;
+        public int visual;
+    }
+
     /// <summary>Configuração visual e tática de um time.</summary>
     public class TimeInfo
     {
+        public const int MaxSubstituicoes = 5;
+        public const int MaxJanelasSub = 3;
+
         public string nome, sigla;
         public Color cor, corSecundaria;
         public int indice;              // 0 = casa, 1 = visitante
@@ -130,11 +145,18 @@ namespace Craquez
         public bool goleiroModeloA;
 
         public readonly List<MatchPlayer> jogadores = new List<MatchPlayer>();
+        public readonly List<ReservaInfo> reservas = new List<ReservaInfo>();
         public GoalkeeperAI goleiro;
         public MatchPlayer goleiroInfo;
 
         public int gols, chutes, chutesNoGol, faltas, amarelos, vermelhos, impedimentos, escanteios;
+        public int substituicoes, janelasSub, penaltisConvertidos;
         public float tempoPosse;
+
+        public bool PodeSubstituir(bool intervalo)
+        {
+            return substituicoes < MaxSubstituicoes && (intervalo || janelasSub < MaxJanelasSub) && reservas.Count > 0;
+        }
 
         /// <summary>Converte coordenadas do time (x: -1 próprio gol .. +1 gol adversário; z: -1..1) para o mundo.</summary>
         public Vector3 ToWorld(float tx, float tz)

@@ -257,7 +257,7 @@ namespace Craquez
             if (d.sqrMagnitude > 0.01f) transform.rotation = Quaternion.LookRotation(d);
             velocity = Vector3.zero;
             Charging = false; Charge = 0f; kickPending = false; passPending = false; lockMoveUntil = 0f;
-            fallen = false; hurt = false; getUpUntil = 0f; slideUntil = 0f;
+            fallen = false; hurt = false; fallStartedAt = -1f; hurtGetUpAt = -1f; staggerUntil = 0f; getUpUntil = 0f; slideUntil = 0f;
             if (grounder != null) grounder.grounding = true;
             HasPossession = false;
             if (sockets != null)
@@ -357,7 +357,7 @@ namespace Craquez
             }
             else if (fallen)
             {
-                velocity = Vector3.MoveTowards(velocity, Vector3.zero, 9f * grip * dt);
+                velocity = Vector3.MoveTowards(velocity, Vector3.zero, 11f * grip * dt);
                 target = velocity;
             }
 
@@ -389,7 +389,12 @@ namespace Craquez
                 Play("Freada", 0.1f);
             }
             UpdatePendingCut();
-            if (!Sliding && !fallen) velocity = Vector3.MoveTowards(velocity, target, accelRate * dt);
+            if (!Sliding && !fallen)
+            {
+                velocity = Vector3.MoveTowards(velocity, target, accelRate * dt);
+                if (target.sqrMagnitude < 1e-4f && velocity.sqrMagnitude < 0.0064f)
+                    velocity = Vector3.zero;
+            }
 
             Vector3 p = transform.position + velocity * dt;
             // alambrado: além de limitar a posição, zera a velocidade contra a grade (antes o jogador "corria parado")
@@ -1227,7 +1232,7 @@ namespace Craquez
         /// </summary>
         Vector3 ResolvePlayerCollisions(Vector3 proposedPos)
         {
-            if (bodyCapsule == null) return proposedPos;
+            if (bodyCapsule == null || Incapacitated) return proposedPos;
             float sc = Mathf.Max(0.5f, transform.lossyScale.y);
             float r = bodyCapsule.radius * sc;
             float h = bodyCapsule.height * sc;
@@ -1254,6 +1259,12 @@ namespace Craquez
                 Vector3 nrm = dir / dist;
 
                 var otherPc = hit.GetComponent<PlayerController>();
+                if (otherPc != null && otherPc.Incapacitated)
+                {
+                    // Jogador caído no gramado: desvio lateral suave sem empurrá-lo nem prender os pés
+                    result += nrm * Mathf.Min(overlap * 0.45f, 0.08f);
+                    continue;
+                }
                 Component other = otherPc;
                 Vector3 ov = Vector3.zero;
                 float om = 80f;
@@ -1265,7 +1276,7 @@ namespace Craquez
                 }
 
                 float share = om / Mathf.Max(1f, bodyMass + om);
-                if (otherPc != null && !otherPc.Incapacitated)
+                if (otherPc != null)
                 {
                     // Separação dividida pela razão inversa das massas (o mais pesado cede menos terreno)
                     result += nrm * ((overlap + 0.01f) * share);
@@ -1347,19 +1358,38 @@ namespace Craquez
 
         void UpdateBodyState(float dt)
         {
-            if (fallen && Time.time >= fallUntil)
+            if (fallen && (Time.time >= fallUntil || (fallStartedAt > 0f && Time.time - fallStartedAt > 7.5f)))
             {
                 fallen = false;
-                getUpUntil = Time.time + 1.05f;
-                Play(hurt ? "CaidoDor" : "Levantar", 0.25f);
-                if (hurt) { getUpUntil = Time.time + 1.8f; hurtGetUpAt = Time.time + 1.6f; }
+                fallStartedAt = -1f;
+                if (hurt)
+                {
+                    Play("CaidoDor", 0.22f, "Levantar");
+                    hurtGetUpAt = Time.time + 1.55f;
+                    getUpUntil = Time.time + 2.65f;
+                }
+                else
+                {
+                    Play("Levantar", 0.22f, "Locomocao");
+                    getUpUntil = Time.time + 1.05f;
+                }
             }
             if (hurt && hurtGetUpAt > 0f && Time.time >= hurtGetUpAt)
             {
                 hurtGetUpAt = -1f;
                 hurt = false;
-                Play("Levantar", 0.3f);
+                Play("Levantar", 0.25f, "Locomocao");
                 getUpUntil = Time.time + 1.05f;
+            }
+            if (!fallen && !hurt && getUpUntil > 0f && Time.time >= getUpUntil)
+            {
+                getUpUntil = 0f;
+                if (anim != null)
+                {
+                    var st = anim.GetCurrentAnimatorStateInfo(0);
+                    if (st.IsName("Queda") || st.IsName("QuedaCostas") || st.IsName("CaidoDor") || st.IsName("Levantar"))
+                        Play("Locomocao", 0.2f);
+                }
             }
             if (slideUntil > 0f && Time.time >= slideUntil)
             {
@@ -1369,6 +1399,7 @@ namespace Craquez
             }
             if (grounder != null) grounder.grounding = !fallen && Time.time >= getUpUntil && !Sliding;
         }
+        float fallStartedAt = -1f;
         float hurtGetUpAt = -1f;
         float staggerUntil;
         public bool Staggered { get { return Time.time < staggerUntil; } }
@@ -1398,11 +1429,15 @@ namespace Craquez
             fallen = true;
             hurt = injured;
             slideUntil = 0f;
-            fallUntil = Time.time + Mathf.Max(0.6f, lieSeconds);
+            fallStartedAt = Time.time;
+            fallUntil = Time.time + Mathf.Clamp(lieSeconds, 0.65f, 6.5f);
             push.y = 0f;
-            velocity = Vector3.ClampMagnitude(velocity * 0.5f + push, 6f);
-            if (push.sqrMagnitude > 0.01f) transform.rotation = Quaternion.LookRotation(-push.normalized); // cai de costas para o lado do empurrão
-            Play("Queda", 0.12f, "Locomocao");
+            bool backward = push.sqrMagnitude > 0.01f && Vector3.Dot(transform.forward, push.normalized) < -0.15f;
+            velocity = Vector3.ClampMagnitude(velocity * 0.38f + push * 0.72f, 4.2f);
+            Vector3 p0 = transform.position; p0.y = 0f; transform.position = p0;
+            if (push.sqrMagnitude > 0.01f)
+                transform.rotation = Quaternion.LookRotation(backward ? -push.normalized : push.normalized);
+            Play(backward ? "QuedaCostas" : "Queda", 0.1f, "Locomocao");
             if (grounder != null) grounder.grounding = false;
         }
 

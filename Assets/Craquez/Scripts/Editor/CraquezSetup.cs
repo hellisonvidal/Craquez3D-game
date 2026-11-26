@@ -184,25 +184,44 @@ namespace Craquez.EditorTools
                 }
             }
 
-            // dribles, fintas, arrancada e freada (tools/blender/jogadoranim): feitos no esqueleto do próprio Jogador.fbx
+            // dribles, fintas, arrancada, freada, parado e quedas (tools/blender/jogadoranim): feitos no esqueleto do próprio Jogador.fbx
             Avatar corpo = null;
             foreach (var o in AssetDatabase.LoadAllAssetsAtPath(Root + "/Models/Jogador.fbx"))
                 if (o is Avatar a && a.isHuman) { corpo = a; break; }
-            if (corpo == null) { Debug.LogWarning("[Craquez 3D] Avatar do Jogador.fbx não encontrado (jogadas)"); return; }
-            foreach (var c in Jogadas)
+            if (corpo != null)
             {
-                var mi = AssetImporter.GetAtPath(Root + "/Animations/Jogador/Jogadas/" + c + ".fbx") as ModelImporter;
-                if (mi == null) { Debug.LogWarning("[Craquez 3D] Jogada ausente: " + c); continue; }
-                if (mi.avatarSetup == ModelImporterAvatarSetup.CopyFromOther && mi.sourceAvatar == corpo) continue;
-                mi.animationType = ModelImporterAnimationType.Human;
-                mi.avatarSetup = ModelImporterAvatarSetup.CopyFromOther;
-                mi.sourceAvatar = corpo;
-                mi.SaveAndReimport();
+                foreach (var c in ClipesNativosJogador)
+                {
+                    var mi = AssetImporter.GetAtPath(Root + "/Animations/Jogador/Jogadas/" + c + ".fbx") as ModelImporter;
+                    if (mi == null) { Debug.LogWarning("[Craquez 3D] Clipe nativo ausente: " + c); continue; }
+                    if (mi.avatarSetup == ModelImporterAvatarSetup.CopyFromOther && mi.sourceAvatar == corpo) continue;
+                    mi.animationType = ModelImporterAnimationType.Human;
+                    mi.avatarSetup = ModelImporterAvatarSetup.CopyFromOther;
+                    mi.sourceAvatar = corpo;
+                    mi.SaveAndReimport();
+                }
+            }
+            else Debug.LogWarning("[Craquez 3D] Avatar do Jogador.fbx não encontrado (jogadas)");
+
+            Avatar corpoGk = null;
+            foreach (var o in AssetDatabase.LoadAllAssetsAtPath(Root + "/Models/Goleiro.fbx"))
+                if (o is Avatar a && a.isHuman) { corpoGk = a; break; }
+            if (corpoGk != null)
+            {
+                var miGk = AssetImporter.GetAtPath(Root + "/Animations/Goleiro/Jogadas/GK_Parado.fbx") as ModelImporter;
+                if (miGk != null && !(miGk.avatarSetup == ModelImporterAvatarSetup.CopyFromOther && miGk.sourceAvatar == corpoGk))
+                {
+                    miGk.animationType = ModelImporterAnimationType.Human;
+                    miGk.avatarSetup = ModelImporterAvatarSetup.CopyFromOther;
+                    miGk.sourceAvatar = corpoGk;
+                    miGk.SaveAndReimport();
+                }
             }
         }
 
-        /// <summary>Jogadas do jogador geradas por tools/blender/jogadoranim/build.py.</summary>
+        /// <summary>Jogadas ofensivas do jogador geradas por tools/blender/jogadoranim/build.py.</summary>
         static readonly string[] Jogadas = { "FintaCorpoDir", "FintaCorpoEsq", "PedaladaDir", "PedaladaEsq", "PuxadaDir", "PuxadaEsq", "Arrancada", "Freada" };
+        static readonly string[] ClipesNativosJogador = { "Parado", "FintaCorpoDir", "FintaCorpoEsq", "PedaladaDir", "PedaladaEsq", "PuxadaDir", "PuxadaEsq", "Arrancada", "Freada", "Queda", "QuedaCostas", "CaidoDor", "Levantar" };
 
         static void ReimportAll()
         {
@@ -622,7 +641,8 @@ namespace Craquez.EditorTools
             ac.AddParameter("Angle", AnimatorControllerParameterType.Float);
             var sm = ac.layers[0].stateMachine;
 
-            var idle = Clip("Jogador", "Idle");
+            var idle = Clip("Jogador/Jogadas", "Parado");
+            if (idle == null) idle = QClip("UAL1", "Idle_Loop") ?? Clip("Jogador", "Idle");
             var walk = Clip("Jogador", "Andar");
             var jog = Clip("Jogador", "Trote");
             var run = Clip("Jogador", "Correr");
@@ -669,17 +689,22 @@ namespace Craquez.EditorTools
                 AddClipState(sm, n, clipJ, finta ? 1.3f : (n == "Arrancada" ? 1.1f : 1.2f), loco, n == "Arrancada" ? 0.8f : 0.88f, 0.15f);
             }
 
-            // contato físico, contusões e bola parada (Universal Animation Library — Quaternius, CC0)
-            var levantar = AddClipState(sm, "Levantar", QClip("UAL2", "LayToIdle"), 1.25f, loco, 0.9f, 0.22f);
-            AddClipState(sm, "Queda", QClip("UAL1", "Death01"), 1.35f, null, 0f, 0f);                 // fica no chão até o código levantar
+            // quedas, contusões e levantar de futebol (nativos em Jogador/Jogadas + complementos Quaternius CC0)
+            var levantarClip = Clip("Jogador/Jogadas", "Levantar") ?? QClip("UAL2", "LayToIdle");
+            var quedaClip = Clip("Jogador/Jogadas", "Queda") ?? QClip("UAL1", "Death01");
+            var quedaCostasClip = Clip("Jogador/Jogadas", "QuedaCostas") ?? quedaClip;
+            var caidoDorClip = Clip("Jogador/Jogadas", "CaidoDor") ?? QClip("UAL1", "Crouch_Idle_Loop");
+            var levantar = AddClipState(sm, "Levantar", levantarClip, 1.15f, loco, 0.92f, 0.2f);
+            AddClipState(sm, "Queda", quedaClip, 1.1f, null, 0f, 0f);                                  // fica no gramado até o código levantar
+            AddClipState(sm, "QuedaCostas", quedaCostasClip, 1.1f, null, 0f, 0f);
             AddClipState(sm, "Atingido", QClip("UAL1", "Hit_Chest"), 1.2f, loco, 0.8f, 0.18f);
             AddClipState(sm, "AtingidoCabeca", QClip("UAL1", "Hit_Head"), 1.2f, loco, 0.8f, 0.18f);
-            AddClipState(sm, "Empurrado", QClip("UAL2", "Hit_Knockback"), 1.25f, loco, 0.85f, 0.2f);
+            AddClipState(sm, "Empurrado", QClip("UAL2", "Idle_Shield_Break") ?? QClip("UAL1", "Hit_Chest"), 1.2f, loco, 0.85f, 0.2f);
             AddClipState(sm, "Lateral", QClip("UAL2", "OverhandThrow"), 1.1f, loco, 0.92f, 0.2f);
             AddClipState(sm, "Comemorar", QClip("UAL1", "Dance_Loop"), 1f, null, 0f, 0f);
             AddClipState(sm, "ComemorarSim", QClip("UAL2", "Yes"), 1f, loco, 0.95f, 0.25f);
             AddClipState(sm, "Reclamar", QClip("UAL2", "Idle_No_Loop"), 1f, loco, 1.6f, 0.25f);
-            AddClipState(sm, "CaidoDor", QClip("UAL1", "Crouch_Idle_Loop"), 0.7f, null, 0f, 0f);       // agachado, segurando a contusão
+            AddClipState(sm, "CaidoDor", caidoDorClip, 0.85f, null, 0f, 0f);                           // sentado no gramado segurando a canela
             var deslize = AddClipState(sm, "CarrinhoInicio", QClip("UAL2", "Slide_Start"), 1.2f, null, 0f, 0f);
             var deslizeLoop = AddClipState(sm, "CarrinhoDeslize", QClip("UAL2", "Slide_Loop"), 1f, null, 0f, 0f);
             var deslizeFim = AddClipState(sm, "CarrinhoFim", QClip("UAL2", "Slide_Exit"), 1.2f, loco, 0.9f, 0.2f);
@@ -687,7 +712,7 @@ namespace Craquez.EditorTools
             {
                 var a = deslize.AddTransition(deslizeLoop); a.hasExitTime = true; a.exitTime = 0.95f; a.duration = 0.05f;
             }
-            if (levantar == null) Debug.LogWarning("[Craquez 3D] Sem LayToIdle: o jogador levanta direto na locomoção.");
+            if (levantar == null) Debug.LogWarning("[Craquez 3D] Sem clipe de levantar: o jogador levanta direto na locomoção.");
             EnableIK(ac);
             EditorUtility.SetDirty(ac);
             return ac;
@@ -704,12 +729,11 @@ namespace Craquez.EditorTools
             bt.blendType = BlendTreeType.Simple1D;
             bt.blendParameter = "Speed";
             bt.useAutomaticThresholds = false;
-            var idle = QClip("UAL1", "Idle_Loop");
+            var idle = Clip("Jogador/Jogadas", "Parado") ?? QClip("UAL1", "Idle_Loop") ?? Clip("Jogador", "Idle");
             var walk = QClip("UAL1", "Walk_Loop");
             var jog = QClip("UAL1", "Jog_Fwd_Loop");
             var sprint = QClip("UAL1", "Sprint_Loop");
-            // fallback: animações do jogador se a biblioteca não estiver presente
-            bt.AddChild(idle != null ? idle : Clip("Jogador", "Idle"), 0f);
+            bt.AddChild(idle, 0f);
             bt.AddChild(walk != null ? walk : Clip("Jogador", "Andar"), 1.4f);
             bt.AddChild(jog != null ? jog : Clip("Jogador", "Trote"), 3.6f);
             bt.AddChild(sprint != null ? sprint : Clip("Jogador", "Correr"), 6.8f);
@@ -736,8 +760,8 @@ namespace Craquez.EditorTools
             ac.parameters = pars;
             var sm = ac.layers[0].stateMachine;
 
-            // animações próprias do goleiro (locomoção 2D: lateral + avanço/recuo)
-            var idle = Clip("Goleiro", "GK_Pronto");
+            // animações próprias do goleiro (locomoção 2D: lateral + avanço/recuo, com pés firmes no parado)
+            var idle = Clip("Goleiro/Jogadas", "GK_Parado") ?? Clip("Goleiro", "GK_Pronto");
             var left = Clip("Goleiro", "GK_DeslocarEsq");
             var right = Clip("Goleiro", "GK_DeslocarDir");
             var walkFwd = Clip("Goleiro", "GK_Andar");
@@ -819,7 +843,7 @@ namespace Craquez.EditorTools
             slideSave.mirrorParameter = "Mirror";
 
             var waitIdle = sm.AddState("GK_Espera");
-            waitIdle.motion = Clip("Goleiro", "GK_Espera");
+            waitIdle.motion = Clip("Goleiro/Jogadas", "GK_Parado") ?? Clip("Goleiro", "GK_Espera");
 
             var punchJump = sm.AddState("GK_Soco");
             punchJump.motion = Clip("Goleiro", "GK_Soco");
@@ -1298,7 +1322,7 @@ namespace Craquez.EditorTools
     [InitializeOnLoad]
     static class CraquezAutoSetup
     {
-        const int SetupSchema = 2;
+        const int SetupSchema = 3;
 
         static string Key() { return "craquez.setup.stamp." + Application.dataPath.GetHashCode(); }
         static string Stamp() { return CraquezSetup.ReadVersion() + "#" + SetupSchema; }

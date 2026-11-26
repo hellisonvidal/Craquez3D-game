@@ -31,7 +31,7 @@ namespace Craquez
         public event Action OnExitRequested;
         public event Action OnRestartRequested;
 
-        public enum Fase { Inativo, BolaParada, Jogo, Comemoracao, Parado, Intervalo, Fim }
+        public enum Fase { Inativo, BolaParada, Jogo, Comemoracao, Parado, Intervalo, DisputaPenaltis, Fim }
         public enum TipoReinicio { Saida, Lateral, TiroDeMeta, Escanteio, Falta, Penalti, BolaAoChao }
 
         public class Reinicio
@@ -42,6 +42,7 @@ namespace Craquez
             public Vector3 aim;
             public MatchPlayer taker;
             public float start;
+            public bool takerArrived;
             public bool executing;
             public float executeAt;
             public bool waitingHuman;
@@ -66,6 +67,22 @@ namespace Craquez
         public float HalfSeconds { get; private set; }
         public float Clock { get; private set; }
         public int MatchMinute { get { return Mathf.Min(45, Mathf.FloorToInt(Clock / Mathf.Max(1f, HalfSeconds) * 45f)) + (Half == 2 ? 45 : 0); } }
+        public int AddedMinutes { get { return Mathf.Clamp(Mathf.CeilToInt(addedSeconds / Mathf.Max(1f, HalfSeconds) * 45f), 0, 9); } }
+        public bool ShootoutFinished { get { return shootoutFinished; } }
+        public string PenHistoryA { get { return penHistoryA; } }
+        public string PenHistoryB { get { return penHistoryB; } }
+
+        public string ClockLabel
+        {
+            get
+            {
+                if (Phase == Fase.DisputaPenaltis) return "PÊN";
+                if (Clock <= HalfSeconds) return MatchMinute.ToString("00") + "'";
+                int baseMin = Half == 1 ? 45 : 90;
+                int extra = Mathf.Max(1, Mathf.FloorToInt((Clock - HalfSeconds) / Mathf.Max(1f, HalfSeconds) * 45f) + 1);
+                return baseMin + "+" + extra + "'";
+            }
+        }
 
         readonly List<MatchPlayer> all = new List<MatchPlayer>();
         readonly List<GameObject> spawned = new List<GameObject>();
@@ -99,6 +116,26 @@ namespace Craquez
         float headerCooldown;
         Ui ui;
 
+        // Regras oficiais IFAB (acréscimos, vantagem real, dois toques, tiro livre indireto, recuo, bola ao chão, substituições e disputa de pênaltis)
+        float addedSeconds;
+        bool addedAnnounced;
+        float advUntil = -1f;
+        TimeInfo advTeam;
+        Vector3 advSpot;
+        MatchPlayer advOffender, advPendingYellow;
+        MatchPlayer restartNoSecondTouchPlayer;
+        bool indirectNeedsSecondTouch;
+        TimeInfo indirectKickerTeam;
+        TimeInfo deliberateFootPassTeam;
+        float refHitCooldown;
+        int subStoppageId, lastTeamSubStoppageA = -1, lastTeamSubStoppageB = -1;
+        bool shootoutFinished, shootoutShotActive, shootoutWaitingHuman;
+        int penTurn, penKicksA, penKicksB;
+        string penHistoryA = "", penHistoryB = "";
+        float penStepTimer;
+        MatchPlayer penKicker;
+        TimeInfo penAttackingTeam;
+
         // ============================================================ montagem
 
         void Awake() { ui = new Ui(); }
@@ -117,6 +154,16 @@ namespace Craquez
             HalfSeconds = halfMinutes * 60f;
             Half = 1;
             Clock = 0f;
+            addedSeconds = 0f;
+            addedAnnounced = false;
+            advUntil = -1f; advTeam = null; advOffender = null; advPendingYellow = null;
+            restartNoSecondTouchPlayer = null;
+            indirectNeedsSecondTouch = false; indirectKickerTeam = null;
+            deliberateFootPassTeam = null;
+            refHitCooldown = 0f;
+            subStoppageId = 0; lastTeamSubStoppageA = -1; lastTeamSubStoppageB = -1;
+            shootoutFinished = false; shootoutShotActive = false; shootoutWaitingHuman = false;
+            penHistoryA = ""; penHistoryB = ""; penTurn = 0; penKicksA = 0; penKicksB = 0;
             weather.Apply(clima);
             foreach (var go in trainingObjects) if (go != null) go.SetActive(false);
 
@@ -264,6 +311,30 @@ namespace Craquez
                 byPc[pc] = mp;
                 prevVel[mp] = Vector3.zero;
             }
+
+            // Banco de reservas (Regra 3 IFAB: 7 suplentes de linha, camisas 12 a 18, prontos para até 5 substituições)
+            Funcao[] funcoesReserva = { Funcao.Zagueiro, Funcao.Lateral, Funcao.Volante, Funcao.Meia, Funcao.MeiaAberto, Funcao.Ponta, Funcao.Atacante };
+            for (int rIdx = 0; rIdx < funcoesReserva.Length; rIdx++)
+            {
+                var rf = funcoesReserva[rIdx];
+                var rAtr = GeradorJogador.Atributos(rf, rng, nivel);
+                if (rostosPartida == null || rostosPartida.Count == 0) rostosPartida = PlayerLook.Embaralhar("Jogador", rng, false);
+                PlayerLook.Rosto rRosto = rostosPartida.Count > 0 ? rostosPartida[rostoIdx++ % rostosPartida.Count] : null;
+                int rVis = rRosto != null ? rRosto.visual : visA[ia++ % PlayerLook.Visuais];
+                var rLook = PlayerLook.Sortear(rf, false, rVis, rAtr, rng);
+                PlayerLook.UsarRosto(rLook, rRosto, "Jogador");
+                PlayerLook.AjustarAtributos(rAtr, rLook);
+                t.reservas.Add(new ReservaInfo
+                {
+                    numero = 12 + rIdx,
+                    nome = NomesBR.Gerar(rng, used),
+                    funcao = rf,
+                    atr = rAtr,
+                    men = GeradorJogador.Mentalidade(rf, rng),
+                    aparencia = rLook,
+                    visual = rVis
+                });
+            }
         }
 
         void SpawnReferees()
@@ -353,10 +424,16 @@ namespace Craquez
         /// <summary>Encerra a partida e devolve o estádio ao treino.</summary>
         public void Teardown()
         {
+            if (Times != null)
+            {
+                foreach (var t in Times)
+                    if (t != null && t.goleiro != null) t.goleiro.humanControlled = false;
+            }
             if (cameraRig != null)
             {
                 cameraRig.povHead = null;
                 cameraRig.matchMode = false;
+                cameraRig.goalkeeperRole = false;
                 cameraRig.attackDir = 1f;
                 cameraRig.player = savedRigPlayer;
                 cameraRig.keeper = savedRigKeeper;
@@ -381,10 +458,11 @@ namespace Craquez
             Resources.UnloadUnusedAssets();
             Times = null;
             Owner = null; Human = null; KeeperHolding = null; LastToucher = null; Scorer = null; Restart = null;
+            penKicker = null; penAttackingTeam = null;
             Active = false;
             Phase = Fase.Inativo;
             foreach (var go in trainingObjects) if (go != null) go.SetActive(true);
-            if (touch != null) { touch.matchMode = false; touch.matchHasBall = null; }
+            if (touch != null) { touch.matchMode = false; touch.goalkeeperMode = false; touch.matchHasBall = null; }
             if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.SetCrowd(0f);
             Time.timeScale = 1f;
             AudioListener.pause = false;
@@ -402,8 +480,8 @@ namespace Craquez
 
         void SetHuman(MatchPlayer p)
         {
-            if (p == null || p == Human || p.pc == null) return;
-            if (Human != null && Human.pc != null)
+            if (p == null || p.pc == null || (p == Human && !p.pc.aiControlled && p.pc.InputEnabled)) return;
+            if (Human != null && Human != p && Human.pc != null)
             {
                 Human.pc.jockeyMode = false;
                 Human.pc.InputEnabled = false;
@@ -420,6 +498,26 @@ namespace Craquez
             cameraRig.attackDir = p.time.attackDir;
             cameraRig.povHead = p.pc.Sockets != null ? p.pc.Sockets.Head : null;
             cameraRig.keeper = OpponentOf(p.time).goleiro != null ? OpponentOf(p.time).goleiro.transform : null;
+        }
+
+        /// <summary>Devolve temporariamente a caminhada do cobrador à IA até ele chegar junto à bola parada.</summary>
+        void FocusTakerWalkingToBall(MatchPlayer taker)
+        {
+            if (taker == null || taker.pc == null) return;
+            if (Human != null && Human.pc != null)
+            {
+                Human.pc.jockeyMode = false;
+                Human.pc.InputEnabled = false;
+                Human.pc.aiControlled = true;
+            }
+            Human = taker;
+            taker.pc.aiControlled = true;
+            taker.pc.InputEnabled = false;
+            taker.pc.jockeyMode = false;
+            cameraRig.player = taker.transform;
+            cameraRig.attackDir = taker.time.attackDir;
+            cameraRig.povHead = taker.pc.Sockets != null ? taker.pc.Sockets.Head : null;
+            cameraRig.keeper = OpponentOf(taker.time).goleiro != null ? OpponentOf(taker.time).goleiro.transform : null;
         }
 
         /// <summary>
@@ -440,6 +538,8 @@ namespace Craquez
         bool CanHumanShoot(MatchPlayer p)
         {
             if (!Active || p != Human) return true;
+            if (Phase == Fase.DisputaPenaltis)
+                return shootoutWaitingHuman && penKicker == p;
             if (Phase == Fase.BolaParada)
                 return Restart != null && Restart.taker == p && Restart.waitingHuman &&
                        (Restart.tipo == TipoReinicio.Falta || Restart.tipo == TipoReinicio.Penalti);
@@ -457,9 +557,14 @@ namespace Craquez
             bool lowDown = low && !prevLow, chipDown = chip && !prevChip, shootDown = shoot && !prevShoot, finesseDown = finesse && !prevFinesse, knockDown = knock && !prevKnock;
             prevLow = low; prevChip = chip; prevShoot = shoot; prevFinesse = finesse; prevKnock = knock;
             if (Human == null || Human.pc == null || Time.timeScale == 0f) return;
-            if (Human.expulso) { SetHuman(ClosestTo(Human.time, BallPos, true)); return; }
+            if (Human.expulso && Phase != Fase.DisputaPenaltis) { SetHuman(ClosestTo(Human.time, BallPos, true)); return; }
             humanTackleCooldown -= Time.deltaTime;
 
+            if (Phase == Fase.DisputaPenaltis)
+            {
+                Human.pc.jockeyMode = false;
+                return;
+            }
             if (Phase == Fase.BolaParada)
             {
                 Human.pc.jockeyMode = false;
@@ -657,14 +762,17 @@ namespace Craquez
             phaseTime += dt;
 
             if (InputBridge.MenuPressed && Phase != Fase.Fim) { if (OnPauseRequested != null) OnPauseRequested(); return; }
-            if (InputBridge.CameraPressed) CycleCamera();
+            if (InputBridge.CameraPressed && Phase != Fase.DisputaPenaltis) CycleCamera();
 
-            UpdateTacticalCaches(dt);
-            foreach (var m in all) m.Tick(this, dt);
-            foreach (var r in referees) if (r != null) r.Tick(dt);
+            if (Phase != Fase.DisputaPenaltis)
+            {
+                UpdateTacticalCaches(dt);
+                foreach (var m in all) m.Tick(this, dt);
+                foreach (var r in referees) if (r != null) r.Tick(dt);
+            }
 
             UpdateHumanInput();
-            if (Phase == Fase.Jogo || Phase == Fase.BolaParada) UpdateAutoSwitch();
+            if (Phase == Fase.Jogo) UpdateAutoSwitch();
             UpdateSlips(dt);
 
             switch (Phase)
@@ -672,11 +780,12 @@ namespace Craquez
                 case Fase.Jogo:
                     Clock += dt;
                     TrackPossessionTime(dt);
-                    CheckBallOut();
-                    CheckClock();
+                    UpdateIFABRules(dt);
+                    if (Phase == Fase.Jogo) CheckBallOut();
+                    if (Phase == Fase.Jogo) CheckClock();
                     break;
                 case Fase.BolaParada:
-                    Clock += dt * 0.5f;
+                    Clock += dt * 0.35f;
                     UpdateRestart();
                     break;
                 case Fase.Comemoracao:
@@ -687,6 +796,9 @@ namespace Craquez
                     break;
                 case Fase.Intervalo:
                     if (phaseTime > 4.5f || (phaseTime > 1.5f && InputBridge.ConfirmPressed)) StartSecondHalf();
+                    break;
+                case Fase.DisputaPenaltis:
+                    UpdatePenaltyShootout(dt);
                     break;
             }
         }
@@ -716,14 +828,57 @@ namespace Craquez
             if (ball.LastKickTime > seenKick + 1e-4f)
             {
                 seenKick = ball.LastKickTime;
+                if (Phase == Fase.DisputaPenaltis)
+                {
+                    if (shootoutWaitingHuman && penKicker != null)
+                    {
+                        shootoutWaitingHuman = false;
+                        shootoutShotActive = true;
+                        penStepTimer = 0f;
+                    }
+                    return;
+                }
                 MatchPlayer kicker = Owner;
                 if (kicker == null) kicker = NearestToBall(1.6f, null);
-                bool fromRestart = Phase == Fase.BolaParada && Restart != null && (Restart.executing || Restart.waitingHuman);
+                bool fromRestart = Phase == Fase.BolaParada && Restart != null && (Restart.executing || Restart.waitingHuman || Restart.tipo == TipoReinicio.TiroDeMeta);
                 if (fromRestart && Restart.taker != null) kicker = Restart.taker;
                 if (kicker != null)
                 {
+                    // Se outro atleta tocou na bola, zera a restrição de dois toques e valida o 2º toque do tiro livre indireto
+                    if (restartNoSecondTouchPlayer != null && restartNoSecondTouchPlayer != kicker)
+                        restartNoSecondTouchPlayer = null;
+                    if (indirectNeedsSecondTouch && LastToucher != kicker)
+                        indirectNeedsSecondTouch = false;
+
                     LastToucher = kicker;
                     LastPossession = kicker.time;
+
+                    // Regra 12 (Recuo deliberado com o pé): impede o próprio goleiro de pegar com as mãos
+                    if (!kicker.IsKeeper && kicker.time != null)
+                    {
+                        bool passTowardOwnHalf = kicker.time.Fwd(BallVel) < -1.5f || LastPassFrom == kicker;
+                        deliberateFootPassTeam = passTowardOwnHalf ? kicker.time : null;
+                        if (kicker.time.goleiro != null) kicker.time.goleiro.forbidHands = passTowardOwnHalf;
+                        var opp = OpponentOf(kicker.time);
+                        if (opp != null && opp.goleiro != null) opp.goleiro.forbidHands = false;
+                    }
+
+                    if (fromRestart && Restart != null)
+                    {
+                        // Regra 8/13/14/15/16/17: o cobrador não pode tocar uma 2ª vez antes de outro jogador (exceto Bola ao Chão)
+                        restartNoSecondTouchPlayer = Restart.tipo != TipoReinicio.BolaAoChao ? kicker : null;
+                        if (Restart.indirect)
+                        {
+                            indirectNeedsSecondTouch = true;
+                            indirectKickerTeam = kicker.time;
+                        }
+                        else
+                        {
+                            indirectNeedsSecondTouch = false;
+                            indirectKickerTeam = null;
+                        }
+                    }
+
                     SnapshotOffside(kicker);
                     CountShot(kicker);
                 }
@@ -739,6 +894,21 @@ namespace Craquez
             {
                 if (KeeperHolding != holder)
                 {
+                    restartNoSecondTouchPlayer = null;
+                    indirectNeedsSecondTouch = false;
+                    // Regra 12 IFAB: se o goleiro segurou recuo deliberado com o pé do próprio companheiro, é tiro livre indireto
+                    if (Phase == Fase.Jogo && deliberateFootPassTeam == holder.time)
+                    {
+                        deliberateFootPassTeam = null;
+                        ball.Release();
+                        KeeperHolding = null;
+                        Whistle(1);
+                        Show("RECUO AO GOLEIRO  •  TIRO LIVRE INDIRETO", UiKit.Yellow, 2.2f);
+                        AddStoppageTime(0.4f);
+                        Vector3 fkSpot = ClampIndirectInBox(holder.Pos, holder.time);
+                        StartRestart(TipoReinicio.Falta, OpponentOf(holder.time), fkSpot, true, 1.5f);
+                        return;
+                    }
                     KeeperHolding = holder;
                     LastToucher = holder;
                     LastPossession = holder.time;
@@ -756,6 +926,7 @@ namespace Craquez
                 {
                     LastToucher = keeperReleaser;
                     LastPossession = keeperReleaser.time;
+                    deliberateFootPassTeam = null;
                     if (Phase == Fase.BolaParada && Restart != null && Restart.tipo == TipoReinicio.TiroDeMeta) { restartKickExempt = true; ResumePlay(); }
                     else SnapshotOffside(keeperReleaser);
                 }
@@ -816,6 +987,9 @@ namespace Craquez
                 Vector3 dv = Quaternion.Euler(0f, Random.Range(-70f, 70f), 0f) * Flat(bv).normalized * Mathf.Clamp(rel * 0.35f, 2f, 7f);
                 ball.Deflect(dv + Vector3.up * Random.Range(0.2f, 1.2f), Vector3.zero);
                 controlCooldown[best] = Time.time + 0.45f;
+                if (restartNoSecondTouchPlayer != best) restartNoSecondTouchPlayer = null;
+                indirectNeedsSecondTouch = false;
+                if (deliberateFootPassTeam != null && best.time != deliberateFootPassTeam) ClearBackPassRestriction();
                 LastToucher = best;
                 if (offsideTeam != null && best.time != offsideTeam) ClearOffside(); // tentativa deliberada de domínio do defensor zera o impedimento
                 return;
@@ -831,6 +1005,21 @@ namespace Craquez
 
         void GainPossession(MatchPlayer p)
         {
+            if (restartNoSecondTouchPlayer == p)
+            {
+                restartNoSecondTouchPlayer = null;
+                indirectNeedsSecondTouch = false;
+                Whistle(1);
+                Show("DOIS TOQUES  •  TIRO LIVRE INDIRETO", UiKit.Yellow, 2.0f);
+                AddStoppageTime(0.35f);
+                Vector3 fkSpot = InPenaltyArea(p.Pos, p.time) ? ClampIndirectInBox(p.Pos, p.time) : Flat(p.Pos);
+                StartRestart(TipoReinicio.Falta, OpponentOf(p.time), fkSpot, true, 1.3f);
+                return;
+            }
+            restartNoSecondTouchPlayer = null;
+            indirectNeedsSecondTouch = false;
+            if (deliberateFootPassTeam != null && p.time != deliberateFootPassTeam) ClearBackPassRestriction();
+
             bool newTeam = LastPossession != p.time;
             if (offsideCandidates.Contains(p) && offsideTeam == p.time && Time.time - offsideStamp < 7f)
             {
@@ -862,6 +1051,21 @@ namespace Craquez
             }
             if (best == null) return;
             headerCooldown = Time.time + 0.5f;
+            if (restartNoSecondTouchPlayer == best)
+            {
+                restartNoSecondTouchPlayer = null;
+                indirectNeedsSecondTouch = false;
+                Whistle(1);
+                Show("DOIS TOQUES  •  TIRO LIVRE INDIRETO", UiKit.Yellow, 2.0f);
+                AddStoppageTime(0.35f);
+                Vector3 fkSpot = InPenaltyArea(best.Pos, best.time) ? ClampIndirectInBox(best.Pos, best.time) : Flat(best.Pos);
+                StartRestart(TipoReinicio.Falta, OpponentOf(best.time), fkSpot, true, 1.3f);
+                return;
+            }
+            restartNoSecondTouchPlayer = null;
+            indirectNeedsSecondTouch = false;
+            // Pela Regra 12, recuo de cabeça habilita o goleiro a segurar com as mãos normalmente
+            ClearBackPassRestriction();
             if (offsideCandidates.Contains(best) && offsideTeam == best.time && Time.time - offsideStamp < 7f) { CallOffside(best); return; }
             ClearOffside();
             Header(best, b);
@@ -911,8 +1115,9 @@ namespace Craquez
             {
                 if (m.pc == null) continue;
                 bool auth;
+                if (Phase == Fase.DisputaPenaltis) auth = m == penKicker && (shootoutShotActive || (shootoutWaitingHuman && m.pc.Busy));
                 // na bola parada o cobrador só mexe na bola quando o chute/passe já começou (a bola não "gruda" no pé antes)
-                if (Phase == Fase.BolaParada) auth = Restart != null && Restart.taker == m && (Restart.executing || (Restart.waitingHuman && m.pc.Busy));
+                else if (Phase == Fase.BolaParada) auth = Restart != null && Restart.taker == m && (Restart.executing || (Restart.waitingHuman && m.pc.Busy));
                 else if (Phase == Fase.Jogo) auth = m == Owner || (Owner == null && KeeperHolding == null && m.pc.Busy && !m.pc.Incapacitated && !m.pc.Sliding);
                 else auth = false;
                 m.pc.ballAuthority = auth;
@@ -958,8 +1163,17 @@ namespace Craquez
         void OnKeeperSave(TimeInfo keeperTeam, bool caught)
         {
             if (!Active) return;
+            restartNoSecondTouchPlayer = null;
+            indirectNeedsSecondTouch = false;
+            ClearBackPassRestriction();
             var gkInfo = keeperTeam.goleiroInfo;
             LastToucher = gkInfo;
+            if (Phase == Fase.DisputaPenaltis)
+            {
+                Show(caught ? "DEFENDEU!" : "ESPALMOU!", new Color(0.6f, 0.9f, 1f), 1.5f);
+                if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.CrowdReaction(0.85f);
+                return;
+            }
             if (shotBy != null && shotBy.time != keeperTeam && Time.time - shotAt < 4f)
             {
                 shotBy.time.chutesNoGol++;
@@ -996,6 +1210,7 @@ namespace Craquez
         {
             ClearOffside();
             p.time.impedimentos++;
+            AddStoppageTime(0.35f);
             // o assistente da metade onde aconteceu levanta a bandeira
             RefereeAgent ar = null;
             foreach (var r in referees) if (r != null && r.papel == RefereeAgent.Papel.Assistente && Mathf.Sign(r.half) == Mathf.Sign(p.Pos.x)) ar = r;
@@ -1018,7 +1233,31 @@ namespace Craquez
                 bool between = Mathf.Abs(b.z) < Arena.GoalHalfWidth - R * 0.5f && b.y < Arena.GoalHeight - R * 0.3f;
                 TimeInfo attacking = Times[0].attackDir == s ? Times[0] : Times[1];
                 TimeInfo defending = OpponentOf(attacking);
-                if (between) { Goal(attacking); return; }
+                if (between)
+                {
+                    // Regra 13 IFAB: tiro livre indireto que entra direto no gol sem 2º toque não vale gol
+                    if (indirectNeedsSecondTouch)
+                    {
+                        indirectNeedsSecondTouch = false;
+                        Whistle(1);
+                        if (indirectKickerTeam == attacking)
+                        {
+                            Show("TIRO LIVRE INDIRETO (sem 2º toque)  •  TIRO DE META", UiKit.Yellow, 2.2f);
+                            StartRestart(TipoReinicio.TiroDeMeta, defending, defending.OwnGoal + defending.Forward * 5.5f, false, 1.4f);
+                        }
+                        else
+                        {
+                            attacking.escanteios++;
+                            Vector3 corner = new Vector3(s * (Arena.HalfLength - 0.4f), 0f, Mathf.Sign(b.z == 0f ? 1f : b.z) * (Arena.HalfWidth - 0.4f));
+                            Show("TIRO LIVRE INDIRETO  •  ESCANTEIO", UiKit.Yellow, 2.2f);
+                            StartRestart(TipoReinicio.Escanteio, attacking, corner, false, 1.6f);
+                        }
+                        return;
+                    }
+                    Goal(attacking);
+                    return;
+                }
+                indirectNeedsSecondTouch = false;
                 if (LastToucher != null && LastToucher.time == defending)
                 {
                     attacking.escanteios++;
@@ -1037,6 +1276,7 @@ namespace Craquez
             }
             if (Mathf.Abs(b.z) > Arena.HalfWidth + R)
             {
+                indirectNeedsSecondTouch = false;
                 TimeInfo to = LastToucher != null ? OpponentOf(LastToucher.time) : Times[0];
                 Vector3 spot = new Vector3(Mathf.Clamp(b.x, -Arena.HalfLength + 1f, Arena.HalfLength - 1f), 0f, Mathf.Sign(b.z) * (Arena.HalfWidth + 0.2f));
                 foreach (var r in referees)
@@ -1052,6 +1292,12 @@ namespace Craquez
 
         void Goal(TimeInfo scoringTeam)
         {
+            advUntil = -1f;
+            FlushPendingAdvantageCard(false);
+            restartNoSecondTouchPlayer = null;
+            indirectNeedsSecondTouch = false;
+            ClearBackPassRestriction();
+            AddStoppageTime(1.0f);
             scoringTeam.gols++;
             concededTeam = OpponentOf(scoringTeam);
             Scorer = LastToucher;
@@ -1072,7 +1318,7 @@ namespace Craquez
             {
                 float zs = Mathf.Sign(Scorer.Pos.z == 0f ? 1f : Scorer.Pos.z);
                 CelebrationSpot = new Vector3(scoringTeam.attackDir * (Arena.HalfLength - 4f), 0f, zs * (Arena.HalfWidth - 5f));
-                    StartCoroutine(CelebrationDance(Scorer));
+                StartCoroutine(CelebrationDance(Scorer));
                 savedCam = cameraRig.mode;
                 cameraRig.player = Scorer.transform;
                 cameraRig.mode = CameraRig.Modo.Comemoracao;
@@ -1100,8 +1346,18 @@ namespace Craquez
         void CheckClock()
         {
             if (Clock < HalfSeconds) return;
-            // não interrompe um ataque perigoso no último segundo
-            if (Owner != null && Owner.time.Fwd(Owner.Pos) > 30f && Clock < HalfSeconds + 6f) return;
+            if (!addedAnnounced)
+            {
+                addedAnnounced = true;
+                int mins = Mathf.Clamp(Mathf.Max(1, AddedMinutes), 1, 7);
+                addedSeconds = mins * (HalfSeconds / 45f);
+                Show("+" + mins + " MIN DE ACRÉSCIMO", UiKit.Yellow, 2.2f);
+            }
+            if (Clock < HalfSeconds + addedSeconds) return;
+            // Regra 7: não encerra com bola em trajetória de chute a gol ou ataque agudo na grande área
+            bool shotFlying = Time.time - shotAt < 2.2f && BallVel.magnitude > 6f;
+            if ((shotFlying || (Owner != null && Owner.time.Fwd(Owner.Pos) > 34f)) && Clock < HalfSeconds + addedSeconds + 5.5f) return;
+            FlushPendingAdvantageCard(false);
             if (Half == 1)
             {
                 Phase = Fase.Intervalo;
@@ -1125,12 +1381,19 @@ namespace Craquez
             kickoffTeleport = true;
             Half = 2;
             Clock = 0f;
+            addedSeconds = 0f;
+            addedAnnounced = false;
             // troca de lado
             foreach (var t in Times)
             {
                 t.attackDir = -t.attackDir;
                 foreach (var m in t.jogadores) if (m.pc != null) m.pc.attackDir = t.attackDir;
                 if (t.goleiro != null) t.goleiro.side = -t.attackDir;
+            }
+            // Regra 3 IFAB: substituições no intervalo não gastam uma das 3 janelas de substituição
+            foreach (var t in Times)
+            {
+                if (!t.humano) TryAISubstitutions(t, true);
             }
             if (Human != null) cameraRig.attackDir = Human.time.attackDir;
             Show("2º TEMPO", Color.white, 1.8f);
@@ -1160,9 +1423,16 @@ namespace Craquez
         }
         bool kickoffTeleport = true;
 
-        /// <summary>Prepara uma bola parada: posiciona a bola, escolhe o cobrador e espera o time se arrumar.</summary>
+        /// <summary>Prepara uma bola parada: posiciona a bola, escolhe o cobrador e faz o cobrador caminhar até a bola.</summary>
         void StartRestart(TipoReinicio tipo, TimeInfo team, Vector3 spot, bool indirect, float minWait)
         {
+            advUntil = -1f;
+            FlushPendingAdvantageCard(true);
+            restartNoSecondTouchPlayer = null;
+            indirectNeedsSecondTouch = false;
+            ClearBackPassRestriction();
+            subStoppageId++;
+
             Phase = Fase.BolaParada;
             phaseTime = 0f;
             Owner = null;
@@ -1176,47 +1446,89 @@ namespace Craquez
             Restart = new Reinicio { tipo = tipo, time = team, spot = spot, start = Time.time, indirect = indirect, executeAt = Time.time + minWait };
             restartKickExempt = tipo == TipoReinicio.Lateral || tipo == TipoReinicio.Escanteio || tipo == TipoReinicio.TiroDeMeta;
 
+            // Substituição tática/física da IA em bola parada no 2º tempo (respeitando limite de 5 trocas e 3 janelas)
+            if (Half == 2 && MatchMinute >= 58 && tipo != TipoReinicio.Penalti && tipo != TipoReinicio.Saida && Times != null)
+            {
+                foreach (var t in Times)
+                    if (!t.humano) TryAISubstitutions(t, false);
+            }
+
             if (tipo == TipoReinicio.TiroDeMeta && team.goleiro != null)
             {
                 Vector3 gp = team.OwnGoal + team.Forward * 5.5f;
-                team.goleiro.ResetTo(gp);
-                ball.PlaceAt(gp + Vector3.up * 1f);
-                team.goleiro.TakeBallInHands();
+                Restart.spot = new Vector3(gp.x, Arena.BallRadius, gp.z);
                 Restart.taker = team.goleiroInfo;
                 Restart.aim = gp + team.Forward * 30f;
+                team.goleiro.TakeGoalKick(gp);
                 return;
             }
             ball.PlaceAt(tipo == TipoReinicio.Lateral ? new Vector3(spot.x, Arena.BallRadius, Mathf.Sign(spot.z) * (Arena.HalfWidth - 0.05f)) : spot);
 
             // cobrador
             MatchPlayer taker;
-            if (tipo == TipoReinicio.Penalti || tipo == TipoReinicio.Falta && ShotQuality(spot, team) > 0.1f)
+            if (tipo == TipoReinicio.Penalti)
                 taker = BestBy(team, m => m.atr.finalizacao * 0.7f + m.men.compostura * 0.3f);
+            else if (tipo == TipoReinicio.Falta && !indirect && ShotQuality(spot, team) > 0.09f)
+                taker = BestBy(team, m => m.atr.finalizacao * 0.62f + m.atr.passe * 0.2f + m.men.compostura * 0.18f - Vector3.Distance(m.Pos, spot) * 0.008f);
             else if (tipo == TipoReinicio.Escanteio)
-                taker = BestBy(team, m => m.atr.passe + (m.funcao == Funcao.Meia || m.funcao == Funcao.MeiaAberto || m.funcao == Funcao.Ponta ? 0.2f : 0f) - Vector3.Distance(m.Pos, spot) * 0.004f);
+                taker = BestBy(team, m => m.atr.passe + (m.funcao == Funcao.Meia || m.funcao == Funcao.MeiaAberto || m.funcao == Funcao.Ponta ? 0.2f : 0f) - Vector3.Distance(m.Pos, spot) * 0.005f);
             else if (tipo == TipoReinicio.Saida)
                 taker = BestBy(team, m => (m.funcao == Funcao.Atacante ? 1f : 0f) + m.atr.passe * 0.2f);
-            else taker = ClosestTo(team, spot, false);
+            else taker = ClosestTo(team, spot, true);
+
             Restart.taker = taker;
             Vector3 goal = team.TargetGoal;
-            Restart.aim = tipo == TipoReinicio.Saida ? spot - team.Forward * 10f : (tipo == TipoReinicio.Lateral ? spot + new Vector3(0f, 0f, -Mathf.Sign(spot.z) * 10f) : goal);
+            Restart.aim = tipo == TipoReinicio.Saida ? spot - team.Forward * 10f
+                        : (tipo == TipoReinicio.Lateral ? spot + new Vector3(0f, 0f, -Mathf.Sign(spot.z) * 10f)
+                        : (tipo == TipoReinicio.BolaAoChao ? spot + team.Forward * 12f : goal));
             if (tipo == TipoReinicio.Penalti)
             {
                 var opp = OpponentOf(team);
                 if (opp.goleiro != null) opp.goleiro.ResetTo(opp.OwnGoal + opp.Forward * 0.2f);
             }
-            if (taker != null && taker.time.humano && taker.pc != null && UserTeam == team) SetHuman(taker);
+            if (taker != null && taker.pc != null)
+            {
+                Vector3 stand = TakerStand(Restart);
+                float distToStand = Flat(taker.Pos - stand).magnitude;
+                // Se o especialista estava muito longe do lance, aproxima-o a ~8,5 m para ele ir andando naturalmente até a bola
+                if (!kickoffTeleport && tipo != TipoReinicio.Saida && distToStand > 14f)
+                {
+                    Vector3 walkFrom = stand + Flat(taker.Pos - stand).normalized * 8.5f;
+                    walkFrom.x = Mathf.Clamp(walkFrom.x, -Arena.HalfLength + 1f, Arena.HalfLength - 1f);
+                    walkFrom.z = Mathf.Clamp(walkFrom.z, -Arena.HalfWidth - 0.5f, Arena.HalfWidth + 0.5f);
+                    taker.pc.Teleport(walkFrom, spot);
+                    distToStand = Flat(taker.Pos - stand).magnitude;
+                }
+                if (taker.time.humano && UserTeam == team)
+                {
+                    if (distToStand <= 0.72f)
+                    {
+                        Restart.takerArrived = true;
+                        SetHuman(taker);
+                    }
+                    else
+                    {
+                        // A câmera acompanha o cobrador enquanto ele vai andando até a bola para fazer a cobrança
+                        Restart.takerArrived = false;
+                        FocusTakerWalkingToBall(taker);
+                    }
+                }
+            }
         }
 
         void UpdateRestart()
         {
             var r = Restart;
             if (r == null) { ResumePlay(); return; }
-            if (r.tipo == TipoReinicio.TiroDeMeta) return; // o goleiro repõe sozinho (DetectKicksAndKeeper retoma o jogo)
+            if (r.tipo == TipoReinicio.TiroDeMeta)
+            {
+                if (Time.time - r.start > 6f) ResumePlay();
+                return;
+            }
             var tk = r.taker;
             if (tk == null || tk.pc == null || !tk.Disponivel)
             {
-                r.taker = ClosestTo(r.time, r.spot, false);
+                r.taker = ClosestTo(r.time, r.spot, true);
                 return;
             }
             if (r.executing)
@@ -1226,21 +1538,47 @@ namespace Craquez
             }
             Vector3 stand = TakerStand(r);
             float d = Flat(tk.Pos - stand).magnitude;
-            bool ready = d < 0.8f && Time.time >= r.executeAt;
+            if (!r.takerArrived)
+            {
+                if (d <= 0.72f)
+                {
+                    r.takerArrived = true;
+                    tk.pc.aiMoveWorld = Vector3.zero;
+                    if (tk.time.humano && UserTeam == r.time) SetHuman(tk);
+                }
+                else if (Time.time - r.start > 9.5f)
+                {
+                    tk.pc.Teleport(stand, r.aim);
+                    r.takerArrived = true;
+                    if (tk.time.humano && UserTeam == r.time) SetHuman(tk);
+                }
+                else
+                {
+                    if (r.tipo == TipoReinicio.Lateral && d < 1.2f && !ball.IsHeld) ball.Hold(tk.transform, new Vector3(0f, 2.15f, 0.12f));
+                    return;
+                }
+            }
+
+            bool ready = Time.time >= r.executeAt;
             // espera o time se posicionar (até um limite)
-            if (ready && Time.time - r.start < 4.5f && !TeamsSettled()) ready = false;
+            if (ready && Time.time - r.start < 4.2f && !TeamsSettled()) ready = false;
             if (!ready)
             {
-                if (Time.time - r.start > 9f && d > 0.8f) tk.pc.Teleport(stand, r.spot);
-                if (r.tipo == TipoReinicio.Lateral && d < 1.2f && !ball.IsHeld) ball.Hold(tk.transform, new Vector3(0f, 2.15f, 0.12f));
+                if (r.tipo == TipoReinicio.Lateral && !ball.IsHeld) ball.Hold(tk.transform, new Vector3(0f, 2.15f, 0.12f));
                 return;
             }
             if (r.tipo == TipoReinicio.Lateral && !ball.IsHeld) ball.Hold(tk.transform, new Vector3(0f, 2.15f, 0.12f));
-            bool humanTaker = tk == Human && tk.time.humano;
+            bool humanTaker = tk.time.humano && UserTeam == r.time;
             if (humanTaker)
             {
-                if (!r.waitingHuman) { r.waitingHuman = true; if (r.tipo == TipoReinicio.Falta || r.tipo == TipoReinicio.Penalti || r.tipo == TipoReinicio.Saida) Whistle(1); }
-                if (Time.time - r.start > 16f) ExecuteRestartAI(r);
+                if (Human != tk || tk.pc.aiControlled) SetHuman(tk);
+                if (!r.waitingHuman)
+                {
+                    r.waitingHuman = true;
+                    if (r.tipo == TipoReinicio.Falta || r.tipo == TipoReinicio.Penalti || r.tipo == TipoReinicio.Saida || r.tipo == TipoReinicio.BolaAoChao)
+                        Whistle(1);
+                }
+                if (Time.time - r.start > 18f) ExecuteRestartAI(r);
                 return;
             }
             ExecuteRestartAI(r);
@@ -1496,21 +1834,36 @@ namespace Craquez
                 return;
             }
             offender.time.faltas++;
-            // cartões
-            if (severity > 0.92f) GiveCard(offender, true);
-            else if (severity > 0.6f) GiveCard(offender, false);
+            var defending = offender.time; // o infrator defende o próprio gol
+            bool inBox = InPenaltyArea(at, defending);
+            bool dogso = IsDOGSO(offender, victim, at);
 
-            // vantagem: o time que sofreu segue com a bola atacando
-            bool advantage = Owner != null && Owner.time == victim.time && Owner != victim && victim.time.Fwd(Owner.Pos) > -15f;
+            // Regra 12 IFAB: dupla punição na área (DOGSO disputando a bola vira Amarelo + Pênalti; fora da área é Vermelho direto)
+            bool straightRed = severity > 0.92f || (dogso && !inBox) || (dogso && inBox && !offender.pc.Sliding && severity > 0.72f);
+            bool yellow = !straightRed && (severity > 0.58f || (dogso && inBox));
+
+            // Regra 12 IFAB: Vantagem real (janela de ~3s; se perder a posse logo em seguida, volta a falta; amarelo fica pendente para a parada)
+            bool advantage = !inBox && !straightRed && Owner != null && Owner.time == victim.time && Owner != victim && victim.time.Fwd(Owner.Pos) > -15f;
             if (advantage)
             {
+                advUntil = Time.time + 3.0f;
+                advTeam = victim.time;
+                advSpot = at;
+                advOffender = offender;
+                if (yellow) advPendingYellow = offender;
                 Show("VANTAGEM", UiKit.Green, 1.4f);
                 if (MainReferee != null) MainReferee.SignalAdvantage();
                 return;
             }
+
+            advUntil = -1f;
+            FlushPendingAdvantageCard(true);
             Whistle(1);
-            var defending = offender.time; // o infrator defende o próprio gol
-            bool inBox = InPenaltyArea(at, defending);
+            AddStoppageTime(straightRed || inBox ? 0.75f : (yellow ? 0.5f : 0.3f));
+
+            if (straightRed) GiveCard(offender, true);
+            else if (yellow) GiveCard(offender, false);
+
             if (inBox)
             {
                 Show("PÊNALTI!", UiKit.Red, 2.2f);
@@ -1520,7 +1873,7 @@ namespace Craquez
             }
             else
             {
-                if (severity <= 0.6f) Show("FALTA  •  " + offender.Rotulo, Color.white, 1.5f);
+                if (!straightRed && !yellow) Show("FALTA  •  " + offender.Rotulo, Color.white, 1.5f);
                 PendingInjuryRestart(victim, TipoReinicio.Falta, at);
             }
         }
@@ -1569,17 +1922,23 @@ namespace Craquez
             Show("CONTUSÃO  •  " + p.Rotulo, new Color(1f, 0.55f, 0.5f), 2.4f);
         }
 
-        /// <summary>Se alguém ficou caído contundido, para o jogo para o atendimento antes de reiniciar.</summary>
+        /// <summary>Se alguém ficou caído contundido, para o jogo para o atendimento antes de reiniciar (e substitui em lesão séria).</summary>
         void PendingInjuryRestart(MatchPlayer victim, TipoReinicio tipo, Vector3 at)
         {
             var team = victim.time;
             if (victim.lesao > 0f && victim.pc != null && victim.pc.Fallen)
             {
+                AddStoppageTime(1.2f);
                 Phase = Fase.Parado;
                 phaseTime = 0f;
                 Show("ATENDIMENTO MÉDICO  •  " + victim.Rotulo, new Color(1f, 0.6f, 0.55f), 3f);
-                resumeAt = Time.time + 4.5f;
-                afterPause = () => StartRestart(tipo, team, at, false, 1.2f);
+                resumeAt = Time.time + 4.2f;
+                afterPause = () =>
+                {
+                    if (victim != null && !victim.expulso && victim.lesao > 0.35f && team.PodeSubstituir(false))
+                        SubstituteForPlayer(team, victim, false);
+                    StartRestart(tipo, team, at, false, 1.2f);
+                };
                 return;
             }
             StartRestart(tipo, team, at, false, 1.3f);
@@ -1727,6 +2086,548 @@ namespace Craquez
                 if (d < bd) bd = d;
             }
             return bd;
+        }
+
+        // ============================================================ Regras Oficiais IFAB, Substituições e Disputa de Pênaltis
+
+        void AddStoppageTime(float matchMins)
+        {
+            addedSeconds += matchMins * (Mathf.Max(30f, HalfSeconds) / 45f);
+        }
+
+        void ClearBackPassRestriction()
+        {
+            deliberateFootPassTeam = null;
+            if (Times != null)
+            {
+                foreach (var t in Times)
+                    if (t != null && t.goleiro != null) t.goleiro.forbidHands = false;
+            }
+        }
+
+        Vector3 ClampIndirectInBox(Vector3 p, TimeInfo defending)
+        {
+            // Regra 13 IFAB: tiro livre indireto dentro da pequena área avança até a linha da pequena área paralela ao gol (5,5 m)
+            float sgn = Mathf.Sign(defending.OwnGoal.x);
+            float maxX = Arena.HalfLength - 5.6f;
+            float x = sgn > 0f ? Mathf.Min(p.x, maxX) : Mathf.Max(p.x, -maxX);
+            return new Vector3(x, 0f, Mathf.Clamp(p.z, -19.5f, 19.5f));
+        }
+
+        void FlushPendingAdvantageCard(bool showBanner)
+        {
+            if (advPendingYellow == null) return;
+            var p = advPendingYellow;
+            advPendingYellow = null;
+            if (p.expulso) return;
+            if (showBanner) GiveCard(p, false);
+            else
+            {
+                p.amarelos++;
+                p.time.amarelos++;
+                if (p.amarelos >= 2) { p.time.vermelhos++; SendOff(p); }
+            }
+        }
+
+        bool IsDOGSO(MatchPlayer offender, MatchPlayer victim, Vector3 at)
+        {
+            if (victim == null || offender == null) return false;
+            var att = victim.time;
+            float fwd = att.Fwd(at);
+            if (fwd < Arena.HalfLength - 32f || Mathf.Abs(at.z) > 17f) return false;
+            int defendersAhead = 0;
+            foreach (var d in offender.time.jogadores)
+            {
+                if (d == offender || d.expulso) continue;
+                if (att.Fwd(d.Pos) > fwd + 0.8f) defendersAhead++;
+            }
+            return defendersAhead == 0;
+        }
+
+        void UpdateIFABRules(float dt)
+        {
+            // 1) Regra 12 IFAB: janela real de Vantagem (~3 s) — se a vantagem não se concretizar, apita a falta original
+            if (advUntil > 0f)
+            {
+                if (Time.time >= advUntil)
+                {
+                    advUntil = -1f;
+                }
+                else if (advTeam != null && ((Owner != null && Owner.time != advTeam) || (KeeperHolding != null && KeeperHolding.time != advTeam)))
+                {
+                    advUntil = -1f;
+                    Whistle(1);
+                    AddStoppageTime(0.35f);
+                    if (advPendingYellow != null)
+                    {
+                        var y = advPendingYellow;
+                        advPendingYellow = null;
+                        GiveCard(y, false);
+                    }
+                    else if (advOffender != null)
+                    {
+                        Show("FALTA (sem vantagem)  •  " + advOffender.Rotulo, Color.white, 1.8f);
+                    }
+                    StartRestart(TipoReinicio.Falta, advTeam, advSpot, false, 1.3f);
+                    return;
+                }
+            }
+
+            // 2) Regra 12 IFAB (atualização 2025/2026): goleiro segurando a bola com as mãos por mais de 8 s -> Escanteio adversário
+            if (KeeperHolding != null && KeeperHolding.gk != null && KeeperHolding.gk.HeldDuration > 8.0f)
+            {
+                var gkTeam = KeeperHolding.time;
+                var att = OpponentOf(gkTeam);
+                ball.Release();
+                gkTeam.goleiro.ResetTo(gkTeam.OwnGoal + gkTeam.Forward * 1.5f);
+                KeeperHolding = null;
+                keeperWasHolding = false;
+                att.escanteios++;
+                Whistle(1);
+                Show("8 SEGUNDOS DO GOLEIRO  •  ESCANTEIO", UiKit.Yellow, 2.2f);
+                AddStoppageTime(0.35f);
+                float sideZ = Mathf.Sign(BallPos.z == 0f ? 1f : BallPos.z);
+                Vector3 corner = new Vector3(att.attackDir * (Arena.HalfLength - 0.4f), 0f, sideZ * (Arena.HalfWidth - 0.4f));
+                StartRestart(TipoReinicio.Escanteio, att, corner, false, 1.6f);
+                return;
+            }
+
+            // 3) Regra 9 IFAB: bola atinge o árbitro em velocidade e interfere na jogada -> Bola ao Chão
+            if (MainReferee != null && Time.time > refHitCooldown && !ball.IsHeld && Time.time - ball.LastKickTime > 0.12f)
+            {
+                Vector3 rp = MainReferee.transform.position;
+                if (BallPos.y < 1.85f && BallVel.magnitude > 4.8f && Flat(BallPos - rp).magnitude < 0.38f)
+                {
+                    refHitCooldown = Time.time + 5f;
+                    Whistle(1);
+                    TimeInfo dropTeam = LastPossession ?? Times[0];
+                    if (InPenaltyArea(BallPos, Times[0])) dropTeam = Times[0];
+                    else if (InPenaltyArea(BallPos, Times[1])) dropTeam = Times[1];
+                    Show("TOQUE NO ÁRBITRO  •  BOLA AO CHÃO", UiKit.Yellow, 2.0f);
+                    AddStoppageTime(0.25f);
+                    StartRestart(TipoReinicio.BolaAoChao, dropTeam, Flat(rp), false, 1.4f);
+                    return;
+                }
+            }
+        }
+
+        bool SameSubStoppage(TimeInfo t)
+        {
+            int last = t.indice == 0 ? lastTeamSubStoppageA : lastTeamSubStoppageB;
+            return last == subStoppageId && subStoppageId > 0;
+        }
+
+        public bool CanUserSubstitute()
+        {
+            if (!Active || UserTeam == null || Phase == Fase.Fim || Phase == Fase.DisputaPenaltis) return false;
+            bool freeWindow = Phase == Fase.Intervalo || SameSubStoppage(UserTeam);
+            return UserTeam.PodeSubstituir(freeWindow) && UserTeam.jogadores.Count > 0;
+        }
+
+        public string UserSubLabel()
+        {
+            if (UserTeam == null) return "-";
+            int rem = TimeInfo.MaxSubstituicoes - UserTeam.substituicoes;
+            int win = TimeInfo.MaxJanelasSub - UserTeam.janelasSub;
+            if (rem <= 0 || (win <= 0 && Phase != Fase.Intervalo && !SameSubStoppage(UserTeam))) return "Esgotadas";
+            return rem + "/" + TimeInfo.MaxSubstituicoes + " (" + win + " jan.)";
+        }
+
+        public bool PerformUserSubstitution()
+        {
+            if (!CanUserSubstitute()) return false;
+            var t = UserTeam;
+            bool intervalo = Phase == Fase.Intervalo;
+            MatchPlayer worst = null;
+            float worstScore = 99f;
+            foreach (var m in t.jogadores)
+            {
+                if (m.expulso || m.pc == null) continue;
+                float s = m.stamina - m.lesao * 1.4f - m.amarelos * 0.18f;
+                if (s < worstScore) { worstScore = s; worst = m; }
+            }
+            if (worst == null) return false;
+            if (!intervalo && Phase == Fase.Jogo) subStoppageId++;
+            return SubstituteForPlayer(t, worst, intervalo);
+        }
+
+        void TryAISubstitutions(TimeInfo t, bool intervalo)
+        {
+            int maxThisStop = intervalo ? 2 : 1;
+            for (int k = 0; k < maxThisStop; k++)
+            {
+                bool freeWindow = intervalo || SameSubStoppage(t);
+                if (!t.PodeSubstituir(freeWindow)) break;
+                MatchPlayer target = null;
+                float worst = intervalo ? 0.64f : 0.48f;
+                foreach (var m in t.jogadores)
+                {
+                    if (m.expulso || m.pc == null) continue;
+                    float score = m.stamina - m.lesao * 1.5f - (m.amarelos > 0 ? 0.12f : 0f);
+                    if (score < worst) { worst = score; target = m; }
+                }
+                if (target == null) break;
+                SubstituteForPlayer(t, target, intervalo);
+            }
+        }
+
+        bool SubstituteForPlayer(TimeInfo t, MatchPlayer outMp, bool intervalo)
+        {
+            if (t == null || outMp == null || t.reservas.Count == 0) return false;
+            bool freeWindow = intervalo || SameSubStoppage(t);
+            if (!t.PodeSubstituir(freeWindow)) return false;
+
+            // Escolhe o suplente da função mais próxima
+            int bestIdx = 0;
+            float bestFit = -9f;
+            for (int i = 0; i < t.reservas.Count; i++)
+            {
+                var r = t.reservas[i];
+                float fit = r.funcao == outMp.funcao ? 2f : (MesmoSetor(r.funcao, outMp.funcao) ? 1f : 0f);
+                fit += r.atr.Media * 0.5f;
+                if (fit > bestFit) { bestFit = fit; bestIdx = i; }
+            }
+            var sub = t.reservas[bestIdx];
+            t.reservas.RemoveAt(bestIdx);
+
+            t.substituicoes++;
+            if (!freeWindow)
+            {
+                t.janelasSub++;
+                if (t.indice == 0) lastTeamSubStoppageA = subStoppageId;
+                else lastTeamSubStoppageB = subStoppageId;
+            }
+
+            bool wasHuman = outMp == Human;
+            Slot slot = outMp.slot;
+            string oldLabel = outMp.Rotulo;
+
+            Vector3 spawnPos = intervalo
+                ? t.ToWorld(Mathf.Min(slot.x * 0.9f, -0.04f), slot.z)
+                : new Vector3(0f, 0f, -Arena.HalfWidth + 0.4f);
+
+            var rng = new System.Random(Random.Range(0, int.MaxValue));
+            var go = Instantiate(playerPrefab, spawnPos, Quaternion.LookRotation(intervalo ? t.Forward : Vector3.forward));
+            spawned.Add(go);
+            ApplyKit(go, KitMaterial(playerPrefab, PlayerLook.Textura(false, t.indice, sub.visual, t.kitA)));
+            PlayerLook.Aplicar(go, sub.aparencia, 1.78f, false, propMaterial, hairMats);
+            sub.aparencia.rosto = FaceShapes.Aplicar(go, rng);
+
+            var pc = go.GetComponent<PlayerController>();
+            pc.ball = ball;
+            pc.cameraTransform = mainCamera.transform;
+            pc.attackDir = t.attackDir;
+            pc.matchControls = true;
+            pc.aiControlled = true;
+            pc.InputEnabled = false;
+            pc.ballAuthority = false;
+
+            var mp = go.AddComponent<MatchPlayer>();
+            mp.pc = pc;
+            mp.time = t;
+            mp.slot = slot;
+            mp.funcao = slot.funcao;
+            mp.numero = sub.numero;
+            mp.nome = sub.nome;
+            mp.atr = sub.atr;
+            mp.aparencia = sub.aparencia;
+            mp.men = sub.men;
+            mp.modeloB = false;
+            mp.stamina = 1f;
+            mp.ApplyPhysical();
+            go.name = t.sigla + " " + mp.numero + " " + mp.nome;
+            pc.OnBodyContact += (other, comp, n, closing) => OnBodyContact(mp, other, comp, n, closing);
+            pc.OnSlideBall += p => OnSlideBall(mp);
+            pc.canShoot = () => CanHumanShoot(mp);
+
+            if (Owner == outMp) Owner = mp;
+            if (Restart != null && Restart.taker == outMp) Restart.taker = mp;
+
+            t.jogadores.Remove(outMp);
+            all.Remove(outMp);
+            outMp.expulso = true;
+            if (intervalo) outMp.gameObject.SetActive(false);
+            else StartCoroutine(WalkOff(outMp));
+
+            t.jogadores.Add(mp);
+            all.Add(mp);
+            byPc[pc] = mp;
+            prevVel[mp] = Vector3.zero;
+
+            if (wasHuman) SetHuman(mp);
+            if (!intervalo) AddStoppageTime(0.5f);
+            Show("⇄ SUBSTITUIÇÃO (" + t.sigla + ")  •  entra " + mp.Rotulo + ", sai " + oldLabel, UiKit.Cyan, 2.6f);
+            return true;
+        }
+
+        static bool MesmoSetor(Funcao a, Funcao b)
+        {
+            bool defA = a == Funcao.Zagueiro || a == Funcao.Lateral;
+            bool defB = b == Funcao.Zagueiro || b == Funcao.Lateral;
+            if (defA && defB) return true;
+            bool midA = a == Funcao.Volante || a == Funcao.Meia || a == Funcao.MeiaAberto;
+            bool midB = b == Funcao.Volante || b == Funcao.Meia || b == Funcao.MeiaAberto;
+            if (midA && midB) return true;
+            bool attA = a == Funcao.Ponta || a == Funcao.Atacante;
+            bool attB = b == Funcao.Ponta || b == Funcao.Atacante;
+            return attA && attB;
+        }
+
+        // ------------------------------------------------------------ Disputa de Pênaltis (Regra 10 IFAB: desempate ABAB 5 + alternadas)
+
+        public bool TiedAtFullTime
+        {
+            get { return Active && Phase == Fase.Fim && Times != null && Times[0].gols == Times[1].gols && !shootoutFinished; }
+        }
+
+        public void StartPenaltyShootout()
+        {
+            if (Times == null) return;
+            Phase = Fase.DisputaPenaltis;
+            phaseTime = 0f;
+            shootoutFinished = false;
+            shootoutShotActive = false;
+            shootoutWaitingHuman = false;
+            penTurn = 0;
+            penKicksA = 0;
+            penKicksB = 0;
+            penHistoryA = "";
+            penHistoryB = "";
+            Times[0].penaltisConvertidos = 0;
+            Times[1].penaltisConvertidos = 0;
+
+            // Posiciona o elenco no círculo central observando a disputa no gol +X
+            for (int ti = 0; ti < 2; ti++)
+            {
+                var t = Times[ti];
+                if (t.goleiro != null)
+                {
+                    t.goleiro.humanControlled = false;
+                    t.goleiro.ResetTo(new Vector3(-8f, 0f, ti == 0 ? -12f : 12f));
+                }
+                for (int i = 0; i < t.jogadores.Count; i++)
+                {
+                    var m = t.jogadores[i];
+                    if (m.pc == null || m.expulso) continue;
+                    m.pc.aiControlled = true;
+                    m.pc.InputEnabled = false;
+                    float z = (i - 4.5f) * 1.4f + (ti == 0 ? -8f : 8f);
+                    m.pc.Teleport(new Vector3(ti == 0 ? -1.5f : 1.5f, 0f, z), new Vector3(Arena.HalfLength, 0f, 0f));
+                }
+            }
+            if (MainReferee != null) MainReferee.transform.position = new Vector3(Arena.HalfLength - 14f, 0f, 11f);
+            SetupNextShootoutKick();
+        }
+
+        void SetupNextShootoutKick()
+        {
+            if (Times == null) return;
+            // Restaura o cobrador e goleiro anteriores ao meio de campo
+            foreach (var t in Times)
+            {
+                if (t.goleiro != null)
+                {
+                    t.goleiro.humanControlled = false;
+                    t.goleiro.ResetTo(new Vector3(-8f, 0f, t.indice == 0 ? -12f : 12f));
+                }
+            }
+            if (penKicker != null && penKicker.pc != null && !penKicker.expulso)
+            {
+                penKicker.pc.aiControlled = true;
+                penKicker.pc.InputEnabled = false;
+                penKicker.pc.Teleport(new Vector3(penKicker.time.indice == 0 ? -1.5f : 1.5f, 0f, 0f), new Vector3(Arena.HalfLength, 0f, 0f));
+            }
+
+            int attIdx = penTurn % 2;
+            penAttackingTeam = Times[attIdx];
+            var defTeam = Times[1 - attIdx];
+
+            // Ordena os melhores batedores disponíveis e roda a lista
+            var takers = new List<MatchPlayer>();
+            foreach (var m in penAttackingTeam.jogadores) if (!m.expulso && m.pc != null) takers.Add(m);
+            takers.Sort((a, b) => (b.atr.finalizacao * 0.7f + b.men.compostura * 0.3f).CompareTo(a.atr.finalizacao * 0.7f + a.men.compostura * 0.3f));
+            if (takers.Count == 0) { EndShootout(); return; }
+            int round = penTurn / 2;
+            penKicker = takers[round % takers.Count];
+
+            // Ambos os times cobram no gol +X (padrão oficial IFAB de disputa de pênaltis em uma única baliza)
+            Vector3 spot = new Vector3(Arena.HalfLength - 11f, Arena.BallRadius, 0f);
+            ball.PlaceAt(spot);
+            seenKick = ball.LastKickTime;
+
+            if (defTeam.goleiro != null)
+            {
+                defTeam.goleiro.side = 1f;
+                defTeam.goleiro.ResetTo(new Vector3(Arena.HalfLength - 0.25f, 0f, 0f));
+            }
+
+            penKicker.pc.attackDir = 1f;
+            penKicker.pc.Teleport(new Vector3(spot.x - 2.2f, 0f, 0f), new Vector3(Arena.HalfLength, 0f, 0f));
+
+            shootoutShotActive = false;
+            penStepTimer = 0f;
+            Whistle(1);
+
+            if (penAttackingTeam == UserTeam)
+            {
+                if (touch != null) { touch.goalkeeperMode = false; touch.matchMode = false; }
+                cameraRig.matchMode = false;
+                cameraRig.goalkeeperRole = false;
+                SetHuman(penKicker);
+                cameraRig.attackDir = 1f;
+                cameraRig.keeper = defTeam.goleiro != null ? defTeam.goleiro.transform : null;
+                cameraRig.mode = CameraRig.Modo.AtrasDoJogador;
+                cameraRig.Snap();
+                shootoutWaitingHuman = true;
+                Show("SUA COBRANÇA  •  " + penKicker.Rotulo, penAttackingTeam.cor, 2.0f);
+            }
+            else
+            {
+                shootoutWaitingHuman = false;
+                if (Human != null && Human.pc != null) { Human.pc.InputEnabled = false; Human.pc.aiControlled = true; }
+                if (defTeam == UserTeam && defTeam.goleiro != null)
+                {
+                    defTeam.goleiro.humanControlled = true;
+                    if (touch != null) { touch.matchMode = false; touch.goalkeeperMode = true; }
+                    cameraRig.matchMode = false;
+                    cameraRig.goalkeeperRole = true;
+                    cameraRig.player = penKicker.transform;
+                    cameraRig.keeper = defTeam.goleiro.transform;
+                    cameraRig.mode = CameraRig.Modo.Goleiro;
+                    cameraRig.Snap();
+                    Show("DEFENDA O PÊNALTI!  •  " + penKicker.Rotulo, defTeam.cor, 2.0f);
+                }
+            }
+        }
+
+        void UpdatePenaltyShootout(float dt)
+        {
+            penStepTimer += dt;
+            if (!shootoutShotActive)
+            {
+                if (shootoutWaitingHuman)
+                {
+                    if (penStepTimer > 12f && penKicker != null && penKicker.pc != null)
+                    {
+                        shootoutWaitingHuman = false;
+                        shootoutShotActive = true;
+                        penStepTimer = 0f;
+                        float z = (Random.value < 0.5f ? -1f : 1f) * Random.Range(1.1f, Arena.GoalHalfWidth - 0.5f);
+                        penKicker.pc.AIShoot(TipoChute.Colocado, 0.72f, z);
+                    }
+                    return;
+                }
+                // Cobrança da IA após breve preparação
+                if (penStepTimer >= 1.45f && penKicker != null && penKicker.pc != null)
+                {
+                    shootoutShotActive = true;
+                    penStepTimer = 0f;
+                    float z = (Random.value < 0.5f ? -1f : 1f) * Random.Range(0.9f, Arena.GoalHalfWidth - 0.35f);
+                    TipoChute tc = Random.value < 0.55f ? TipoChute.Colocado : TipoChute.Forte;
+                    penKicker.pc.AIShoot(tc, Random.Range(0.62f, 0.88f), z);
+                }
+                return;
+            }
+
+            // Avalia o desfecho da cobrança (gol, defesa, trave/fora ou bola amortecida)
+            Vector3 b = BallPos;
+            float R = Arena.BallRadius;
+            if (b.x > Arena.HalfLength + R && Mathf.Abs(b.z) < Arena.GoalHalfWidth - R * 0.45f && b.y < Arena.GoalHeight - R * 0.25f)
+            {
+                FinishShootoutKick(true);
+                return;
+            }
+            bool outOrSaved = ball.IsHeld || b.x > Arena.HalfLength + R || Mathf.Abs(b.z) > Arena.HalfWidth ||
+                              (penStepTimer > 0.7f && (BallVel.magnitude < 0.8f || BallVel.x < -0.5f)) || penStepTimer > 4.2f;
+            if (outOrSaved)
+            {
+                FinishShootoutKick(false);
+            }
+        }
+
+        void FinishShootoutKick(bool scored)
+        {
+            shootoutShotActive = false;
+            if (penAttackingTeam.indice == 0)
+            {
+                penKicksA++;
+                if (scored) Times[0].penaltisConvertidos++;
+                penHistoryA += scored ? "● " : "○ ";
+            }
+            else
+            {
+                penKicksB++;
+                if (scored) Times[1].penaltisConvertidos++;
+                penHistoryB += scored ? "● " : "○ ";
+            }
+
+            if (scored)
+            {
+                Whistle(1);
+                if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.CrowdReaction(1f);
+                if (ParticleEffectsManager.Instance != null && ball != null) ParticleEffectsManager.Instance.PlayGoalCelebration(ball.transform.position);
+                Show("GOL DE PÊNALTI!  •  " + penKicker.Rotulo, penAttackingTeam.cor, 1.8f);
+            }
+            else if (!ball.IsHeld)
+            {
+                Show("PRA FORA!  •  " + penKicker.Rotulo, UiKit.Yellow, 1.8f);
+            }
+
+            penTurn++;
+            if (IsShootoutClinched())
+            {
+                StartCoroutine(DelayedEndShootout());
+            }
+            else
+            {
+                StartCoroutine(DelayedNextShootoutKick());
+            }
+        }
+
+        bool IsShootoutClinched()
+        {
+            int sA = Times[0].penaltisConvertidos;
+            int sB = Times[1].penaltisConvertidos;
+            if (penKicksA <= 5 && penKicksB <= 5 && (penKicksA < 5 || penKicksB < 5))
+            {
+                int remA = 5 - penKicksA;
+                int remB = 5 - penKicksB;
+                if (sA > sB + remB) return true;
+                if (sB > sA + remA) return true;
+                return false;
+            }
+            return penKicksA == penKicksB && sA != sB;
+        }
+
+        System.Collections.IEnumerator DelayedNextShootoutKick()
+        {
+            yield return new WaitForSeconds(2.1f);
+            if (Active && Phase == Fase.DisputaPenaltis) SetupNextShootoutKick();
+        }
+
+        System.Collections.IEnumerator DelayedEndShootout()
+        {
+            yield return new WaitForSeconds(2.3f);
+            if (Active) EndShootout();
+        }
+
+        void EndShootout()
+        {
+            foreach (var t in Times)
+            {
+                if (t.goleiro != null) { t.goleiro.humanControlled = false; t.goleiro.side = -t.attackDir; }
+                foreach (var m in t.jogadores) if (m.pc != null) { m.pc.attackDir = t.attackDir; m.pc.InputEnabled = false; m.pc.aiControlled = true; }
+            }
+            if (touch != null) { touch.goalkeeperMode = false; touch.matchMode = true; }
+            cameraRig.matchMode = true;
+            cameraRig.goalkeeperRole = false;
+            shootoutFinished = true;
+            Phase = Fase.Fim;
+            phaseTime = 2.6f;
+            Whistle(3);
+            var winner = Times[0].penaltisConvertidos > Times[1].penaltisConvertidos ? Times[0] : Times[1];
+            if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.CrowdReaction(1f);
+            Show("VENCEDOR NOS PÊNALTIS: " + winner.nome.ToUpper(), winner.cor, 3.5f);
         }
 
         public void RequestRestartMatch() { if (OnRestartRequested != null) OnRestartRequested(); }

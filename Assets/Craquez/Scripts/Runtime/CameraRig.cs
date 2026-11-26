@@ -8,11 +8,11 @@ namespace Craquez
     /// </summary>
     public class CameraRig : MonoBehaviour
     {
-        public enum Modo { AtrasDoJogador = 0, Dinamica = 1, TV = 2, Aerea = 3, AtrasDoGol = 4, Goleiro = 5, Menu = 6, VisaoJogador = 7, Comemoracao = 8 }
+        public enum Modo { AtrasDoJogador = 0, Dinamica = 1, TV = 2, Aerea = 3, AtrasDoGol = 4, Goleiro = 5, Menu = 6, VisaoJogador = 7, Comemoracao = 8, LateralProxima = 9 }
 
-        public static readonly Modo[] ModosAtacante = { Modo.AtrasDoJogador, Modo.Dinamica, Modo.TV, Modo.Aerea, Modo.AtrasDoGol, Modo.VisaoJogador };
-        public static readonly Modo[] ModosGoleiro = { Modo.Goleiro, Modo.AtrasDoGol, Modo.TV, Modo.Aerea };
-        public static readonly Modo[] ModosPartida = { Modo.TV, Modo.AtrasDoJogador, Modo.VisaoJogador, Modo.Aerea, Modo.Dinamica };
+        public static readonly Modo[] ModosAtacante = { Modo.AtrasDoJogador, Modo.Dinamica, Modo.TV, Modo.LateralProxima, Modo.Aerea, Modo.AtrasDoGol, Modo.VisaoJogador };
+        public static readonly Modo[] ModosGoleiro = { Modo.Goleiro, Modo.AtrasDoGol, Modo.TV, Modo.LateralProxima, Modo.Aerea };
+        public static readonly Modo[] ModosPartida = { Modo.TV, Modo.LateralProxima, Modo.AtrasDoJogador, Modo.VisaoJogador, Modo.Aerea, Modo.Dinamica };
 
         public static string Nome(Modo m)
         {
@@ -21,6 +21,7 @@ namespace Craquez
                 case Modo.AtrasDoJogador: return "Atrás do atacante";
                 case Modo.Dinamica: return "Dinâmica (baixa)";
                 case Modo.TV: return "Transmissão TV";
+                case Modo.LateralProxima: return "Lateral próxima (2 lados)";
                 case Modo.Aerea: return "Aérea";
                 case Modo.AtrasDoGol: return "Atrás do gol";
                 case Modo.Goleiro: return "Goleiro";
@@ -132,6 +133,18 @@ namespace Craquez
                         Vector3 far = new Vector3(x, 21f, -Arena.HalfWidth - 24f);
                         pos = look + (far - look) * Mathf.Lerp(0.75f, 0.66f, boxZoom);
                         fov = Mathf.Lerp(36f, 33.5f, boxZoom);
+                        break;
+                    }
+                case Modo.LateralProxima:
+                    {
+                        // câmera próxima na beira da lateral frontal: enquadra os dois lados do campo de frente simultaneamente
+                        float cx = Mathf.Clamp((bp.x + ballLead.x) * 0.12f + peek.x * 6f, -5.5f, 5.5f);
+                        float cz = Mathf.Clamp(bp.z * 0.16f + peek.y * 3f, -3.5f, 4.5f) + 2.2f;
+                        pos = new Vector3(cx, 12.8f, -Arena.HalfWidth - 9.2f);
+                        ClampInsideFence(ref pos);
+                        look = new Vector3(cx * 0.75f, 0.55f, cz);
+                        float aspect = cam != null && cam.aspect > 0.5f ? cam.aspect : 1.7778f;
+                        fov = Mathf.Clamp(2f * Mathf.Atan(1.16f / aspect) * Mathf.Rad2Deg, 58f, 74f);
                         break;
                     }
                 case Modo.VisaoJogador:

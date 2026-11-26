@@ -358,6 +358,12 @@ namespace Craquez
 
                 case Tela.Pausa when inMatch:
                     items.Add(new Item { label = "CONTINUAR", activate = Resume });
+                    items.Add(new Item
+                    {
+                        label = "SUBSTITUIR ATLETA", tipo = Tipo.Botao,
+                        value = () => match.UserSubLabel(),
+                        activate = () => { if (match.PerformUserSubstitution()) Resume(); }
+                    });
                     items.Add(new Item { label = "CÂMERA", tipo = Tipo.Lista, value = () => CameraRig.Nome(cameraRig.mode), change = d => match.CycleCameraFromMenu() });
                     items.Add(new Item { label = "MINI MAPA", tipo = Tipo.Lista, value = () => GameSettings.MiniMapa ? "Ligado" : "Desligado", change = d => GameSettings.MiniMapa = !GameSettings.MiniMapa });
                     items.Add(new Item { label = "NOMES DOS JOGADORES", tipo = Tipo.Lista, value = () => GameSettings.NomesJogadores ? "Ligados" : "Desligados", change = d => GameSettings.NomesJogadores = !GameSettings.NomesJogadores });
@@ -929,7 +935,7 @@ namespace Craquez
             UiKit.Fill(new Rect(p.x + 40 * S, p.y + 112 * S, 100 * S, 4 * S), UiKit.Yellow);
             UiKit.Text(new Rect(p.x + 40 * S, p.y + 26 * S, pw, 80 * S), "PAUSA", ui.Title, Color.white, 3 * S);
             string info = inMatch && match.Times != null
-                ? match.Times[0].sigla + " " + match.Times[0].gols + " x " + match.Times[1].gols + " " + match.Times[1].sigla + "  •  " + match.MatchMinute + "'"
+                ? match.Times[0].sigla + " " + match.Times[0].gols + " x " + match.Times[1].gols + " " + match.Times[1].sigla + "  •  " + match.ClockLabel
                 : Arena.Nome(session.weather.Current) + "  •  " + (session.Role == PapelControle.Goleiro ? "Goleiro" : "Atacante");
             UiKit.Text(new Rect(p.x, p.y + 40 * S, pw - 40 * S, 60 * S), info, new GUIStyle(ui.Body) { alignment = TextAnchor.MiddleRight }, UiKit.TextDim, 0f);
 

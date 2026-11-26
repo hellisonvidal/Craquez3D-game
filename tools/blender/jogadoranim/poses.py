@@ -85,3 +85,73 @@ R_FREIA_H = (0, -0.10, -0.16)
 R_ASSENTA = merge(leg('Left', 30, 62, 18, 7), leg('Right', 34, 48, 12, 7), arm('Left', -55, 25, 55), arm('Right', -55, 25, 55),
                   spine(8, neck=4, head=0))
 R_ASSENTA_H = (0, -0.05, -0.12)
+
+# ---- parado (postura atlética natural de campo: pés 100% plantados no chão, só leve respiração no tronco/braços)
+IDLE_A = merge(leg('Left', 8, 15, 7, 4.5), leg('Right', 7, 14, 7, 4.5),
+               arm('Left', -72, 10, 22), arm('Right', -72, 10, 22),
+               spine(4, neck=2, head=-1))
+IDLE_A_H = (0, -0.01, -0.014)
+
+IDLE_B = merge(leg('Left', 8, 15, 7, 4.5), leg('Right', 7, 14, 7, 4.5),
+               arm('Left', -70.5, 11, 24, shoulder=1.2), arm('Right', -70.5, 11, 24, shoulder=1.2),
+               spine(5.2, neck=2.6, head=-1.4))
+IDLE_B_H = (0, -0.01, -0.014)
+
+# ---- queda para frente/lado (falta por trás, tropeço ou escorregão: amortece com antebraços e quadril acima da grama)
+Q_IMPACTO = merge(leg('Left', 32, 58, 12, 8), leg('Right', -18, 42, -20, 6),
+                  arm('Left', -35, 55, 40), arm('Right', -30, 60, 35),
+                  spine(36, side=8, twist=10, neck=10, head=-8), {'Hips': [('R', -22), ('F', 10)]})
+Q_IMPACTO_H = (0.04, 0.10, -0.18)
+
+Q_DESCIDA = merge(leg('Left', 42, 82, -8, 10), leg('Right', 12, 65, -18, 8),
+                  arm('Left', -15, 75, 55), arm('Right', -10, 78, 50),
+                  spine(28, side=14, twist=14, neck=6, head=-12), {'Hips': [('R', -58), ('F', 28)]})
+Q_DESCIDA_H = (0.10, 0.22, -0.52)
+
+Q_SOLO = merge(leg('Left', 36, 68, -10, 8), leg('Right', 18, 44, -12, 6),
+               arm('Left', -25, 68, 72), arm('Right', -35, 58, 65),
+               spine(16, side=10, twist=8, neck=8, head=4), {'Hips': [('R', -74), ('F', 52)]})
+Q_SOLO_H = (0.14, 0.26, -0.78)
+
+Q_REPOUSO = merge(leg('Left', 30, 56, -8, 7), leg('Right', 14, 36, -10, 5),
+                  arm('Left', -32, 62, 78), arm('Right', -40, 52, 70),
+                  spine(12, side=8, twist=6, neck=6, head=4), {'Hips': [('R', -76), ('F', 58)]})
+Q_REPOUSO_H = (0.14, 0.26, -0.80)
+
+# ---- queda de costas/sentado (trombada de frente: desequilibra para trás e senta apoiando as mãos no gramado)
+QC_IMPACTO = merge(leg('Left', 18, 36, 12, 8), leg('Right', 28, 44, 16, 8),
+                   arm('Left', -45, 35, 35), arm('Right', -45, 35, 35),
+                   spine(-18, side=-6, neck=10, head=10), {'Hips': [('R', 20), ('F', -8)]})
+QC_IMPACTO_H = (-0.04, -0.10, -0.16)
+
+QC_SOLO = merge(leg('Left', 58, 64, 8, 12), leg('Right', 46, 48, 6, 10),
+                arm('Left', -52, -32, 22), arm('Right', -50, -34, 22),
+                spine(-12, side=-4, neck=16, head=14), {'Hips': [('R', 54), ('F', -10)]})
+QC_SOLO_H = (-0.06, -0.22, -0.76)
+
+QC_REPOUSO = merge(leg('Left', 52, 56, 6, 12), leg('Right', 40, 40, 4, 10),
+                   arm('Left', -55, -30, 26), arm('Right', -54, -30, 26),
+                   spine(-8, side=-4, neck=14, head=12), {'Hips': [('R', 58), ('F', -12)]})
+QC_REPOUSO_H = (-0.06, -0.22, -0.78)
+
+# ---- caído com dor (sentado no gramado segurando a canela direita, sem atravessar o chão)
+DOR_A = merge(leg('Left', 44, 42, 4, 14), leg('Right', 78, 106, 14, 6),
+              arm('Left', -48, 52, 42), arm('Right', -52, 58, 48),
+              spine(26, side=6, twist=10, neck=14, head=10), {'Hips': [('R', 28), ('F', -8)]})
+DOR_A_H = (-0.04, -0.08, -0.78)
+
+DOR_B = merge(leg('Left', 44, 42, 4, 14), leg('Right', 82, 110, 16, 6),
+              arm('Left', -46, 55, 46), arm('Right', -50, 60, 52),
+              spine(32, side=8, twist=12, neck=18, head=14), {'Hips': [('R', 26), ('F', -8)]})
+DOR_B_H = (-0.04, -0.08, -0.78)
+
+# ---- levantar atlético do gramado (impulso de mão e um joelho até ficar em pé)
+LEV_APOIO = merge(leg('Left', 64, 98, 16, 10), leg('Right', 42, 86, 12, 8),
+                  arm('Left', -38, 48, 45), arm('Right', -58, 22, 24),
+                  spine(28, side=8, neck=8, head=4), {'Hips': [('R', -28), ('F', 24)]})
+LEV_APOIO_H = (0.08, 0.06, -0.62)
+
+LEV_JOELHO = merge(leg('Left', 76, 88, 14, 8), leg('Right', 18, 76, 24, 6),
+                   arm('Left', -58, 32, 48), arm('Right', -62, 18, 42),
+                   spine(24, neck=8, head=2))
+LEV_JOELHO_H = (0.02, 0.02, -0.36)
