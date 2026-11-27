@@ -4,13 +4,13 @@ using UnityEngine.Rendering.Universal;
 
 namespace Craquez
 {
-    /// <summary>Layouts de botões do controle (PlayStation / Xbox / genérico).</summary>
+    /// <summary>Layouts de botões do controle conforme eFootball (PlayStation / Xbox / Switch / genérico).</summary>
     public enum LayoutControle
     {
-        /// <summary>Chute no ○ (B), colocado no □ (X), cavadinha no △ (Y).</summary>
-        ChuteNoCirculo = 0,
-        /// <summary>Chute no □ (X), colocado no ○ (B), cavadinha no △ (Y).</summary>
-        ChuteNoQuadrado = 1
+        /// <summary>Padrão eFootball: Chute no □ (X), Passe Alto/Cruzamento e Carrinho no ○ (B), Passe no ✕ (A), Profundidade no △ (Y).</summary>
+        ChuteNoQuadrado = 0,
+        /// <summary>Alternativo: Chute no ○ (B), Passe Alto/Cruzamento e Carrinho no □ (X), Passe no ✕ (A), Profundidade no △ (Y).</summary>
+        ChuteNoCirculo = 1
     }
 
     public enum QualidadeGrafica { Baixa = 0, Media = 1, Alta = 2 }
@@ -23,10 +23,10 @@ namespace Craquez
     /// <summary>Configurações do jogador, salvas no aparelho (PlayerPrefs).</summary>
     public static class GameSettings
     {
-        const string KLayout = "craquez.layout", KCam = "craquez.camera", KQual = "craquez.qualidade",
+        const string KLayout = "craquez.layout.efootball", KCam = "craquez.camera", KQual = "craquez.qualidade",
                      KVol = "craquez.volume", KPapel = "craquez.papel", KVib = "craquez.vibracao", KInv = "craquez.inverterX",
                      KMapa = "craquez.minimapa", KNomes = "craquez.nomes", KTempo = "craquez.tempo", KDif = "craquez.dificuldade",
-                     KCamPartida = "craquez.cameraPartida", KTime = "craquez.timeUsuario",
+                     KCamPartida = "craquez.cameraPartida.v19", KTime = "craquez.timeUsuario",
                      KJoy = "craquez.joystick", KTam = "craquez.tamanhoControles", KCorrerAnalog = "craquez.correrAnalogico";
 
         public static ModoJoystick Joystick

@@ -50,6 +50,12 @@ namespace Craquez
         [NonSerialized] public Func<Vector3?> distributionTarget;
         /// <summary>Regra 12 (recuo deliberado com o pé): impede o goleiro de usar as mãos, jogando com os pés.</summary>
         [NonSerialized] public bool forbidHands;
+        /// <summary>Verdadeiro quando este é o goleiro do time do usuário na partida (permite reposição manual e saída com △).</summary>
+        [NonSerialized] public bool userTeamKeeper;
+        /// <summary>Comando de saída do goleiro na defesa (segurar △ / Y no estilo eFootball).</summary>
+        [NonSerialized] public bool externalRushRequest;
+        /// <summary>Direção mirada pelo usuário ao repor a bola com o goleiro.</summary>
+        [NonSerialized] public Vector3 userAimDir;
         public Vector3 Velocity { get { return velocity; } }
         public bool HoldingBall { get { return State == Estado.ComBola && ball != null && ball.IsHeld; } }
         public float HeldDuration { get { return HoldingBall ? stateTime : 0f; } }
@@ -660,9 +666,14 @@ namespace Craquez
             }
         }
 
+        float nextThreatScan;
+
         /// <summary>
-        /// Posicionamento em Arco (Bissetriz do Gol - GK_Alert):
-        /// Move-se em Strafe/Sidestep sobre um arco entre o centro do gol e a bola, encarando sempre a bola.
+        /// Posicionamento em Arco (Bissetriz do Gol - GK_Alert) + Leitura Proativa de Ameaças:
+        /// - Fecha o ângulo sobre a bissetriz;
+        /// - Intercepta cruzamentos na pequena área (GK_Salto / GK_Soco);
+        /// - Reage a cabeçadas, desvios e bolas enfiadas (mesmo sem OnShot);
+        /// - Sai nos pés do atacante no 1x1 ou quando o usuário segura △ (Saída do Goleiro eFootball).
         /// </summary>
         void UpdateArcPositioning(float dt)
         {
@@ -670,9 +681,79 @@ namespace Craquez
             if (ball == null) return;
 
             Vector3 bp = ball.transform.position;
+            Vector3 bv = ball.IsHeld ? Vector3.zero : ball.Velocity;
             Vector3 g = GoalCenter;
+            float sgn = Mathf.Sign(side);
             Vector3 toBall = bp - g; toBall.y = 0f;
             float dist = toBall.magnitude;
+
+            // 1) Leitura contínua de finalizações desviadas, cabeçadas e enfiadas rumo ao gol
+            if (!ball.IsHeld && reactAt < 0f && Time.time >= nextThreatScan)
+            {
+                nextThreatScan = Time.time + 0.06f;
+                if (bv.x * sgn > 3.4f && dist < 34f)
+                {
+                    var ws = WeatherSystem.Instance;
+                    Vector3 wind = ws != null ? ws.Wind : Vector3.zero;
+                    Vector3 hit; float tHit;
+                    if (BallPhysics.PredictPlaneCrossing(bp, bv, ball.Body.angularVelocity, wind, transform.position.x, 1.45f, out hit, out tHit))
+                    {
+                        if (tHit > 0.05f && tHit < 0.85f && Mathf.Abs(hit.z) <= Arena.GoalHalfWidth + 0.9f && hit.y <= Arena.GoalHeight + 0.65f)
+                        {
+                            shotInFlight = true;
+                            resolved = false;
+                            reactAt = Time.time + Mathf.Clamp(tHit * 0.18f, 0.03f, 0.11f);
+                        }
+                    }
+                }
+            }
+
+            // 2) Interceptação aérea de cruzamentos na pequena área / entrada da área
+            bool claimingCross = false;
+            Vector3 crossSpot = Vector3.zero;
+            if (!ball.IsHeld && bp.y > 0.9f && dist < 24f && Mathf.Abs(bv.z) + Mathf.Abs(bv.x) > 3.5f)
+            {
+                float gAcc = -Physics.gravity.y;
+                float disc = bv.y * bv.y + 2f * gAcc * Mathf.Max(0f, bp.y - 2.05f);
+                if (disc > 0f)
+                {
+                    float tHigh = (bv.y + Mathf.Sqrt(disc)) / gAcc;
+                    if (tHigh > 0.12f && tHigh < 1.35f)
+                    {
+                        Vector3 catchPt = bp + new Vector3(bv.x, 0f, bv.z) * tHigh;
+                        float depth = Arena.HalfLength - catchPt.x * sgn;
+                        if (depth >= -0.5f && depth <= 8.2f && Mathf.Abs(catchPt.z) <= 8.5f)
+                        {
+                            float dGk = Vector3.Distance(new Vector3(transform.position.x, 0f, transform.position.z), new Vector3(catchPt.x, 0f, catchPt.z));
+                            if (dGk / 5.8f <= tHigh + 0.18f)
+                            {
+                                claimingCross = true;
+                                crossSpot = new Vector3(catchPt.x, 0f, catchPt.z);
+                                if (dGk < 1.25f && bp.y >= 1.55f && bp.y <= 2.75f && Vector3.Distance(bp, transform.position + Vector3.up * 1.6f) < 1.85f)
+                                {
+                                    float nearOpp = opponentDistance != null ? opponentDistance(crossSpot) : 9f;
+                                    predictedHitPoint = bp;
+                                    ikTarget = bp;
+                                    float lat = Vector3.Dot(bp - transform.position, transform.right);
+                                    ActiveQuadrant = QuadranteDefesa.Dive_High;
+                                    if (nearOpp < 1.6f || forbidHands || !InsideOwnPenaltyArea(bp))
+                                    {
+                                        // Área congestionada: afasta de soco!
+                                        StartJump(Mathf.Clamp(lat * 0.5f, -0.4f, 0.4f), 0.36f, 0.42f);
+                                        PunchClear(bp);
+                                    }
+                                    else
+                                    {
+                                        StartJump(Mathf.Clamp(lat * 0.7f, -0.95f, 0.95f), 0.38f, 0.38f);
+                                        Grab();
+                                    }
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             // Calcula o arco da bissetriz entre o centro do gol e os postes
             Vector3 leftPost = g + new Vector3(0f, 0f, Arena.GoalHalfWidth);
@@ -688,51 +769,80 @@ namespace Craquez
             }
 
             Vector3 target;
-            float sgn = Mathf.Sign(side);
-            if (toBall.x * sgn > -0.5f || dist < 0.5f)
+            if (claimingCross)
+            {
+                target = crossSpot;
+            }
+            else if (toBall.x * sgn > -0.5f || dist < 0.5f)
             {
                 target = g + new Vector3(-0.55f * sgn, 0f, Mathf.Clamp(bp.z, -2.6f, 2.6f));
             }
             else
             {
-                float arcRadius = Mathf.Clamp(dist * 0.115f, 0.65f, 3.65f);
+                // Avança um pouco mais no arco quando a bola entra na grande área para fechar o ângulo
+                float arcScale = dist < 16.5f ? 0.165f : 0.115f;
+                float arcRadius = Mathf.Clamp(dist * arcScale, 0.65f, 4.4f);
                 target = g + dirBisector * arcRadius;
             }
-            if ((g.x - target.x) * sgn < 0.42f) target.x = g.x - sgn * 0.42f;
-            target.z = Mathf.Clamp(target.z, -Arena.GoalHalfWidth + 0.45f, Arena.GoalHalfWidth - 0.45f);
+            if (!claimingCross)
+            {
+                if ((g.x - target.x) * sgn < 0.42f) target.x = g.x - sgn * 0.42f;
+                target.z = Mathf.Clamp(target.z, -Arena.GoalHalfWidth + 0.40f, Arena.GoalHalfWidth - 0.40f);
+            }
             target.y = 0f;
 
-            // Saída do gol em bola solta e lenta dentro da pequena/grande área
-            bool looseBall = !ball.IsHeld && ball.Grounded && ball.Velocity.magnitude < 4.2f && dist < sweepRange && Time.time - ball.LastKickTime > 0.6f;
-            if (looseBall)
+            // 3) Saída do gol: bola solta na área, 1x1 cara a cara ou comando manual △ (externalRushRequest)
+            bool rushingOut = false;
+            if (!ball.IsHeld && !claimingCross && dist < 21f)
             {
-                float nearest;
-                if (opponentDistance != null) nearest = opponentDistance(bp);
-                else { PlayerController pc = FindPlayer(); nearest = pc == null ? 99f : Vector3.Distance(pc.transform.position, bp); }
-                // só sai se chegar antes do atacante
-                float myTime = Vector3.Distance(transform.position, bp) / 6.5f;
-                if (nearest > 2.2f && myTime < nearest / 7.5f + 0.35f)
+                float nearestOpp = opponentDistance != null ? opponentDistance(bp) : 99f;
+                float myDist = Vector3.Distance(transform.position, new Vector3(bp.x, 0f, bp.z));
+                bool looseSweep = bp.y < 1.2f && bv.magnitude < 6.5f && dist < sweepRange + 2.5f && myDist / 6.6f < nearestOpp / 7.4f + 0.30f;
+                bool manualRush = externalRushRequest && dist < 24f;
+                bool oneOnOne = InsideOwnPenaltyArea(bp) && dist < 12.5f && bp.y < 1.0f && bv.magnitude < 9.5f && nearestOpp < 2.2f && myDist < 6.8f;
+
+                if (looseSweep || manualRush || oneOnOne)
                 {
-                    target = new Vector3(bp.x, 0f, bp.z);
-                    if (Vector3.Distance(transform.position, target) < 0.85f) { Grab(); return; }
+                    rushingOut = true;
+                    // Fecha a linha entre a bola e o centro do gol
+                    Vector3 rushSpot = new Vector3(bp.x, 0f, bp.z) + (bv.magnitude > 1f ? new Vector3(bv.x, 0f, bv.z) * 0.14f : Vector3.zero);
+                    if (manualRush)
+                        rushSpot.x = Mathf.Clamp(rushSpot.x, -Arena.HalfLength + 0.6f, Arena.HalfLength - 0.6f);
+                    target = Vector3.Lerp(rushSpot, g, oneOnOne && !looseSweep && !manualRush ? 0.16f : 0.0f);
+
+                    if (myDist < 0.92f && bp.y < 1.35f)
+                    {
+                        if (nearestOpp < 1.5f && !forbidHands && InsideOwnPenaltyArea(bp) && InsideOwnPenaltyArea(transform.position))
+                        {
+                            // Abafamento rápido nos pés do atacante (K-block + encaixe!)
+                            ActiveQuadrant = QuadranteDefesa.GK_FootSave;
+                            Grab();
+                            return;
+                        }
+                        Grab();
+                        return;
+                    }
                 }
             }
 
             Vector3 toTarget = target - transform.position; toTarget.y = 0f;
-            float maxSpeed = looseBall ? 6.5f : maxShuffleSpeed;
-            Vector3 desired = toTarget.magnitude < 0.08f ? Vector3.zero : Vector3.ClampMagnitude(toTarget * 3.2f, maxSpeed);
+            float maxSpeed = (rushingOut || claimingCross) ? 6.6f : maxShuffleSpeed;
+            Vector3 desired = toTarget.magnitude < 0.07f ? Vector3.zero : Vector3.ClampMagnitude(toTarget * (rushingOut ? 4.4f : 3.4f), maxSpeed);
             float accel = desired.magnitude < velocity.magnitude ? shuffleDeceleration : shuffleAcceleration;
             velocity = Vector3.MoveTowards(velocity, desired, accel * dt);
 
             Vector3 p = transform.position + velocity * dt;
+            // Impede entrar para trás da rede ou atravessar as traves
+            if ((g.x - p.x) * sgn < 0.25f && Mathf.Abs(p.z) < Arena.GoalHalfWidth + 0.35f)
+                p.x = g.x - sgn * 0.25f;
             p = ResolvePlayerCollisions(p);
+            p.y = 0f;
             transform.position = p;
 
-            // Footstep sounds/particles for goalkeeper
             float gkSpeed = velocity.magnitude;
             if (gkSpeed > 1.0f && Time.time - lastFootstepTime > 0.35f)
             {
-                float stepInterval = gkSpeed > maxShuffleSpeed * 0.8f ? 0.3f : 0.4f;
+                float stepInterval = gkSpeed > maxShuffleSpeed * 0.8f ? 0.28f : 0.38f;
                 if (Time.time - lastFootstepTime > stepInterval)
                 {
                     Vector3 footPos = gkSplashLeft
@@ -741,7 +851,6 @@ namespace Craquez
 
                     if (ParticleEffectsManager.Instance != null)
                         ParticleEffectsManager.Instance.PlayFootstepDust(footPos, gkSpeed);
-
                     if (AudioManager.Instance != null)
                         AudioManager.Instance.PlayFootstep(footPos, gkSpeed, gkSpeed > maxShuffleSpeed * 0.8f);
 
@@ -750,12 +859,26 @@ namespace Craquez
                 }
             }
 
-            // Mantém a rotação encarando a bola sobre o arco
             Vector3 look = bp - transform.position; look.y = 0f;
             if (look.sqrMagnitude < 0.01f) look = Out;
-            if (Vector3.Dot(look.normalized, Out) < 0.1f)
+            if (!rushingOut && Vector3.Dot(look.normalized, Out) < 0.1f)
                 look = Vector3.Lerp(look.normalized, Out, 0.6f);
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(look), 420f * dt);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(look), 460f * dt);
+        }
+
+        void PunchClear(Vector3 bp)
+        {
+            resolved = true;
+            shotInFlight = false;
+            float latSign = Mathf.Abs(bp.z) > 0.2f ? Mathf.Sign(bp.z) : (Random.value < 0.5f ? 1f : -1f);
+            Vector3 punchDir = (Out * 0.78f + new Vector3(0f, 0.46f, latSign * 0.55f)).normalized;
+            float spd = Random.Range(14f, 18.5f);
+            ball.Deflect(punchDir * spd, Vector3.Cross(Vector3.up, punchDir) * 20f);
+            if (ParticleEffectsManager.Instance != null)
+                ParticleEffectsManager.Instance.PlayKickImpact(bp, punchDir, 0.65f);
+            if (AudioManager.Instance != null)
+                AudioManager.Instance.PlayGoalkeeperSave(bp, 0.7f);
+            if (OnSave != null) OnSave(false);
         }
 
         PlayerController cachedPlayer;
@@ -777,9 +900,8 @@ namespace Craquez
         }
 
         /// <summary>
-        /// Física do Salto (Dive Impulse + Motion Warping):
-        /// Aplica impulso controlado na janela ativa de propulsão (`0.10` a `0.45` do tempo normalizado)
-        /// rumo ao ponto de interceptação previsto, sem depender apenas do Root Motion do Mixamo.
+        /// Física do Salto (Dive Impulse + Arco Parabólico Realista):
+        /// Impulso concentrado na janela [0.08..0.55], arco parabólico suave com gravidade e proteção contra atravessar traves/rede.
         /// </summary>
         void UpdateDefending(float dt)
         {
@@ -791,7 +913,6 @@ namespace Craquez
                 float d = Vector3.Distance(ball.transform.position, transform.position);
                 if (d < 4.8f)
                 {
-                    // Combina o ponto futuro de interceptação com a posição instantânea da bola quando muito próxima
                     Vector3 liveTarget = Vector3.Lerp(predictedHitPoint, ball.transform.position, Mathf.Clamp01(1f - d / 3.2f));
                     ikTarget = Vector3.Lerp(ikTarget, liveTarget, 1f - Mathf.Exp(-28f * dt));
                 }
@@ -802,28 +923,42 @@ namespace Craquez
                 float elapsed = Time.time - diveStart;
                 float k = Mathf.Clamp01(elapsed / Mathf.Max(0.15f, diveDuration));
 
-                // Curva de impulsão concentrada na fase [0.10 .. 0.45] da animação de ponte (Motion Warping)
                 float warpProgress;
                 if (k < 0.08f)
                 {
                     warpProgress = (k / 0.08f) * 0.10f;
                 }
-                else if (k <= 0.55f)
+                else if (k <= 0.58f)
                 {
-                    float phase = (k - 0.08f) / 0.47f;
+                    float phase = (k - 0.08f) / 0.50f;
                     float easeOut = 1f - (1f - phase) * (1f - phase);
-                    warpProgress = Mathf.Lerp(0.10f, 0.94f, easeOut);
+                    warpProgress = Mathf.Lerp(0.10f, 0.95f, easeOut);
                 }
                 else
                 {
-                    float tail = (k - 0.55f) / 0.45f;
-                    warpProgress = Mathf.Lerp(0.94f, 1.0f, tail);
+                    float tail = (k - 0.58f) / 0.42f;
+                    warpProgress = Mathf.Lerp(0.95f, 1.0f, tail);
                 }
 
                 Vector3 p = Vector3.Lerp(diveFrom, diveTo, warpProgress);
-                p.y = (ActiveQuadrant == QuadranteDefesa.Dive_Mid || ActiveQuadrant == QuadranteDefesa.Dive_High)
-                    ? Mathf.Clamp(diveHeight, 0f, 0.36f) * Mathf.Sin(Mathf.PI * Mathf.Clamp01(k * 0.88f))
-                    : 0f;
+                float sgn = Mathf.Sign(side);
+                float gx = GoalCenter.x;
+                // Mantém o corpo sempre à frente da linha do gol/traves para nunca atravessar a trave ou a rede
+                if ((gx - p.x) * sgn < 0.28f) p.x = gx - sgn * 0.28f;
+                if (Mathf.Abs(gx - p.x) < 1.2f)
+                    p.z = Mathf.Clamp(p.z, -Arena.GoalHalfWidth + 0.38f, Arena.GoalHalfWidth - 0.38f);
+
+                if (ActiveQuadrant == QuadranteDefesa.Dive_Mid || ActiveQuadrant == QuadranteDefesa.Dive_High)
+                {
+                    // Trajetória parabólica balística realista 4*h*u*(1-u) até o pouso suave em y = 0
+                    float uFlight = Mathf.Clamp01((k - 0.05f) / 0.82f);
+                    float maxH = Mathf.Clamp(diveHeight, 0f, 0.65f);
+                    p.y = maxH * 4f * uFlight * (1f - uFlight);
+                }
+                else
+                {
+                    p.y = 0f;
+                }
                 transform.position = p;
             }
 
@@ -832,7 +967,7 @@ namespace Craquez
                             anim.GetNextAnimatorStateInfo(0).IsName("GK_Mergulho") ||
                             anim.GetCurrentAnimatorStateInfo(0).IsName("GK_Carrinho") ||
                             anim.GetNextAnimatorStateInfo(0).IsName("GK_Carrinho"));
-            float total = diving ? Mathf.Clamp(diveDuration + 0.42f, 0.78f, 1.15f) : 0.72f;
+            float total = diving ? Mathf.Clamp(diveDuration + 0.38f, 0.72f, 1.08f) : 0.65f;
             if (stateTime > total)
             {
                 State = Estado.Recuperando;
@@ -843,16 +978,16 @@ namespace Craquez
 
                 if (wasDive)
                 {
-                    recoverTime = 0.85f;
-                    if (anim != null) anim.CrossFadeInFixedTime("GK_Levantar", 0.18f);
+                    recoverTime = 0.72f;
+                    if (anim != null) anim.CrossFadeInFixedTime("GK_Levantar", 0.16f);
                 }
                 else
                 {
-                    recoverTime = 0.45f;
+                    recoverTime = 0.38f;
                     if (anim != null)
                     {
                         anim.SetBool(MirrorHash, false);
-                        anim.CrossFadeInFixedTime("Locomocao", 0.25f);
+                        anim.CrossFadeInFixedTime("Locomocao", 0.22f);
                     }
                 }
             }
@@ -1130,9 +1265,38 @@ namespace Craquez
             stateTime = 0f;
             repo = Reposicao.TiroDeMeta;
             repoStart = Time.time;
-            repoAt = 1.05f;
+            // Se for o goleiro do usuário, aguarda comando do jogador (ou cobra antes do limite de tempo); IA cobra em ~1.1s
+            repoAt = userTeamKeeper ? 6.2f : 1.05f;
             repoReleased = false;
             if (anim != null) { anim.SetBool(MirrorHash, false); anim.CrossFadeInFixedTime("Locomocao", 0.1f); }
+        }
+
+        /// <summary>Aciona imediatamente a reposição do goleiro do usuário (mãos ou tiro de meta) para o alvo escolhido.</summary>
+        public bool RequestUserDistribution(Vector3 targetWorld, bool longKick)
+        {
+            if (State != Estado.ComBola || diving) return false;
+            repoTarget = targetWorld;
+            Vector3 look = targetWorld - transform.position; look.y = 0f;
+            if (look.sqrMagnitude > 0.1f) transform.rotation = Quaternion.LookRotation(look);
+
+            if (repo == Reposicao.TiroDeMeta)
+            {
+                if (repoReleased) return false;
+                repoStart = Time.time;
+                repoAt = 0.36f;
+                if (anim != null) anim.CrossFadeInFixedTime(longKick ? "GK_Chutao" : "GK_Chutao", 0.08f);
+                return true;
+            }
+            if (repo == Reposicao.Nenhuma && ball != null && ball.IsHeld)
+            {
+                repoStart = Time.time;
+                repoReleased = false;
+                repo = longKick ? Reposicao.Chutao : Reposicao.Arremesso;
+                repoAt = longKick ? 0.42f : 0.46f;
+                if (anim != null) anim.CrossFadeInFixedTime(longKick ? "GK_Chutao" : "GK_Lancar", 0.10f);
+                return true;
+            }
+            return false;
         }
 
         void BeginDistribution()
@@ -1149,7 +1313,7 @@ namespace Craquez
                 if (look.sqrMagnitude > 0.1f) transform.rotation = Quaternion.LookRotation(look);
             }
             repo = punt ? Reposicao.Chutao : Reposicao.Arremesso;
-            repoAt = punt ? 0.5f : 0.68f;
+            repoAt = punt ? 0.46f : 0.56f;
             if (anim != null) anim.CrossFadeInFixedTime(punt ? "GK_Chutao" : "GK_Lancar", 0.12f);
         }
 
@@ -1189,7 +1353,12 @@ namespace Craquez
             if (repo == Reposicao.Nenhuma)
             {
                 if (State != Estado.ComBola) return;
-                float wait = (diving || stateTime > 1.2f) ? 1.35f : 0.8f;
+                // Goleiro do time do usuário espera o comando do usuário (só repõe automaticamente perto de 6,8s p/ evitar infração de 8s)
+                float wait = userTeamKeeper ? 6.8f : ((diving || stateTime > 1.2f) ? 1.35f : 0.85f);
+                if (userTeamKeeper && !diving && userAimDir.sqrMagnitude > 0.04f)
+                {
+                    transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(userAimDir), 360f * Time.deltaTime);
+                }
                 if (ball.IsHeld && stateTime > wait) BeginDistribution();
                 return;
             }
@@ -1197,25 +1366,29 @@ namespace Craquez
             float t = Time.time - repoStart;
             if (repo == Reposicao.TiroDeMeta)
             {
-                if (!repoReleased && t >= repoAt - 0.45f && t < repoAt - 0.35f && anim != null)
+                if (userTeamKeeper && !repoReleased && t < repoAt - 0.5f && userAimDir.sqrMagnitude > 0.04f)
+                {
+                    transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(userAimDir), 320f * Time.deltaTime);
+                }
+                if (!repoReleased && t >= repoAt - 0.36f && t < repoAt - 0.24f && anim != null)
                 {
                     anim.CrossFadeInFixedTime("GK_Chutao", 0.1f);
                 }
                 if (!repoReleased && t >= repoAt)
                 {
                     repoReleased = true;
-                    repoTarget = distributionTarget != null ? distributionTarget() : repoTarget;
+                    if (!repoTarget.HasValue && distributionTarget != null) repoTarget = distributionTarget();
                     Vector3 d = FieldDirection();
                     transform.rotation = Quaternion.LookRotation(d);
                     ball.PlaceAt(goalKickSpot);
                     float dist = repoTarget.HasValue ? Vector3.Distance(goalKickSpot, repoTarget.Value) : 38f;
                     Vector3 v, sp;
-                    if (dist < 24f)
+                    if (dist < 25f)
                     {
                         // Saída curta pelo chão (permitida inclusive dentro da própria grande área pela Regra 16 atual)
-                        float spd = Mathf.Clamp(8.5f + dist * 0.35f, 9f, 17f);
-                        v = d * spd + Vector3.up * 0.25f;
-                        sp = Vector3.Cross(Vector3.up, d) * (spd / Arena.BallRadius) * 0.8f;
+                        float spd = Mathf.Clamp(9.0f + dist * 0.38f, 9.5f, 18.5f);
+                        v = d * spd + Vector3.up * 0.22f;
+                        sp = Vector3.Cross(Vector3.up, d) * (spd / Arena.BallRadius) * 0.88f;
                     }
                     else
                     {

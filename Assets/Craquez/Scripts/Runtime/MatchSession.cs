@@ -100,11 +100,16 @@ namespace Craquez
         bool keeperWasHolding;
         MatchPlayer keeperReleaser;
         float lastSwitch;
-        bool prevLow, prevChip, prevShoot, prevFinesse, prevKnock;
+        bool prevLow, prevChip, prevShoot, prevFinesse, prevKnock, prevSlide;
         // comandos apertados um pouco antes de a bola chegar (passe ou finalização de primeira) continuam valendo
         float bufLow = -9f, bufChip = -9f, bufShoot = -9f, bufFinesse = -9f;
+        enum ModoPasseHumano { Rasteiro = 0, Profundidade = 1, ProfundidadeAlta = 2, AltoCruzamento = 3 }
+        bool passCharging;
+        float passChargeStart;
+        ModoPasseHumano chargingPassMode;
+        float PassCharge01 { get { return passCharging ? Mathf.Clamp01((Time.time - passChargeStart) / 0.52f) : 0f; } }
         float humanTackleCooldown;
-        const float InputBuffer = 0.34f;
+        const float InputBuffer = 0.36f;
         float resumeAt = -1f;
         Action afterPause;
         readonly HashSet<MatchPlayer> offsideCandidates = new HashSet<MatchPlayer>();
@@ -242,6 +247,7 @@ namespace Craquez
             gk.side = -t.attackDir;
             gk.sweepRange = 14f;
             gk.cameraTransform = mainCamera.transform;
+            gk.userTeamKeeper = t.humano;
             TimeInfo tt = t;
             gk.opponentDistance = p => KeeperOpponentDistance(tt, p);
             gk.distributionTarget = () => KeeperTarget(tt);
@@ -478,7 +484,13 @@ namespace Craquez
 
         // ============================================================ controle humano
 
-        void SetHuman(MatchPlayer p)
+        public void EnsureHumanControl(MatchPlayer p)
+        {
+            if (p != null && !p.IsKeeper && p.time == UserTeam && (Human != p || p.pc.aiControlled || !p.pc.InputEnabled))
+                SetHuman(p, false);
+        }
+
+        void SetHuman(MatchPlayer p, bool blockButtons = false)
         {
             if (p == null || p.pc == null || (p == Human && !p.pc.aiControlled && p.pc.InputEnabled)) return;
             if (Human != null && Human != p && Human.pc != null)
@@ -487,12 +499,13 @@ namespace Craquez
                 Human.pc.InputEnabled = false;
                 Human.pc.aiControlled = true;
             }
+            passCharging = false;
             Human = p;
             p.pc.aiControlled = false;
             p.pc.InputEnabled = true;
             p.pc.jockeyMode = false;
             p.pc.aiMoveWorld = Vector3.zero;
-            p.pc.BlockInput(0.12f);
+            if (blockButtons) p.pc.BlockInput(0.15f);
             lastSwitch = Time.time;
             cameraRig.player = p.transform;
             cameraRig.attackDir = p.time.attackDir;
@@ -510,6 +523,7 @@ namespace Craquez
                 Human.pc.InputEnabled = false;
                 Human.pc.aiControlled = true;
             }
+            passCharging = false;
             Human = taker;
             taker.pc.aiControlled = true;
             taker.pc.InputEnabled = false;
@@ -521,18 +535,19 @@ namespace Craquez
         }
 
         /// <summary>
-        /// Verdadeiro quando o jogador humano está atacando com a bola (posse ativa, bola adiantada na condução/arrancada
-        /// ou passe do próprio time chegando a ele): evita trocar de jogador ou dar carrinho acidental na própria jogada.
+        /// Verdadeiro quando o jogador humano está atacando com a bola (posse ativa, goleiro do próprio time segurando,
+        /// bola adiantada na condução/arrancada ou passe do próprio time chegando a ele).
         /// </summary>
         public bool HumanAttackingContext()
         {
+            if (UserTeam != null && KeeperHolding != null && KeeperHolding.time == UserTeam) return true;
             if (Human == null || Human.pc == null) return false;
-            if (Owner == Human) return true;
-            if (Owner != null || KeeperHolding != null) return false;
+            if (Owner != null) return Owner.time == Human.time;
+            if (KeeperHolding != null) return false;
             if (LastPossession != Human.time) return false;
-            if (Human.pc.HasPossession || Time.time - Human.pc.LastTouchTime < 1.25f) return true;
+            if (Human.pc.HasPossession || Time.time - Human.pc.LastTouchTime < 1.35f) return true;
             if (Time.time < Human.expectingPassUntil) return true;
-            return Flat(BallPos - Human.Pos).magnitude < 3.4f;
+            return Flat(BallPos - Human.Pos).magnitude < 3.6f;
         }
 
         bool CanHumanShoot(MatchPlayer p)
@@ -547,90 +562,266 @@ namespace Craquez
             if (Owner == p) return true;
             Vector3 cp = p.pc.ControlPoint;
             Vector3 b = BallPos;
-            float maxReach = LastPossession == p.time ? 2.1f : 1.55f;
+            float maxReach = LastPossession == p.time ? 2.2f : 1.6f;
             return Owner == null && KeeperHolding == null && Flat(b - cp).magnitude < maxReach && b.y < 2.35f;
+        }
+
+        Vector3 StickWorldDirection(Vector3 fallbackDir)
+        {
+            Vector2 mv = InputBridge.Move;
+            if (mv.sqrMagnitude > 0.04f && mainCamera != null)
+            {
+                Vector3 f = Flat(mainCamera.transform.forward).normalized, r = Flat(mainCamera.transform.right).normalized;
+                Vector3 d = f * mv.y + r * mv.x;
+                if (d.sqrMagnitude > 1e-4f) return d.normalized;
+            }
+            return fallbackDir.sqrMagnitude > 1e-4f ? Flat(fallbackDir).normalized : Vector3.right;
+        }
+
+        void HandleUserKeeperDistribution(GoalkeeperAI gk, bool passDown, bool thruDown, bool crossDown, bool shootDown)
+        {
+            Vector3 aim = StickWorldDirection(UserTeam.Forward);
+            if (Vector3.Dot(aim, UserTeam.Forward) < -0.25f)
+                aim = Vector3.Lerp(aim, UserTeam.Forward, 0.7f).normalized;
+            gk.userAimDir = aim;
+
+            if (!passDown && !thruDown && !crossDown && !shootDown) return;
+            bool longKick = crossDown || shootDown;
+            MatchPlayer best = null; float bestSc = -99f;
+            foreach (var m in UserTeam.jogadores)
+            {
+                if (!m.Disponivel) continue;
+                Vector3 to = Flat(m.Pos - gk.transform.position);
+                float d = to.magnitude;
+                if (d < 5f || d > (longKick ? 68f : 34f)) continue;
+                if (!longKick && d > 28f) continue;
+                float align = Vector3.Dot(to / d, aim);
+                if (align < 0.15f) continue;
+                float sc = align * 2.2f + (longKick ? d * 0.02f : -d * 0.03f) - Pressure(m) * 0.6f;
+                if (sc > bestSc) { bestSc = sc; best = m; }
+            }
+            Vector3 target = best != null
+                ? best.Pos + Flat(best.Vel) * (longKick ? 1.1f : 0.45f) + (thruDown ? UserTeam.Forward * 3.5f : Vector3.zero)
+                : gk.transform.position + aim * (longKick ? 42f : 18f);
+            target.x = Mathf.Clamp(target.x, -Arena.HalfLength + 2f, Arena.HalfLength - 2f);
+            target.z = Mathf.Clamp(target.z, -Arena.HalfWidth + 2f, Arena.HalfWidth - 2f);
+            if (gk.RequestUserDistribution(target, longKick) && best != null)
+            {
+                NotifyPass(UserTeam.goleiroInfo, best, target);
+                SetHuman(best, false);
+            }
         }
 
         void UpdateHumanInput()
         {
-            bool low = InputBridge.LowShot, chip = InputBridge.Chip, shoot = InputBridge.Shoot, finesse = InputBridge.Finesse, knock = InputBridge.KnockOn;
-            bool lowDown = low && !prevLow, chipDown = chip && !prevChip, shootDown = shoot && !prevShoot, finesseDown = finesse && !prevFinesse, knockDown = knock && !prevKnock;
-            prevLow = low; prevChip = chip; prevShoot = shoot; prevFinesse = finesse; prevKnock = knock;
-            if (Human == null || Human.pc == null || Time.timeScale == 0f) return;
-            if (Human.expulso && Phase != Fase.DisputaPenaltis) { SetHuman(ClosestTo(Human.time, BallPos, true)); return; }
+            bool low = InputBridge.Pass;
+            bool chip = InputBridge.ThroughBall;
+            bool lofted = InputBridge.LoftedPass;
+            bool shoot = InputBridge.Shoot;
+            bool slide = InputBridge.SlideTackle;
+            bool knock = InputBridge.KnockOn;
+
+            bool lowDown = low && !prevLow;
+            bool chipDown = chip && !prevChip;
+            bool loftedDown = lofted && !prevFinesse;
+            bool shootDown = shoot && !prevShoot;
+            bool slideDown = slide && !prevSlide;
+            bool knockDown = knock && !prevKnock;
+
+            prevLow = low; prevChip = chip; prevFinesse = lofted; prevShoot = shoot; prevSlide = slide; prevKnock = knock;
+
+            if (UserTeam != null && UserTeam.goleiro != null)
+                UserTeam.goleiro.externalRushRequest = false;
+
+            if (Human == null || Human.pc == null || Time.timeScale == 0f) { passCharging = false; return; }
+            if (Human.expulso && Phase != Fase.DisputaPenaltis) { SetHuman(ClosestTo(Human.time, BallPos, true), false); return; }
             humanTackleCooldown -= Time.deltaTime;
 
             if (Phase == Fase.DisputaPenaltis)
             {
+                passCharging = false;
                 Human.pc.jockeyMode = false;
                 return;
             }
             if (Phase == Fase.BolaParada)
             {
+                passCharging = false;
                 Human.pc.jockeyMode = false;
+                if (Restart != null && Restart.tipo == TipoReinicio.TiroDeMeta && Restart.time == UserTeam && UserTeam.goleiro != null)
+                {
+                    HandleUserKeeperDistribution(UserTeam.goleiro, lowDown, chipDown, loftedDown, shootDown);
+                    return;
+                }
                 if (Restart != null && Restart.waitingHuman && Restart.taker == Human)
                 {
-                    if (lowDown || chipDown) ExecuteRestartHuman(chipDown);
+                    if (lowDown || chipDown || loftedDown)
+                    {
+                        ModoPasseHumano pm = loftedDown ? ModoPasseHumano.AltoCruzamento : (chipDown ? ModoPasseHumano.Profundidade : ModoPasseHumano.Rasteiro);
+                        ExecuteRestartHuman(pm);
+                    }
                     else if (Human.pc.Busy && (Restart.tipo == TipoReinicio.Falta || Restart.tipo == TipoReinicio.Penalti)) { /* chute em andamento */ }
                 }
                 return;
             }
-            if (Phase != Fase.Jogo) { Human.pc.jockeyMode = false; return; }
+            if (Phase != Fase.Jogo) { passCharging = false; Human.pc.jockeyMode = false; return; }
+
+            // Goleiro do time do usuário com a bola nas mãos: usuário escolhe para onde repor (✕/△ = curto/mão, ○/□ = chutão)
+            if (KeeperHolding != null && KeeperHolding.time == UserTeam && UserTeam.goleiro != null)
+            {
+                passCharging = false;
+                Human.pc.jockeyMode = false;
+                HandleUserKeeperDistribution(UserTeam.goleiro, lowDown, chipDown, loftedDown, shootDown);
+                return;
+            }
 
             if (lowDown) bufLow = Time.time;
             if (chipDown) bufChip = Time.time;
+            if (loftedDown) bufFinesse = Time.time;
             if (shootDown) bufShoot = Time.time;
-            if (finesseDown) bufFinesse = Time.time;
 
             bool attacking = HumanAttackingContext();
             if (attacking)
             {
                 Human.pc.jockeyMode = false;
-                bool wantLow = Time.time - bufLow < InputBuffer, wantChip = Time.time - bufChip < InputBuffer;
-                if (Owner == Human && (wantLow || wantChip))
+
+                // Carregamento de força nos passes eFootball (segurar ✕, △ ou ○ dosa alcance/força; soltar executa)
+                if (!passCharging && !Human.pc.Charging && !Human.pc.Busy)
                 {
-                    if (Human.pc.Busy) return;          // espera o domínio terminar e passa logo em seguida
-                    bool lofted = wantChip && (!wantLow || bufChip > bufLow);
-                    bufLow = bufChip = -9f;
-                    HumanPass(lofted);
+                    if (lowDown)
+                    {
+                        passCharging = true; passChargeStart = Time.time; chargingPassMode = ModoPasseHumano.Rasteiro;
+                    }
+                    else if (chipDown)
+                    {
+                        passCharging = true; passChargeStart = Time.time;
+                        chargingPassMode = InputBridge.LoftedThroughBall ? ModoPasseHumano.ProfundidadeAlta : ModoPasseHumano.Profundidade;
+                    }
+                    else if (loftedDown)
+                    {
+                        passCharging = true; passChargeStart = Time.time; chargingPassMode = ModoPasseHumano.AltoCruzamento;
+                    }
+                }
+
+                if (passCharging)
+                {
+                    if (chargingPassMode == ModoPasseHumano.Profundidade && InputBridge.LoftedThroughBall)
+                        chargingPassMode = ModoPasseHumano.ProfundidadeAlta;
+                    bool stillHeld = chargingPassMode == ModoPasseHumano.Rasteiro ? low :
+                                     (chargingPassMode == ModoPasseHumano.AltoCruzamento ? lofted : chip);
+                    float charged = PassCharge01;
+                    // Soltou o botão (ou atingiu carga máxima com a posse): executa o passe!
+                    if (!stillHeld || charged >= 0.99f)
+                    {
+                        if (Owner == Human && !Human.pc.Busy)
+                        {
+                            float pwr = Mathf.Max(0.18f, charged);
+                            passCharging = false;
+                            bufLow = bufChip = bufFinesse = -9f;
+                            HumanExecutePass(chargingPassMode, pwr);
+                            return;
+                        }
+                        if (!stillHeld)
+                        {
+                            // Ainda sem a bola no pé: mantém no buffer para toque de primeira assim que dominar!
+                            passCharging = false;
+                        }
+                    }
                     return;
                 }
-                // chute/voleio/cabeceio de primeira apertado um instante antes de a bola chegar
-                bool wantShoot = Time.time - bufShoot < InputBuffer, wantFinesse = Time.time - bufFinesse < InputBuffer;
-                if ((wantShoot || wantFinesse) && !Human.pc.Charging && !Human.pc.Busy && CanHumanShoot(Human))
+
+                // Passe de primeira (apertado um instante antes de a bola chegar ao pé)
+                bool wantLow = Time.time - bufLow < InputBuffer;
+                bool wantChip = Time.time - bufChip < InputBuffer;
+                bool wantLoft = Time.time - bufFinesse < InputBuffer;
+                if (Owner == Human && (wantLow || wantChip || wantLoft))
                 {
-                    bool useFinesse = wantFinesse && (!wantShoot || bufFinesse > bufShoot);
-                    bufShoot = bufFinesse = -9f;
+                    if (Human.pc.Busy) return;
+                    ModoPasseHumano mode = ModoPasseHumano.Rasteiro;
+                    float latest = bufLow;
+                    if (wantChip && bufChip >= latest)
+                    {
+                        latest = bufChip;
+                        mode = InputBridge.LoftedThroughBall ? ModoPasseHumano.ProfundidadeAlta : ModoPasseHumano.Profundidade;
+                    }
+                    if (wantLoft && bufFinesse >= latest)
+                        mode = ModoPasseHumano.AltoCruzamento;
+                    bufLow = bufChip = bufFinesse = -9f;
+                    HumanExecutePass(mode, 0.42f);
+                    return;
+                }
+
+                // Finalização de primeira (□, R1+□ colocado ou L1+□ cavadinha)
+                bool wantShoot = Time.time - bufShoot < InputBuffer;
+                if (wantShoot && !Human.pc.Charging && !Human.pc.Busy && CanHumanShoot(Human))
+                {
+                    bufShoot = -9f;
+                    TipoChute st = InputBridge.KnockOn ? TipoChute.Cavadinha : (InputBridge.Skill ? TipoChute.Colocado : TipoChute.Forte);
                     float zAim = HumanQuickShotZ();
-                    if (Human.pc.AIShoot(useFinesse ? TipoChute.Colocado : TipoChute.Forte, useFinesse ? 0.62f : 0.68f, zAim))
+                    if (Human.pc.AIShoot(st, st == TipoChute.Colocado ? 0.62f : 0.68f, zAim))
                         NotifyShot(Human);
                 }
                 return;
             }
 
-            // sem a bola (defesa): R1/F = cercar (jockey), ✕ = desarme, ○ = carrinho, L1 = trocar de jogador
-            bool holdingJockey = InputBridge.Skill;
-            Human.pc.jockeyMode = holdingJockey;
-            if (holdingJockey && humanTackleCooldown <= 0f && Owner != null && Owner.time != Human.time &&
-                Vector3.Distance(Human.Pos, BallPos) < 1.35f)
+            // ============================================================ DEFESA ESTILO EFOOTBALL (SEM A BOLA)
+            passCharging = false;
+
+            // △ segurado na defesa: Saída do Goleiro (GK Rush eFootball)
+            if (UserTeam != null && UserTeam.goleiro != null && InputBridge.KeeperRush)
+                UserTeam.goleiro.externalRushRequest = true;
+
+            // L1 / LB: Trocar Cursor (Trocar Jogador)
+            if (knockDown) { SwitchToBest(true); return; }
+
+            // L2 / LT (ou R1): Cercar (Match-up — postura baixa acompanhando cortes e fechando linhas de passe)
+            bool holdingMatchUp = InputBridge.MatchUp;
+            Human.pc.jockeyMode = holdingMatchUp;
+            if (holdingMatchUp && humanTackleCooldown <= 0f && Owner != null && Owner.time != Human.time &&
+                Vector3.Distance(Human.Pos, BallPos) < 1.38f)
             {
                 TryTackle(Human, false);
-                humanTackleCooldown = 0.65f;
+                humanTackleCooldown = 0.55f;
             }
 
-            if (knockDown) { SwitchToBest(true); return; }
-            if (lowDown && humanTackleCooldown <= 0f)
+            // ✕ / A segurado: Pressão (aproxima automaticamente do portador quando o analógico está solto e dá o bote no alcance!)
+            if (InputBridge.Pressure && !Human.pc.Busy)
             {
-                if ((Owner != null && Owner.time != Human.time && Vector3.Distance(Human.Pos, Owner.Pos) < 2.9f) ||
+                Vector3 targetBall = Owner != null && Owner.time != Human.time ? Owner.pc.ControlPoint : BallPos;
+                Vector3 toB = Flat(targetBall - Human.Pos);
+                float dB = toB.magnitude;
+                if (InputBridge.Move.sqrMagnitude < 0.12f && dB > 0.65f && dB < 18f)
+                {
+                    // Condução assistida de pressão estilo eFootball quando o usuário segura ✕ sem empurrar o analógico para outro lado
+                    InputBridge.VirtualMove = Vector2.zero;
+                    Vector3 dirN = toB / dB;
+                    Human.transform.rotation = Quaternion.RotateTowards(Human.transform.rotation, Quaternion.LookRotation(dirN), 480f * Time.deltaTime);
+                    // Aproximação controlada sem teleporte
+                    Vector3 step = Human.Pos + dirN * (Human.pc.jogSpeed * Human.pc.speedScale * 0.88f * Time.deltaTime);
+                    step.y = 0f;
+                    Human.transform.position = step;
+                }
+                if (humanTackleCooldown <= 0f && dB < 1.55f && (Owner == null || Owner.time != Human.time))
+                {
+                    TryTackle(Human, false);
+                    humanTackleCooldown = 0.48f;
+                }
+            }
+
+            // □ / X: Bote em pé / Jogo de corpo (Standing Tackle / Shoulder Charge)
+            if (shootDown && humanTackleCooldown <= 0f && !CanHumanShoot(Human))
+            {
+                if ((Owner != null && Owner.time != Human.time && Vector3.Distance(Human.Pos, Owner.Pos) < 2.8f) ||
                     (Owner == null && Vector3.Distance(Human.Pos, BallPos) < 2.2f))
                 {
                     TryTackle(Human, false);
                     humanTackleCooldown = 0.45f;
                 }
             }
-            else if (shootDown && !CanHumanShoot(Human))
+            // ○ / B: Carrinho (Sliding Tackle)
+            else if (slideDown && !CanHumanShoot(Human))
             {
-                if (Vector3.Distance(Human.Pos, BallPos) < 5.2f) TryTackle(Human, true);
+                if (Vector3.Distance(Human.Pos, BallPos) < 5.4f)
+                    TryTackle(Human, true);
             }
         }
 
@@ -647,43 +838,102 @@ namespace Craquez
             return (gkz >= 0f ? -1f : 1f) * (Arena.GoalHalfWidth - 0.85f);
         }
 
-        void HumanPass(bool lofted)
+        void HumanExecutePass(ModoPasseHumano mode, float power01)
         {
             var h = Human;
-            Vector2 mv = InputBridge.Move;
-            Vector3 dir;
-            if (mv.sqrMagnitude > 0.04f && mainCamera != null)
-            {
-                Vector3 f = Flat(mainCamera.transform.forward).normalized, r = Flat(mainCamera.transform.right).normalized;
-                dir = (f * mv.y + r * mv.x).normalized;
-            }
-            else dir = Flat(h.transform.forward).normalized;
+            if (h == null || h.pc == null) return;
+            Vector3 dir = StickWorldDirection(h.transform.forward);
+            bool isThrough = mode == ModoPasseHumano.Profundidade || mode == ModoPasseHumano.ProfundidadeAlta;
+            bool isLofted = mode == ModoPasseHumano.ProfundidadeAlta || mode == ModoPasseHumano.AltoCruzamento;
 
-            MatchPlayer best = null; float bestScore = -9f;
+            // Detecta cruzamento na ala ofensiva (○ perto da área/linha de fundo -> cruza na medida para os atacantes na área!)
+            bool inCrossZone = mode == ModoPasseHumano.AltoCruzamento &&
+                               h.time.Fwd(h.Pos) > 14f &&
+                               (Mathf.Abs(h.Pos.z) > 10.5f || h.time.Fwd(h.Pos) > 33f);
+
+            if (inCrossZone)
+            {
+                Vector3 goal = h.time.TargetGoal;
+                MatchPlayer targetStriker = null; float bestHead = -99f;
+                foreach (var m in h.time.jogadores)
+                {
+                    if (m == h || !m.Disponivel) continue;
+                    float fwdM = h.time.Fwd(m.Pos);
+                    if (fwdM < 18f || Mathf.Abs(m.Pos.z) > 18f) continue;
+                    // Força baixa = 1º pau; média = centro da área; alta = 2º pau
+                    float idealZ = Mathf.Lerp(Mathf.Sign(h.Pos.z) * 5.5f, -Mathf.Sign(h.Pos.z) * 6.5f, power01);
+                    float sc = fwdM * 0.06f - Mathf.Abs(m.Pos.z - idealZ) * 0.14f + m.atr.cabeceio * 0.8f;
+                    if (sc > bestHead) { bestHead = sc; targetStriker = m; }
+                }
+                Vector3 boxSpot = targetStriker != null
+                    ? targetStriker.Pos + Flat(targetStriker.Vel) * 0.75f + h.time.Forward * 1.8f
+                    : new Vector3(goal.x - h.time.attackDir * Mathf.Lerp(9.5f, 12.5f, power01), 0f, Mathf.Lerp(Mathf.Sign(h.Pos.z) * 4f, -Mathf.Sign(h.Pos.z) * 5f, power01));
+                boxSpot.x = Mathf.Clamp(boxSpot.x, -Arena.HalfLength + 2.5f, Arena.HalfLength - 2.5f);
+                boxSpot.z = Mathf.Clamp(boxSpot.z, -16f, 16f);
+                float crossErr = (1f - h.atr.passe) * 0.42f + Pressure(h) * 0.20f;
+                if (h.pc.Pass(boxSpot, true, crossErr, power01, true))
+                    NotifyPass(h, targetStriker, boxSpot);
+                return;
+            }
+
+            float minDist = 2.6f;
+            float maxDist = isLofted ? 62f : (isThrough ? 46f : 42f);
+            float preferredDist = Mathf.Lerp(isLofted ? 16f : 9f, isLofted ? 46f : 29f, power01);
+            float offsideX = OffsideLine(h.time);
+
+            MatchPlayer best = null; float bestScore = -99f;
             foreach (var m in h.time.jogadores)
             {
                 if (m == h || !m.Disponivel) continue;
                 Vector3 to = Flat(m.Pos - h.Pos);
                 float d = to.magnitude;
-                if (d < 3f || d > (lofted ? 60f : 42f)) continue;
+                if (d < minDist || d > maxDist) continue;
                 float cos = Vector3.Dot(to / d, dir);
-                if (cos < 0.35f) continue;
-                float score = cos * 2f - d / (lofted ? 60f : 30f) + (lofted ? Flat(m.Vel).magnitude * 0.05f : 0f);
+                if (cos < (isThrough ? 0.28f : 0.34f)) continue;
+
+                float distFit = 1f - Mathf.Clamp01(Mathf.Abs(d - preferredDist) / 28f);
+                float score = cos * 2.4f + distFit * 0.85f;
+                if (isThrough)
+                {
+                    // Favorece companheiro infiltrando em velocidade sem estar impedido
+                    float fwdVel = Vector3.Dot(Flat(m.Vel), h.time.Forward);
+                    score += Mathf.Max(0f, fwdVel) * 0.12f + (h.time.Fwd(m.Pos) > h.time.Fwd(h.Pos) ? 0.35f : 0f);
+                    if (h.time.Fwd(m.Pos) > offsideX + 0.3f && h.time.Fwd(m.Pos) > 0f) score -= 1.4f;
+                }
                 if (score > bestScore) { bestScore = score; best = m; }
             }
+
             Vector3 target;
             if (best != null)
             {
                 float d = Vector3.Distance(h.Pos, best.Pos);
-                float lead = lofted ? Mathf.Clamp(d / 17f, 0.6f, 2.2f) : Mathf.Clamp(d / 15f, 0.2f, 1.2f);
-                target = best.Pos + Flat(best.Vel) * lead;
-                if (lofted) target += best.time.Forward * 3f; // em profundidade: na frente do companheiro
+                if (isThrough)
+                {
+                    // Passe em profundidade: coloca a bola no espaço aberto à frente da corrida do companheiro
+                    float spaceLead = Mathf.Lerp(4.2f, 9.5f, power01);
+                    Vector3 runDir = Flat(best.Vel).magnitude > 1.8f
+                        ? Vector3.Lerp(h.time.Forward, Flat(best.Vel).normalized, 0.55f).normalized
+                        : h.time.Forward;
+                    target = best.Pos + Flat(best.Vel) * Mathf.Clamp(d / 18f, 0.35f, 1.3f) + runDir * spaceLead;
+                    best.runTarget = target;
+                    best.runUntil = Time.time + 2.4f;
+                }
+                else
+                {
+                    float lead = isLofted ? Mathf.Clamp(d / 18f, 0.4f, 1.5f) : Mathf.Clamp(d / 17f, 0.15f, 0.95f);
+                    target = best.Pos + Flat(best.Vel) * lead;
+                }
             }
-            else target = h.Pos + dir * (lofted ? 30f : 14f);
-            target.x = Mathf.Clamp(target.x, -Arena.HalfLength + 1f, Arena.HalfLength - 1f);
-            target.z = Mathf.Clamp(target.z, -Arena.HalfWidth + 1f, Arena.HalfWidth - 1f);
-            float err = (1f - h.atr.passe) * 0.55f + Pressure(h) * 0.25f;
-            if (h.pc.Pass(target, lofted || Vector3.Distance(h.Pos, target) > 34f, err)) NotifyPass(h, best, target);
+            else
+            {
+                target = h.Pos + dir * Mathf.Lerp(isLofted ? 20f : 11f, isLofted ? 42f : 24f, power01);
+            }
+
+            target.x = Mathf.Clamp(target.x, -Arena.HalfLength + 1.2f, Arena.HalfLength - 1.2f);
+            target.z = Mathf.Clamp(target.z, -Arena.HalfWidth + 1.2f, Arena.HalfWidth - 1.2f);
+            float err = (1f - h.atr.passe) * 0.45f + Pressure(h) * 0.22f;
+            if (h.pc.Pass(target, isLofted, err, power01, false))
+                NotifyPass(h, best, target);
         }
 
         /// <summary>Próximo companheiro que receberá o controle ao apertar Trocar (leva em conta a bola prevista e o analógico).</summary>
@@ -731,24 +981,28 @@ namespace Craquez
         void SwitchToBest(bool manual)
         {
             var best = NextSwitchCandidate(manual);
-            if (best != null) SetHuman(best);
+            if (best != null) SetHuman(best, false);
         }
 
         void UpdateAutoSwitch()
         {
             if (UserTeam == null) return;
-            if (Human == null || Human.expulso) { SetHuman(ClosestTo(UserTeam, BallPos, true)); return; }
-            if (Owner != null && Owner.time == UserTeam && Owner != Human && !Owner.IsKeeper) { SetHuman(Owner); return; }
-            if (Time.time - lastSwitch < 1.3f || HumanAttackingContext()) return;
+            if (Human == null || Human.expulso) { SetHuman(ClosestTo(UserTeam, BallPos, true), false); return; }
+            // CRÍTICO: qualquer jogador de linha do time do usuário com a posse recebe o controle imediatamente (nunca vira bot!)
+            if (Owner != null && Owner.time == UserTeam && !Owner.IsKeeper && (Owner != Human || Owner.pc.aiControlled || !Owner.pc.InputEnabled))
+            {
+                SetHuman(Owner, false);
+                return;
+            }
+            if (Time.time - lastSwitch < 1.15f || HumanAttackingContext()) return;
             if (Human.pc != null && (Human.pc.Busy || Human.pc.Charging)) return;
-            // defendendo/bola solta: passa o controle para quem está bem mais perto da trajetória da bola
             Vector3 pb = PredictBall(0.3f);
             float th = Vector3.Distance(Human.Pos, pb);
             var near = ClosestTo(UserTeam, pb, true);
             if (near != null && near != Human)
             {
                 float tn = Vector3.Distance(near.Pos, pb);
-                if (th > tn * 1.75f + 5.5f) SetHuman(near);
+                if (th > tn * 1.7f + 5.0f) SetHuman(near, false);
             }
         }
 
@@ -764,6 +1018,10 @@ namespace Craquez
             if (InputBridge.MenuPressed && Phase != Fase.Fim) { if (OnPauseRequested != null) OnPauseRequested(); return; }
             if (InputBridge.CameraPressed && Phase != Fase.DisputaPenaltis) CycleCamera();
 
+            // CRÍTICO: Atualiza a troca automática ANTES do Tick da IA para que nenhum companheiro recém-acionado execute passe de bot!
+            if (Phase == Fase.Jogo) UpdateAutoSwitch();
+            UpdateHumanInput();
+
             if (Phase != Fase.DisputaPenaltis)
             {
                 UpdateTacticalCaches(dt);
@@ -771,8 +1029,6 @@ namespace Craquez
                 foreach (var r in referees) if (r != null) r.Tick(dt);
             }
 
-            UpdateHumanInput();
-            if (Phase == Fase.Jogo) UpdateAutoSwitch();
             UpdateSlips(dt);
 
             switch (Phase)
@@ -881,6 +1137,9 @@ namespace Craquez
 
                     SnapshotOffside(kicker);
                     CountShot(kicker);
+                    // Ao sair um passe comandado pelo usuário, transfere imediatamente o cursor para o receptor (estilo eFootball)
+                    if (kicker.time == UserTeam && LastPassFrom == kicker && LastPassTo != null && LastPassTo.time == UserTeam && !LastPassTo.IsKeeper)
+                        SetHuman(LastPassTo, false);
                 }
                 Owner = null;
                 if (fromRestart) ResumePlay();
@@ -940,7 +1199,7 @@ namespace Craquez
             if (Owner != null)
             {
                 Vector3 cp = Owner.pc.ControlPoint;
-                bool keep = Owner.Disponivel && !Owner.pc.Sliding && Flat(b - cp).magnitude < 1.9f && b.y < 1.2f;
+                bool keep = Owner.Disponivel && !Owner.pc.Sliding && Flat(b - cp).magnitude < 1.95f && b.y < 1.25f;
                 if (!keep) { Owner = null; }
                 else return;
             }
@@ -959,8 +1218,8 @@ namespace Craquez
                 if (controlCooldown.TryGetValue(m, out cd) && Time.time < cd) continue;
                 Vector3 cp = m.pc.ControlPoint;
                 float d = Flat(b - cp).magnitude;
-                float reach = 0.72f + Mathf.Min(0.3f, m.pc.Velocity.magnitude * 0.03f);
-                if (d > reach && Flat(b - m.Pos).magnitude > 0.85f) continue;
+                float reach = 0.76f + Mathf.Min(0.32f, m.pc.Velocity.magnitude * 0.03f);
+                if (d > reach && Flat(b - m.Pos).magnitude > 0.88f) continue;
                 if (best == null || d < bestD)
                 {
                     if (best != null && best.time != m.time) { rival = best; rivalD = bestD; }
@@ -977,28 +1236,29 @@ namespace Craquez
                 if (sr > sb) { var tmp = best; best = rival; rival = tmp; }
                 if (rival.pc != null && Random.value < 0.35f) rival.pc.Stagger(Flat(rival.Pos - best.Pos).normalized * 1.6f, false);
             }
-            // domínio: bola muito rápida pode escapar (técnica e chuva)
+            // Domínio limpo: apenas bombas à queima-roupa (> 20 m/s) podem espirrar da canela; passes normais são amortecidos pelo PlayerController!
             float rel = Flat(bv - best.Vel).magnitude;
             float wet = weather != null && weather.P != null ? weather.P.wetness : 0f;
-            float miss = Mathf.Clamp01((rel - 11f) / 14f) * (1.1f - best.atr.drible * 0.6f) + wet * 0.04f;
-            if (b.y > 0.6f) miss += 0.12f * (1f - best.atr.drible);
+            bool friendlyPass = LastPassFrom != null && LastPassFrom.time == best.time;
+            float miss = friendlyPass ? 0f : (Mathf.Clamp01((rel - 20f) / 16f) * (1.0f - best.atr.drible * 0.7f) + wet * 0.02f);
             if (Random.value < miss)
             {
-                Vector3 dv = Quaternion.Euler(0f, Random.Range(-70f, 70f), 0f) * Flat(bv).normalized * Mathf.Clamp(rel * 0.35f, 2f, 7f);
-                ball.Deflect(dv + Vector3.up * Random.Range(0.2f, 1.2f), Vector3.zero);
-                controlCooldown[best] = Time.time + 0.45f;
+                Vector3 dv = Quaternion.Euler(0f, Random.Range(-55f, 55f), 0f) * Flat(bv).normalized * Mathf.Clamp(rel * 0.28f, 1.8f, 5.5f);
+                ball.Deflect(dv + Vector3.up * Random.Range(0.15f, 0.75f), Vector3.zero);
+                controlCooldown[best] = Time.time + 0.38f;
                 if (restartNoSecondTouchPlayer != best) restartNoSecondTouchPlayer = null;
                 indirectNeedsSecondTouch = false;
                 if (deliberateFootPassTeam != null && best.time != deliberateFootPassTeam) ClearBackPassRestriction();
                 LastToucher = best;
-                if (offsideTeam != null && best.time != offsideTeam) ClearOffside(); // tentativa deliberada de domínio do defensor zera o impedimento
+                if (offsideTeam != null && best.time != offsideTeam) ClearOffside();
                 return;
             }
-            if (b.y > 0.55f)
+            // Amortecimento de bola aérea no peito/coxa suave sem conflitar com o domínio orientado do PlayerController
+            if (b.y > 0.68f)
             {
-                // matada no peito/coxa: a bola cai no pé
-                Vector3 v = best.Vel * 0.7f + Vector3.down * 1.2f;
-                ball.Deflect(v, Vector3.zero);
+                Vector3 vCushion = best.Vel * 0.82f + Flat(bv - best.Vel) * 0.14f + Vector3.down * 1.4f;
+                ball.Deflect(vCushion, Vector3.Cross(Vector3.up, vCushion) / Arena.BallRadius * 0.5f);
+                if (!best.pc.Busy) best.pc.Play("Dominio", 0.06f);
             }
             GainPossession(best);
         }
@@ -1031,8 +1291,12 @@ namespace Craquez
             LastToucher = p;
             LastPossession = p.time;
             p.expectingPassUntil = 0f;
-            if (newTeam && LastPassFrom != null && LastPassFrom.time != p.time) { LastPassFrom.passesErrados++; LastPassFrom = null; }
-            else if (LastPassFrom != null && LastPassFrom.time == p.time && LastPassFrom != p) { LastPassFrom.passesCertos++; LastPassFrom = null; }
+            // CRÍTICO: Transfere o controle humano IMEDIATAMENTE no mesmo FixedUpdate ao ganhar a posse!
+            // Impede que o próximo Update trate p como IA por 1 quadro e dispare passe automático de bot!
+            if (p.time == UserTeam && !p.IsKeeper)
+                SetHuman(p, false);
+            if (newTeam && LastPassFrom != null && LastPassFrom.time != p.time) { LastPassFrom.passesErrados++; LastPassFrom = null; LastPassTo = null; }
+            else if (LastPassFrom != null && LastPassFrom.time == p.time && LastPassFrom != p) { LastPassFrom.passesCertos++; LastPassFrom = null; LastPassTo = null; }
         }
 
         void CheckHeaders(Vector3 b)
@@ -1064,11 +1328,69 @@ namespace Craquez
             }
             restartNoSecondTouchPlayer = null;
             indirectNeedsSecondTouch = false;
-            // Pela Regra 12, recuo de cabeça habilita o goleiro a segurar com as mãos normalmente
             ClearBackPassRestriction();
             if (offsideCandidates.Contains(best) && offsideTeam == best.time && Time.time - offsideStamp < 7f) { CallOffside(best); return; }
             ClearOffside();
+
+            // Se o jogador é do time do usuário, NUNCA cabeceia para longe sozinho como bot!
+            // Passa o cursor para ele: se o usuário apertou Chute ou Passe, cabeceia na direção pedida; caso contrário, amortece no peito p/ dominar!
+            if (best.time == UserTeam && !best.IsKeeper)
+            {
+                SetHuman(best, false);
+                bool userWantsShot = InputBridge.Shoot || (Time.time - bufShoot < InputBuffer);
+                bool userWantsPass = passCharging || InputBridge.Pass || InputBridge.ThroughBall || InputBridge.LoftedPass ||
+                                     (Time.time - bufLow < InputBuffer) || (Time.time - bufChip < InputBuffer) || (Time.time - bufFinesse < InputBuffer);
+                passCharging = false;
+                bufLow = bufChip = bufFinesse = bufShoot = -9f;
+                if (userWantsShot || userWantsPass)
+                {
+                    HumanHeader(best, b, userWantsShot);
+                }
+                else
+                {
+                    // Domínio aéreo amortecido para os pés do jogador controlado
+                    Vector3 dropDir = StickWorldDirection(best.transform.forward);
+                    Vector3 vDrop = best.Vel * 0.65f + dropDir * 1.4f + Vector3.down * 2.2f;
+                    best.pc.Play("Dominio", 0.06f);
+                    ball.Deflect(vDrop, Vector3.Cross(Vector3.up, dropDir) * 8f);
+                    Owner = best;
+                    LastToucher = best;
+                    LastPossession = best.time;
+                }
+                return;
+            }
             Header(best, b);
+        }
+
+        void HumanHeader(MatchPlayer m, Vector3 b, bool shootAtGoal)
+        {
+            TimeInfo t = m.time;
+            Vector3 target;
+            float speed;
+            if (shootAtGoal)
+            {
+                Vector3 goal = t.TargetGoal;
+                float zAim = HumanQuickShotZ();
+                target = new Vector3(goal.x, Random.Range(0.35f, 1.55f), zAim);
+                speed = Mathf.Lerp(12.5f, 18.5f, m.atr.cabeceio);
+                t.chutes++;
+            }
+            else
+            {
+                Vector3 dir = StickWorldDirection(t.Forward);
+                var mate = BestInCone(m, dir, 28f);
+                target = mate != null ? mate.Pos + Flat(mate.Vel) * 0.5f : Flat(b) + dir * 14f;
+                speed = 12.5f;
+                if (mate != null) NotifyPass(m, mate, target);
+            }
+            Vector3 d = target - b;
+            float err = (1f - m.atr.cabeceio) * 7f;
+            Vector3 hDir = Quaternion.Euler(Random.Range(-err, err) * 0.4f, Random.Range(-err, err), 0f) * d.normalized;
+            if (!shootAtGoal) hDir.y = Mathf.Max(hDir.y, 0.25f);
+            m.pc.Play("Cabeceio", 0.06f);
+            ball.Kick(hDir.normalized * speed, Vector3.zero);
+            if (ProceduralAudio.Instance != null) ProceduralAudio.Instance.Kick(b, 0.45f);
+            LastToucher = m;
         }
 
         void Header(MatchPlayer m, Vector3 b)
@@ -1129,11 +1451,12 @@ namespace Craquez
             if (LastPossession != null) LastPossession.tempoPosse += dt;
         }
 
-        MatchPlayer LastPassFrom;
+        MatchPlayer LastPassFrom, LastPassTo;
 
         public void NotifyPass(MatchPlayer from, MatchPlayer to, Vector3 target)
         {
             LastPassFrom = from;
+            LastPassTo = to;
             if (to != null)
             {
                 to.expectingPassUntil = Time.time + 2.6f;
@@ -1571,14 +1894,14 @@ namespace Craquez
             bool humanTaker = tk.time.humano && UserTeam == r.time;
             if (humanTaker)
             {
-                if (Human != tk || tk.pc.aiControlled) SetHuman(tk);
+                if (Human != tk || tk.pc.aiControlled) SetHuman(tk, false);
                 if (!r.waitingHuman)
                 {
                     r.waitingHuman = true;
                     if (r.tipo == TipoReinicio.Falta || r.tipo == TipoReinicio.Penalti || r.tipo == TipoReinicio.Saida || r.tipo == TipoReinicio.BolaAoChao)
                         Whistle(1);
                 }
-                if (Time.time - r.start > 18f) ExecuteRestartAI(r);
+                // Nunca executa bola parada automaticamente como bot no time do usuário: aguarda sempre o comando do jogador!
                 return;
             }
             ExecuteRestartAI(r);
@@ -1629,7 +1952,7 @@ namespace Craquez
                         Vector3 box = goal - r.time.Forward * Random.Range(6f, 12f) + new Vector3(0f, 0f, Random.Range(-6f, 6f));
                         var target = ClosestTo(r.time, box, false, tk);
                         Vector3 tp = target != null ? Vector3.Lerp(box, target.Pos, 0.5f) : box;
-                        if (!tk.pc.Pass(tp, true, (1f - tk.atr.passe) * 0.6f)) r.executing = false;
+                        if (!tk.pc.Pass(tp, true, (1f - tk.atr.passe) * 0.6f, 0.6f, true)) r.executing = false;
                         else NotifyPass(tk, target, tp);
                         break;
                     }
@@ -1668,7 +1991,7 @@ namespace Craquez
             NotifyPass(tk, mate, target);
         }
 
-        void ExecuteRestartHuman(bool lofted)
+        void ExecuteRestartHuman(ModoPasseHumano passMode)
         {
             var r = Restart;
             if (r == null || r.taker == null) return;
@@ -1676,7 +1999,19 @@ namespace Craquez
             r.waitingHuman = false;
             r.taker.pc.ballAuthority = true;
             if (r.tipo == TipoReinicio.Lateral) { StartCoroutine(ThrowIn(r)); return; }
-            HumanPass(lofted);
+            if (r.tipo == TipoReinicio.Escanteio && passMode == ModoPasseHumano.AltoCruzamento)
+            {
+                Vector3 goal = r.time.TargetGoal;
+                Vector3 box = goal - r.time.Forward * Random.Range(7.5f, 11.5f) + new Vector3(0f, 0f, InputBridge.Move.x * 5.5f);
+                var target = ClosestTo(r.time, box, false, r.taker);
+                Vector3 tp = target != null ? Vector3.Lerp(box, target.Pos + Flat(target.Vel) * 0.5f, 0.55f) : box;
+                if (r.taker.pc.Pass(tp, true, (1f - r.taker.atr.passe) * 0.35f, 0.62f, true))
+                    NotifyPass(r.taker, target, tp);
+            }
+            else
+            {
+                HumanExecutePass(passMode, 0.52f);
+            }
             if (!r.taker.pc.PassPending) r.executing = false;
         }
 

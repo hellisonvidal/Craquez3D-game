@@ -4,60 +4,98 @@ using UnityEngine;
 namespace Craquez
 {
     /// <summary>
-    /// Controles de toque para Android (multitoque), desenhados com IMGUI e lógica de toque própria:
-    /// analógico flutuante à esquerda (aparece onde o dedo encosta) e botões à direita em dois arcos:
-    /// CHUTE (grande) com COLOCADO, CAVADINHA e RASTEIRO em volta; CORRER, DRIBLE e ARRANCADA no arco externo.
-    /// No modo goleiro ficam só MERGULHAR / DEFESA / SALTAR / SAIR.
-    /// Analógico flutuante, fixo ou ancorado (Configurações), corrida ao arrastar até a borda e tamanho ajustável.
-    /// Some sozinho quando um joystick físico (Bluetooth/USB) é usado e volta ao tocar na tela.
-    /// Ativo automaticamente em celulares; tecla T alterna no editor/PC para testar com o mouse.
+    /// Controles de toque estilo eFootball Mobile Clássico (4 botões em diamante ergonômico + gestos de deslizar):
+    /// - Esquerda: Analógico virtual (Flutuante, Fixo ou Ancorado).
+    /// - Direita (Com a Bola - Ataque):
+    ///     * CHUTE (baixo/direita): tocar/segurar = Chute; deslizar p/ baixo = Chute Colocado; deslizar p/ cima = Cavadinha.
+    ///     * PASSE (esquerda): tocar/segurar = Passe Rasteiro; deslizar p/ cima = Passe Alto / Cruzamento.
+    ///     * ENFIADA (topo): tocar/segurar = Passe em Profundidade; deslizar p/ cima = Profundidade Alta.
+    ///     * CORRER (direita/topo): segurar = Correr (Dash); toque duplo = Finta / Drible.
+    /// - Direita (Sem a Bola - Defesa):
+    ///     * PRESSÃO (esquerda): segurar = Pressão e bote; deslizar p/ cima = Cercar (Match-up).
+    ///     * CARRINHO (baixo/direita): Carrinho; deslizar p/ cima = Saída do Goleiro.
+    ///     * TROCAR (topo): Trocar Jogador (Cursor).
+    ///     * CORRER (direita/topo): Correr (Dash).
+    /// - Modo Goleiro (Treino): MERGULHO, DEFESA, SALTAR, SAIR.
     /// </summary>
-    [DefaultExecutionOrder(-200)] // lê o toque antes da partida e do jogador (sem um quadro de atraso)
+    [DefaultExecutionOrder(-200)]
     public class TouchControls : MonoBehaviour
     {
-        public Texture2D circle; // mantido por compatibilidade (o desenho usa UiKit)
+        public Texture2D circle;
         public bool visible;
         public bool goalkeeperMode;
-        [Tooltip("Partida 11 x 11: rótulos de ataque (com a bola) e de defesa (sem a bola).")]
+        [Tooltip("Partida 11 x 11: alterna dinamicamente os 4 botões clássicos do eFootball entre Ataque e Defesa.")]
         public bool matchMode;
         public System.Func<bool> matchHasBall;
 
+        enum SwipeDir { None = 0, Up = 1, Down = 2 }
+
         class Button
         {
-            public string label, gkLabel, atkLabel, defLabel;
-            public Vector2 center; // em alturas de tela, a partir do canto inferior direito
-            public float radius;   // fração da altura da tela
+            public string trainLabel, gkLabel, atkLabel, defLabel;
+            public string atkUpHint, atkDownHint, defUpHint;
+            public Vector2 center; // em frações de altura da tela a partir do canto inferior direito
+            public float radius;
             public int finger = int.MinValue;
+            public Vector2 pressStart, curPos;
+            public SwipeDir swipe;
             public bool held;
+            public bool lockedAtk;
+            public bool wasModeLocked;
             public float pressAnim;
-            public Color color;
-            public bool attackerOnly;
+            public Color atkColor, defColor;
         }
 
         readonly List<PointerPoint> pointers = new List<PointerPoint>();
         readonly HashSet<int> seen = new HashSet<int>();
-        readonly Button shoot = new Button { label = "CHUTE", gkLabel = "MERGULHAR", atkLabel = "CHUTE", defLabel = "CARRINHO", center = new Vector2(0.17f, 0.2f), radius = 0.105f, color = UiKit.Red };
-        readonly Button finesse = new Button { label = "COLOCADO", gkLabel = "DEFESA", atkLabel = "COLOCADO", defLabel = "", center = new Vector2(0.39f, 0.13f), radius = 0.07f, color = UiKit.Blue };
-        readonly Button low = new Button { label = "RASTEIRO", gkLabel = "", atkLabel = "PASSE", defLabel = "DESARME", center = new Vector2(0.38f, 0.32f), radius = 0.066f, color = new Color(0.55f, 0.35f, 0.95f), attackerOnly = true };
-        readonly Button chip = new Button { label = "CAVADINHA", gkLabel = "SALTAR", atkLabel = "LANÇAR", defLabel = "", center = new Vector2(0.2f, 0.44f), radius = 0.066f, color = UiKit.Yellow };
-        readonly Button sprint = new Button { label = "CORRER", gkLabel = "SAIR", atkLabel = "CORRER", defLabel = "CORRER", center = new Vector2(0.6f, 0.11f), radius = 0.075f, color = UiKit.Green };
-        readonly Button skill = new Button { label = "DRIBLE", gkLabel = "", atkLabel = "DRIBLE", defLabel = "CERCAR", center = new Vector2(0.58f, 0.3f), radius = 0.062f, color = new Color(1f, 0.55f, 0.15f), attackerOnly = true };
-        readonly Button knock = new Button { label = "ARRANCADA", gkLabel = "", atkLabel = "ARRANCADA", defLabel = "TROCAR", center = new Vector2(0.43f, 0.5f), radius = 0.058f, color = new Color(0.2f, 0.8f, 0.85f), attackerOnly = true };
+
+        // Diamante de 4 botões estilo eFootball Mobile Clássico
+        readonly Button btnBottomRight = new Button
+        {
+            trainLabel = "CHUTE", gkLabel = "MERGULHAR", atkLabel = "CHUTE", defLabel = "CARRINHO",
+            atkUpHint = "▲ CAVADINHA", atkDownHint = "▼ COLOCADO", defUpHint = "▲ GOLEIRO",
+            center = new Vector2(0.18f, 0.17f), radius = 0.095f,
+            atkColor = UiKit.Red, defColor = new Color(0.92f, 0.35f, 0.25f)
+        };
+        readonly Button btnLeft = new Button
+        {
+            trainLabel = "RASTEIRO", gkLabel = "DEFESA", atkLabel = "PASSE", defLabel = "PRESSÃO",
+            atkUpHint = "▲ CRUZAR", atkDownHint = "", defUpHint = "▲ CERCAR",
+            center = new Vector2(0.42f, 0.19f), radius = 0.084f,
+            atkColor = UiKit.Blue, defColor = UiKit.Green
+        };
+        readonly Button btnTop = new Button
+        {
+            trainLabel = "COLOCADO", gkLabel = "SALTAR", atkLabel = "ENFIADA", defLabel = "TROCAR",
+            atkUpHint = "▲ COBERTURA", atkDownHint = "", defUpHint = "",
+            center = new Vector2(0.33f, 0.40f), radius = 0.080f,
+            atkColor = UiKit.Yellow, defColor = new Color(0.20f, 0.78f, 0.90f)
+        };
+        readonly Button btnRight = new Button
+        {
+            trainLabel = "CORRER", gkLabel = "SAIR", atkLabel = "CORRER", defLabel = "CORRER",
+            atkUpHint = "", atkDownHint = "", defUpHint = "",
+            center = new Vector2(0.14f, 0.41f), radius = 0.082f,
+            atkColor = UiKit.Green, defColor = UiKit.Green
+        };
         Button[] buttons;
 
         int stickFinger = int.MinValue;
         Vector2 stickOrigin, stickPos;
-        bool stickSprint;     // analógico arrastado até a borda externa: corre
-        bool padHidden;       // um controle físico está sendo usado: os botões de toque saem da tela
+        bool stickSprint;
+        bool padHidden;
+        float lastDashTapTime = -10f;
+        float skillPulseUntil = -10f;
+
         float Scale { get { return GameSettings.EscalaControles; } }
         Vector2 StickHome { get { float H = Screen.height; return new Vector2(H * 0.26f * Scale, H * 0.24f * Scale); } }
         public bool Showing { get { return visible && !padHidden; } }
-        GUIStyle labelStyle;
+        GUIStyle labelStyle, subStyle;
         int styleH;
 
         void Awake()
         {
-            buttons = new[] { shoot, finesse, low, chip, sprint, skill, knock };
+            buttons = new[] { btnBottomRight, btnLeft, btnTop, btnRight };
             visible = Application.isMobilePlatform && !Platform.IsTv;
         }
 
@@ -68,25 +106,47 @@ namespace Craquez
             InputBridge.VirtualMove = Vector2.zero;
             InputBridge.VirtualShoot = InputBridge.VirtualFinesse = InputBridge.VirtualChip = InputBridge.VirtualSprint = false;
             InputBridge.VirtualLow = InputBridge.VirtualSkill = InputBridge.VirtualKnock = false;
+            InputBridge.VirtualPass = InputBridge.VirtualThroughBall = InputBridge.VirtualCross = InputBridge.VirtualLoftedThrough = false;
+            InputBridge.VirtualMatchUp = InputBridge.VirtualSlide = InputBridge.VirtualPressure = InputBridge.VirtualSwitch = InputBridge.VirtualKeeperRush = false;
         }
 
-        bool Active(Button b)
+        bool IsAttackingNow()
         {
-            if (b.finger != int.MinValue) return true; // preserva botão já pressionado durante transição de posse
-            if (matchMode) return !string.IsNullOrEmpty(Label(b));
-            return !(goalkeeperMode && b.attackerOnly);
+            return matchMode && matchHasBall != null && matchHasBall();
+        }
+
+        bool ButtonAttacking(Button b)
+        {
+            if (!matchMode) return true;
+            return b.wasModeLocked ? b.lockedAtk : IsAttackingNow();
         }
 
         string Label(Button b)
         {
             if (matchMode)
             {
-                bool atk = matchHasBall != null && matchHasBall();
-                string lbl = atk ? b.atkLabel : b.defLabel;
-                if (string.IsNullOrEmpty(lbl) && b.finger != int.MinValue) return b.atkLabel;
-                return lbl;
+                bool atk = ButtonAttacking(b);
+                if (b.held && b.swipe == SwipeDir.Up)
+                {
+                    if (atk && b == btnBottomRight) return "CAVADINHA";
+                    if (atk && b == btnLeft) return "CRUZAR";
+                    if (atk && b == btnTop) return "ALTO △";
+                    if (!atk && b == btnLeft) return "CERCAR";
+                    if (!atk && b == btnBottomRight) return "GOLEIRO";
+                }
+                else if (b.held && b.swipe == SwipeDir.Down && atk && b == btnBottomRight)
+                {
+                    return "COLOCADO";
+                }
+                return atk ? b.atkLabel : b.defLabel;
             }
-            return goalkeeperMode ? b.gkLabel : b.label;
+            if (goalkeeperMode) return b.gkLabel;
+            if (b.held && b == btnBottomRight)
+            {
+                if (b.swipe == SwipeDir.Up) return "CAVADINHA";
+                if (b.swipe == SwipeDir.Down) return "COLOCADO";
+            }
+            return b.trainLabel;
         }
 
         Vector2 ButtonScreen(Button b)
@@ -96,7 +156,6 @@ namespace Craquez
         }
 
         float ButtonRadius(Button b) { return b.radius * Screen.height * Scale; }
-
         float StickRadius { get { return Screen.height * 0.12f * Scale; } }
 
         static bool InTopHudBar(Vector2 pos)
@@ -111,39 +170,85 @@ namespace Craquez
             if (!visible) { ClearVirtual(); stickFinger = int.MinValue; return; }
 
             InputBridge.GetPointers(pointers);
-            // joystick físico (Bluetooth/USB): esconde os botões de toque; um toque na tela traz de volta
             if (InputBridge.GamepadActive) padHidden = true;
             if (pointers.Count > 0) padHidden = false;
-            if (padHidden) { ClearVirtual(); stickFinger = int.MinValue; foreach (var b in buttons) b.finger = int.MinValue; return; }
+            if (padHidden)
+            {
+                ClearVirtual();
+                stickFinger = int.MinValue;
+                foreach (var b in buttons) { b.finger = int.MinValue; b.wasModeLocked = false; b.swipe = SwipeDir.None; }
+                return;
+            }
+
+            bool liveAtk = IsAttackingNow();
             bool stickAlive = false;
             foreach (var b in buttons) b.held = false;
             seen.Clear();
+
+            float swipeThreshold = Screen.height * 0.045f * Scale;
+
             foreach (var p in pointers)
             {
                 seen.Add(p.id);
                 if (p.id == stickFinger) { stickAlive = true; stickPos = p.position; continue; }
                 bool claimed = false;
                 foreach (var b in buttons)
-                    if (b.finger == p.id) { b.held = true; claimed = true; break; }
+                {
+                    if (b.finger == p.id)
+                    {
+                        b.held = true;
+                        b.curPos = p.position;
+                        float dy = p.position.y - b.pressStart.y;
+                        if (dy > swipeThreshold) b.swipe = SwipeDir.Up;
+                        else if (dy < -swipeThreshold) b.swipe = SwipeDir.Down;
+                        else b.swipe = SwipeDir.None;
+                        claimed = true;
+                        break;
+                    }
+                }
                 if (claimed) continue;
                 if (InTopHudBar(p.position)) continue;
-                // novo toque: botão mais próximo dentro da área (área de toque 50% maior que o desenho)
+
                 Button best = null; float bestD = float.MaxValue;
                 foreach (var b in buttons)
                 {
-                    if (b.finger != int.MinValue || !Active(b)) continue;
+                    if (b.finger != int.MinValue) continue;
                     float d = Vector2.Distance(p.position, ButtonScreen(b));
-                    if (d < ButtonRadius(b) * 1.5f && d < bestD) { best = b; bestD = d; }
+                    if (d < ButtonRadius(b) * 1.45f && d < bestD) { best = b; bestD = d; }
                 }
-                if (best != null) { best.finger = p.id; best.held = true; continue; }
+                if (best != null)
+                {
+                    best.finger = p.id;
+                    best.held = true;
+                    best.pressStart = p.position;
+                    best.curPos = p.position;
+                    best.swipe = SwipeDir.None;
+                    best.lockedAtk = liveAtk;
+                    best.wasModeLocked = true;
+                    if (best == btnRight)
+                    {
+                        float now = Time.unscaledTime;
+                        if (now - lastDashTapTime < 0.28f) skillPulseUntil = now + 0.12f;
+                        lastDashTapTime = now;
+                    }
+                    continue;
+                }
                 if (stickFinger == int.MinValue && p.position.x < Screen.width * 0.48f && p.position.y < Screen.height * 0.84f)
                 {
                     stickFinger = p.id; stickPos = p.position; stickAlive = true; stickSprint = false;
-                    // fixo: a base fica sempre no canto; flutuante/ancorado: nasce onde o dedo encostou
                     stickOrigin = GameSettings.Joystick == ModoJoystick.Fixo ? StickHome : p.position;
                 }
             }
-            foreach (var b in buttons) if (b.finger != int.MinValue && !seen.Contains(b.finger)) b.finger = int.MinValue;
+
+            foreach (var b in buttons)
+            {
+                if (b.finger != int.MinValue && !seen.Contains(b.finger))
+                {
+                    b.finger = int.MinValue;
+                    b.wasModeLocked = false;
+                    b.swipe = SwipeDir.None;
+                }
+            }
             if (!stickAlive) { stickFinger = int.MinValue; stickSprint = false; }
 
             Vector2 move = Vector2.zero;
@@ -152,7 +257,6 @@ namespace Craquez
                 Vector2 d = stickPos - stickOrigin;
                 float r = StickRadius;
                 float raw = d.magnitude / r;
-                // arrastar além da borda (anel externo) liga a corrida; ela segue enquanto o analógico estiver quase no máximo
                 if (GameSettings.CorrerNoAnalogico)
                 {
                     if (raw > 1.12f) stickSprint = true;
@@ -161,33 +265,94 @@ namespace Craquez
                 else stickSprint = false;
                 if (d.magnitude > r)
                 {
-                    // flutuante: a base acompanha o dedo (mudanças de direção rápidas); fixo/ancorado: a base fica e o pino para na borda
                     if (GameSettings.Joystick == ModoJoystick.Flutuante) { stickOrigin = stickPos - d.normalized * r; d = stickPos - stickOrigin; }
                     else d = d.normalized * r;
                 }
                 float m = d.magnitude / r;
                 const float dead = 0.05f;
-                // resposta um pouco mais rápida no começo do curso (curva suave), máximo antes da borda
                 move = m > dead ? d.normalized * Mathf.Pow(Mathf.Clamp01((m - dead) / (0.85f - dead)), 0.8f) : Vector2.zero;
             }
             float dt = Time.unscaledDeltaTime;
             foreach (var b in buttons) b.pressAnim = Mathf.MoveTowards(b.pressAnim, b.held ? 1f : 0f, dt * 12f);
 
+            ClearVirtual();
             InputBridge.VirtualMove = move;
-            InputBridge.VirtualShoot = shoot.held;
-            InputBridge.VirtualFinesse = finesse.held;
-            InputBridge.VirtualChip = chip.held;
-            InputBridge.VirtualSprint = sprint.held || stickSprint;
-            InputBridge.VirtualLow = low.held && Active(low);
-            InputBridge.VirtualSkill = skill.held && Active(skill);
-            InputBridge.VirtualKnock = knock.held && Active(knock);
+            InputBridge.VirtualSprint = btnRight.held || stickSprint;
+            if (Time.unscaledTime < skillPulseUntil && (!matchMode || liveAtk))
+                InputBridge.VirtualSkill = true;
+
+            if (matchMode)
+            {
+                // Botão principal inferior direito: CHUTE (ataque) / CARRINHO (defesa)
+                if (btnBottomRight.held)
+                {
+                    if (ButtonAttacking(btnBottomRight))
+                    {
+                        InputBridge.VirtualShoot = true;
+                        if (btnBottomRight.swipe == SwipeDir.Down) InputBridge.VirtualSkill = true; // R1 + Chute = Colocado
+                        else if (btnBottomRight.swipe == SwipeDir.Up) InputBridge.VirtualKnock = true; // L1 + Chute = Cavadinha
+                    }
+                    else
+                    {
+                        if (btnBottomRight.swipe == SwipeDir.Up) InputBridge.VirtualKeeperRush = true;
+                        else InputBridge.VirtualSlide = true;
+                    }
+                }
+                // Botão esquerdo: PASSE (ataque) / PRESSÃO (defesa)
+                if (btnLeft.held)
+                {
+                    if (ButtonAttacking(btnLeft))
+                    {
+                        if (btnLeft.swipe == SwipeDir.Up) InputBridge.VirtualCross = true;
+                        else { InputBridge.VirtualPass = true; InputBridge.VirtualLow = true; }
+                    }
+                    else
+                    {
+                        if (btnLeft.swipe == SwipeDir.Up) InputBridge.VirtualMatchUp = true;
+                        else { InputBridge.VirtualPressure = true; InputBridge.VirtualLow = true; }
+                    }
+                }
+                // Botão topo: ENFIADA (ataque) / TROCAR (defesa)
+                if (btnTop.held)
+                {
+                    if (ButtonAttacking(btnTop))
+                    {
+                        InputBridge.VirtualThroughBall = true;
+                        InputBridge.VirtualChip = true;
+                        if (btnTop.swipe == SwipeDir.Up) InputBridge.VirtualLoftedThrough = true;
+                    }
+                    else
+                    {
+                        InputBridge.VirtualSwitch = true;
+                        InputBridge.VirtualKnock = true;
+                    }
+                }
+            }
+            else if (goalkeeperMode)
+            {
+                InputBridge.VirtualShoot = btnBottomRight.held;
+                InputBridge.VirtualFinesse = btnLeft.held;
+                InputBridge.VirtualChip = btnTop.held;
+            }
+            else
+            {
+                // Arena de Treino (Atacante)
+                if (btnBottomRight.held)
+                {
+                    if (btnBottomRight.swipe == SwipeDir.Down) InputBridge.VirtualFinesse = true;
+                    else if (btnBottomRight.swipe == SwipeDir.Up) InputBridge.VirtualChip = true;
+                    else InputBridge.VirtualShoot = true;
+                }
+                InputBridge.VirtualLow = btnLeft.held;
+                InputBridge.VirtualFinesse = InputBridge.VirtualFinesse || btnTop.held;
+            }
         }
 
         /// <summary>Retorna true se o ponto (tela, origem embaixo) está sobre um controle de toque.</summary>
         public bool Covers(Vector2 screenPos)
         {
             if (!Showing) return false;
-            foreach (var b in buttons) if (Active(b) && Vector2.Distance(screenPos, ButtonScreen(b)) < ButtonRadius(b) * 1.5f) return true;
+            foreach (var b in buttons) if (Vector2.Distance(screenPos, ButtonScreen(b)) < ButtonRadius(b) * 1.45f) return true;
             return false;
         }
 
@@ -203,20 +368,24 @@ namespace Craquez
                     font = Compat.DefaultFont(),
                     alignment = TextAnchor.MiddleCenter,
                     fontStyle = FontStyle.Bold,
-                    fontSize = Mathf.RoundToInt(H * 0.021f),
+                    fontSize = Mathf.RoundToInt(H * 0.022f),
                     wordWrap = false,
                     clipping = TextClipping.Overflow
                 };
+                subStyle = new GUIStyle(labelStyle)
+                {
+                    fontSize = Mathf.RoundToInt(H * 0.014f),
+                };
             }
 
-            // analógico
+            // Analógico esquerdo
             float R = StickRadius;
             Vector2 o = stickFinger != int.MinValue ? stickOrigin : StickHome;
             Vector2 k = o;
             if (stickFinger != int.MinValue)
             {
                 Vector2 dk = stickPos - o;
-                k = o + Vector2.ClampMagnitude(dk, R); // o pino não sai da base
+                k = o + Vector2.ClampMagnitude(dk, R);
             }
             Vector2 og = new Vector2(o.x, H - o.y), kg = new Vector2(k.x, H - k.y);
             float act = stickFinger != int.MinValue ? 1f : 0.55f;
@@ -224,27 +393,42 @@ namespace Craquez
             UiKit.RingAt(og, R, new Color(1f, 1f, 1f, 0.35f * act));
             UiKit.RingAt(og, R * 0.62f, new Color(1f, 1f, 1f, 0.12f * act));
             if (GameSettings.CorrerNoAnalogico)
-                UiKit.RingAt(og, R * 1.12f, stickSprint ? UiKit.A(UiKit.Green, 0.95f) : new Color(1f, 1f, 1f, 0.1f * act)); // zona de corrida
+                UiKit.RingAt(og, R * 1.12f, stickSprint ? UiKit.A(UiKit.Green, 0.95f) : new Color(1f, 1f, 1f, 0.1f * act));
             UiKit.Disc(kg, R * 0.42f, new Color(1f, 1f, 1f, 0.75f * act));
             UiKit.RingAt(kg, R * 0.42f, UiKit.A(UiKit.Cyan, 0.9f * act));
 
+            // 4 botões eFootball à direita
             foreach (var b in buttons)
             {
-                if (!Active(b)) continue;
+                bool atk = ButtonAttacking(b);
+                Color baseCol = (!matchMode || atk) ? b.atkColor : b.defColor;
                 Vector2 c = ButtonScreen(b);
                 Vector2 g = new Vector2(c.x, H - c.y);
-                float r = ButtonRadius(b) * (1f - 0.08f * b.pressAnim);
-                UiKit.Disc(g + new Vector2(0f, r * 0.08f), r * 1.04f, new Color(0f, 0f, 0f, 0.3f));
-                Color fill = Color.Lerp(UiKit.A(b.color, 0.42f), UiKit.A(b.color, 0.9f), b.pressAnim);
+                if (b.held && b.swipe != SwipeDir.None)
+                    g.y += (b.swipe == SwipeDir.Up ? -1f : 1f) * H * 0.012f;
+
+                float r = ButtonRadius(b) * (1f - 0.07f * b.pressAnim);
+                UiKit.Disc(g + new Vector2(0f, r * 0.08f), r * 1.04f, new Color(0f, 0f, 0f, 0.32f));
+                Color fill = Color.Lerp(UiKit.A(baseCol, 0.46f), UiKit.A(baseCol, 0.92f), b.pressAnim);
                 UiKit.Disc(g, r, fill);
-                UiKit.Disc(g - new Vector2(0f, r * 0.25f), r * 0.6f, new Color(1f, 1f, 1f, 0.08f + 0.06f * b.pressAnim)); // brilho
-                UiKit.RingAt(g, r, new Color(1f, 1f, 1f, 0.55f + 0.4f * b.pressAnim));
+                UiKit.Disc(g - new Vector2(0f, r * 0.25f), r * 0.58f, new Color(1f, 1f, 1f, 0.08f + 0.06f * b.pressAnim));
+                UiKit.RingAt(g, r, new Color(1f, 1f, 1f, 0.58f + 0.4f * b.pressAnim));
+
                 string text = Label(b);
-                var st = labelStyle;
-                int keep = st.fontSize;
-                if (b == shoot) st.fontSize = Mathf.RoundToInt(keep * 1.25f);
-                UiKit.Text(new Rect(g.x - r * 1.6f, g.y - r, r * 3.2f, r * 2f), text, st, Color.white, Mathf.Max(1f, H * 0.002f));
-                st.fontSize = keep;
+                int keep = labelStyle.fontSize;
+                if (b == btnBottomRight) labelStyle.fontSize = Mathf.RoundToInt(keep * 1.15f);
+                UiKit.Text(new Rect(g.x - r * 1.6f, g.y - r, r * 3.2f, r * 2f), text, labelStyle, Color.white, Mathf.Max(1f, H * 0.002f));
+                labelStyle.fontSize = keep;
+
+                // Indicador sutil de deslizar (estilo eFootball Mobile)
+                if (!b.held && matchMode)
+                {
+                    string upHint = atk ? b.atkUpHint : b.defUpHint;
+                    if (!string.IsNullOrEmpty(upHint))
+                        UiKit.Text(new Rect(g.x - r * 1.5f, g.y - r * 1.30f, r * 3f, r * 0.4f), "▲", subStyle, new Color(1f, 1f, 1f, 0.45f), 0f);
+                    if (atk && !string.IsNullOrEmpty(b.atkDownHint))
+                        UiKit.Text(new Rect(g.x - r * 1.5f, g.y + r * 0.90f, r * 3f, r * 0.4f), "▼", subStyle, new Color(1f, 1f, 1f, 0.45f), 0f);
+                }
             }
         }
     }

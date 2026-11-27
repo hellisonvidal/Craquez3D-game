@@ -162,7 +162,6 @@ namespace Craquez
             var anim = go.GetComponentInChildren<Animator>();
             if (anim == null || !anim.isHuman) return;
             Transform head = anim.GetBoneTransform(HumanBodyBones.Head);
-            Transform neck = anim.GetBoneTransform(HumanBodyBones.Neck);
             Transform spine = anim.GetBoneTransform(HumanBodyBones.Spine);
             if (spine != null && Mathf.Abs(torso - 1f) > 0.005f)
             {
@@ -173,15 +172,10 @@ namespace Craquez
                     var arm = anim.GetBoneTransform(hb);
                     if (arm != null) arm.localScale = arm.localScale * inv; // braços com o comprimento normal
                 }
-                if (neck != null && head != null)
+                if (head != null)
                 {
-                    float halfInv = Mathf.Sqrt(inv);
-                    neck.localScale = neck.localScale * halfInv; // transição suave entre colarinho e cabeça
-                    head.localScale = head.localScale * halfInv;
-                }
-                else if (head != null)
-                {
-                    head.localScale = head.localScale * inv;
+                    // Mantém Neck com a mesma escala de Spine2 para selar 100% o colarinho e compensa suavemente na cabeça
+                    head.localScale = head.localScale * Mathf.Lerp(1f, inv, 0.82f);
                 }
             }
             if (head == null) return;

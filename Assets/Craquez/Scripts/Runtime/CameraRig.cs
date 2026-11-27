@@ -8,16 +8,17 @@ namespace Craquez
     /// </summary>
     public class CameraRig : MonoBehaviour
     {
-        public enum Modo { AtrasDoJogador = 0, Dinamica = 1, TV = 2, Aerea = 3, AtrasDoGol = 4, Goleiro = 5, Menu = 6, VisaoJogador = 7, Comemoracao = 8, LateralProxima = 9 }
+        public enum Modo { AtrasDoJogador = 0, Dinamica = 1, TV = 2, Aerea = 3, AtrasDoGol = 4, Goleiro = 5, Menu = 6, VisaoJogador = 7, Comemoracao = 8, LateralProxima = 9, Estadio = 10 }
 
-        public static readonly Modo[] ModosAtacante = { Modo.AtrasDoJogador, Modo.Dinamica, Modo.TV, Modo.LateralProxima, Modo.Aerea, Modo.AtrasDoGol, Modo.VisaoJogador };
-        public static readonly Modo[] ModosGoleiro = { Modo.Goleiro, Modo.AtrasDoGol, Modo.TV, Modo.LateralProxima, Modo.Aerea };
-        public static readonly Modo[] ModosPartida = { Modo.TV, Modo.LateralProxima, Modo.AtrasDoJogador, Modo.VisaoJogador, Modo.Aerea, Modo.Dinamica };
+        public static readonly Modo[] ModosAtacante = { Modo.AtrasDoJogador, Modo.Estadio, Modo.Dinamica, Modo.TV, Modo.LateralProxima, Modo.Aerea, Modo.AtrasDoGol, Modo.VisaoJogador };
+        public static readonly Modo[] ModosGoleiro = { Modo.Goleiro, Modo.Estadio, Modo.AtrasDoGol, Modo.TV, Modo.LateralProxima, Modo.Aerea };
+        public static readonly Modo[] ModosPartida = { Modo.Estadio, Modo.TV, Modo.LateralProxima, Modo.AtrasDoJogador, Modo.VisaoJogador, Modo.Aerea, Modo.Dinamica };
 
         public static string Nome(Modo m)
         {
             switch (m)
             {
+                case Modo.Estadio: return "Estádio Ampla (EA / eFootball)";
                 case Modo.AtrasDoJogador: return "Atrás do atacante";
                 case Modo.Dinamica: return "Dinâmica (baixa)";
                 case Modo.TV: return "Transmissão TV";
@@ -122,6 +123,25 @@ namespace Craquez
             Vector3 kp = keeper != null ? keeper.position : Arena.AttackGoalCenter;
             switch (mode)
             {
+                case Modo.Estadio:
+                    {
+                        // Câmera padrão EA FC / eFootball (Estádio / Dinâmica Ampla):
+                        // Tribuna central alta com visão ampla dos dois lados do campo (~84 m de extensão horizontal)
+                        // e leve ângulo de perspectiva rumo às grandes áreas sem cortar o meio-campo.
+                        float leadX = bp.x + ballLead.x * 0.85f + peek.x * 9f;
+                        float leadZ = bp.z + ballLead.z * 0.55f + peek.y * 5f;
+                        float boxFactor = Mathf.InverseLerp(22f, 47f, Mathf.Abs(bp.x));
+                        float camX = Mathf.Clamp(leadX * 0.44f, -21.5f, 21.5f);
+                        float lookX = Mathf.Clamp(leadX * 0.64f, -32.5f, 32.5f);
+                        float lookZ = Mathf.Clamp(leadZ * 0.30f, -8.5f, 9.5f) + 1.4f;
+                        pos = new Vector3(camX, Mathf.Lerp(23.6f, 21.6f, boxFactor), -Arena.HalfWidth - Mathf.Lerp(17.8f, 15.6f, boxFactor));
+                        look = new Vector3(lookX, 0.55f, lookZ);
+                        float aspect = cam != null && cam.aspect > 0.5f ? cam.aspect : 1.7778f;
+                        // Garante abertura horizontal >= ~73° em 16:9 (mostrando os dois lados do campo com clareza)
+                        float baseV = 2f * Mathf.Atan(0.735f / Mathf.Min(aspect, 1.85f)) * Mathf.Rad2Deg;
+                        fov = Mathf.Clamp(Mathf.Lerp(baseV, baseV - 2.2f, boxFactor), 41f, 54f);
+                        break;
+                    }
                 case Modo.TV when matchMode:
                     {
                         // transmissão: lateral alta com antecipação suave da bola e aproximação na grande área

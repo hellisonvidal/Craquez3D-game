@@ -30,7 +30,6 @@ namespace Craquez
             if (GameSettings.NomesJogadores) DrawNameTags(s);
             DrawScoreboard(s);
             DrawControlledCard(s);
-            DrawControlsHint(s);
             if (GameSettings.MiniMapa) DrawMiniMap(s, W, H);
 
             // botões do topo (em celulares/PC com toque; na TV usa o controle)
@@ -42,15 +41,18 @@ namespace Craquez
                 if (TopButton(new Rect(bx - (bw + gap), 18 * s, bw, bh), "CÂMERA", UiKit.Blue, s)) CycleCamera();
             }
 
-            // força do chute
+            // barra de força eFootball (chute ou passe carregado)
             var h = Human;
-            if (h != null && h.pc != null && h.pc.Charging)
+            bool shotCharging = h != null && h.pc != null && h.pc.Charging;
+            if (shotCharging || passCharging)
             {
-                float pw = 520 * s, ph = 26 * s;
-                Rect r = new Rect((W - pw) * 0.5f, H * 0.66f, pw, ph);
-                UiKit.RoundRect(new Rect(r.x - 6 * s, r.y - 6 * s, r.width + 12 * s, r.height + 12 * s), UiKit.A(UiKit.Navy, 0.75f), (ph + 12 * s) * 0.5f);
-                float c = h.pc.Charge;
-                Color col = c < 0.6f ? Color.Lerp(UiKit.Green, UiKit.Yellow, c / 0.6f) : Color.Lerp(UiKit.Yellow, UiKit.Red, (c - 0.6f) / 0.4f);
+                float pw = 420 * s, ph = 20 * s;
+                Rect r = new Rect((W - pw) * 0.5f, H * 0.70f, pw, ph);
+                UiKit.RoundRect(new Rect(r.x - 5 * s, r.y - 5 * s, r.width + 10 * s, r.height + 10 * s), UiKit.A(UiKit.Navy, 0.78f), (ph + 10 * s) * 0.5f);
+                float c = shotCharging ? h.pc.Charge : PassCharge01;
+                Color col = shotCharging
+                    ? (c < 0.6f ? Color.Lerp(UiKit.Green, UiKit.Yellow, c / 0.6f) : Color.Lerp(UiKit.Yellow, UiKit.Red, (c - 0.6f) / 0.4f))
+                    : Color.Lerp(UiKit.Cyan, UiKit.Blue, c);
                 UiKit.RoundRect(new Rect(r.x, r.y, Mathf.Max(ph, r.width * c), r.height), col, ph * 0.5f);
             }
 
@@ -182,63 +184,6 @@ namespace Craquez
             UiKit.Text(new Rect(r.x + 20 * s, r.y + 88 * s, 70 * s, 26 * s), "FÔLEGO", new GUIStyle(ui.Tiny) { fontSize = ui.R(15) }, UiKit.TextDim, 0f);
         }
 
-        // ------------------------------------------------------------ comandos na tela
-
-        bool hintHadBall;
-        float hintChanged = -9f;
-
-        /// <summary>Nome do comando conforme o aparelho: botão do controle, tecla ou botão de toque.</summary>
-        static string Key(string action, string tecla, string toque)
-        {
-            if (InputBridge.ControleConectado != TipoControle.Nenhum || Platform.IsTv) return InputBridge.Glyph(action);
-            return Application.isMobilePlatform ? toque : tecla;
-        }
-
-        /// <summary>
-        /// Lista curta dos comandos do momento, embaixo do cartão do jogador: muda (com destaque) quando
-        /// o seu jogador ganha ou perde a bola.
-        /// </summary>
-        void DrawControlsHint(float s)
-        {
-            var h = Human;
-            if (h == null || Phase != Fase.Jogo) return;
-            bool hasBall = HumanAttackingContext();
-            if (hasBall != hintHadBall) { hintHadBall = hasBall; hintChanged = Time.time; }
-            float since = Time.time - hintChanged;
-            string[] linhas = hasBall
-                ? new[]
-                {
-                    Key("passe", "Z", "PASSE") + "  passe",
-                    Key("lancamento", "Q", "LANÇAR") + "  lançamento",
-                    Key("chute", "Espaço", "CHUTE") + "  chute (segure)",
-                    Key("colocado", "E", "COLOCADO") + "  colocado",
-                    Key("drible", "F", "DRIBLE") + "  drible",
-                    Key("arrancada", "X", "ARRANCADA") + "  arrancada",
-                    Key("correr", "Shift", "CORRER") + "  correr",
-                }
-                : new[]
-                {
-                    Key("desarme", "Z", "DESARME") + "  desarme",
-                    Key("cercar", "F", "CERCAR") + "  cercar",
-                    Key("carrinho", "Espaço", "CARRINHO") + "  carrinho",
-                    Key("trocar", "X", "TROCAR") + "  trocar jogador",
-                    Key("correr", "Shift", "CORRER") + "  correr",
-                };
-            Color accent = hasBall ? UiKit.Green : UiKit.Red;
-            float lh = 27 * s, w = 300 * s;
-            Rect r = new Rect(20 * s, 242 * s, w, 46 * s + lh * linhas.Length);
-            // ao trocar, o painel pisca forte e depois fica discreto
-            float pulse = Mathf.Clamp01(1f - since / 1.2f);
-            float alpha = Mathf.Lerp(0.45f, 0.85f, pulse);
-            UiKit.RoundRect(r, UiKit.A(UiKit.Navy, alpha), 12 * s);
-            UiKit.RoundBorder(r, UiKit.A(accent, 0.35f + 0.6f * pulse), 12 * s, (2f + 2f * pulse) * s);
-            UiKit.Text(new Rect(r.x + 14 * s, r.y + 6 * s, w - 28 * s, 34 * s), hasBall ? "COM A BOLA" : "SEM A BOLA", ui.Pill, accent, 1 * s);
-            if (hintStyle == null || hintStyle.fontSize != ui.R(17)) hintStyle = new GUIStyle(ui.Tiny) { fontSize = ui.R(17), alignment = TextAnchor.MiddleLeft };
-            for (int i = 0; i < linhas.Length; i++)
-                UiKit.Text(new Rect(r.x + 16 * s, r.y + 40 * s + i * lh, w - 24 * s, lh), linhas[i], hintStyle, UiKit.A(Color.white, Mathf.Lerp(0.8f, 1f, pulse)), 1 * s);
-        }
-        GUIStyle hintStyle;
-
         // ------------------------------------------------------------ minimapa (centro, embaixo)
 
         void DrawMiniMap(float s, float W, float H)
@@ -338,23 +283,25 @@ namespace Craquez
                 return;
             }
             if (Phase != Fase.BolaParada || Restart == null || !Restart.waitingHuman || Restart.taker != Human) return;
+            string gPass = InputBridge.ControleConectado != TipoControle.Nenhum ? InputBridge.Glyph("passe") : (Application.isMobilePlatform ? "PASSE" : "Z");
+            string gThru = InputBridge.ControleConectado != TipoControle.Nenhum ? InputBridge.Glyph("profundidade") : (Application.isMobilePlatform ? "ENFIADA" : "Q");
+            string gCross = InputBridge.ControleConectado != TipoControle.Nenhum ? InputBridge.Glyph("cruzamento") : (Application.isMobilePlatform ? "CRUZAR" : "E");
+            string gShoot = InputBridge.ControleConectado != TipoControle.Nenhum ? InputBridge.Glyph("chute") : (Application.isMobilePlatform ? "CHUTE" : "Espaço");
             string tipo;
             switch (Restart.tipo)
             {
-                case TipoReinicio.Penalti: tipo = "PÊNALTI: " + InputBridge.Glyph("chute") + " chute (segure p/ força) + direção"; break;
+                case TipoReinicio.Penalti: tipo = "PÊNALTI: " + gShoot + " chute (segure p/ força) + direção"; break;
                 case TipoReinicio.Falta:
                     tipo = Restart.indirect
-                        ? "TIRO LIVRE INDIRETO: ✕ passe   △ lançamento (exige 2º toque p/ gol)"
-                        : "FALTA DIRETA: " + InputBridge.Glyph("chute") + "/" + InputBridge.Glyph("colocado") + " chute   ✕ passe   △ lançamento";
+                        ? "TIRO LIVRE INDIRETO: " + gPass + " passe   " + gCross + " passe alto (exige 2º toque p/ gol)"
+                        : "FALTA DIRETA: " + gShoot + " chute   " + gCross + " cruzamento   " + gPass + " passe";
                     break;
-                case TipoReinicio.Lateral: tipo = "LATERAL: direção + ✕ para cobrar"; break;
-                case TipoReinicio.Escanteio: tipo = "ESCANTEIO: △ cruzamento   ✕ passe curto"; break;
-                case TipoReinicio.Saida: tipo = "SAÍDA DE BOLA: ✕ passe"; break;
-                case TipoReinicio.BolaAoChao: tipo = "BOLA AO CHÃO: ✕ passe   △ lançamento"; break;
-                default: tipo = "✕ passe   △ lançamento"; break;
+                case TipoReinicio.Lateral: tipo = "LATERAL: direção + " + gPass + " para cobrar"; break;
+                case TipoReinicio.Escanteio: tipo = "ESCANTEIO: " + gCross + " cruzamento   " + gPass + " passe curto"; break;
+                case TipoReinicio.Saida: tipo = "SAÍDA DE BOLA: " + gPass + " passe"; break;
+                case TipoReinicio.BolaAoChao: tipo = "BOLA AO CHÃO: " + gPass + " passe   " + gThru + " profundidade"; break;
+                default: tipo = gPass + " passe   " + gCross + " lançamento"; break;
             }
-            if (InputBridge.ControleConectado == TipoControle.Nenhum)
-                tipo = tipo.Replace("✕", "Z/PASSE").Replace("△", "Q/LANÇAR");
             Rect r = new Rect((W - 940 * s) * 0.5f, H * 0.36f, 940 * s, 56 * s);
             UiKit.RoundRect(r, UiKit.A(UiKit.Navy, 0.75f), 28 * s);
             UiKit.Text(r, tipo, ui.Pill, UiKit.Yellow, 0f);

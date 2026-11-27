@@ -13,7 +13,7 @@ namespace Craquez.EditorTools
     public class CraquezImportSettings : AssetPostprocessor
     {
         const string Root = "Assets/Craquez/";
-        public const int Version = 22;
+        public const int Version = 23;
 
         static readonly string[] LoopClips =
         {
@@ -25,7 +25,7 @@ namespace Craquez.EditorTools
         static readonly string[] FreeHeightClips =
         {
             "Queda", "QuedaCostas", "CaidoDor", "Levantar",
-            "GK_Salto", "GK_Mergulho", "GK_Soco", "GK_Caido", "GK_Levantar"
+            "GK_Salto", "GK_Mergulho", "GK_Soco", "GK_Carrinho", "GK_Caido", "GK_Levantar"
         };
 
         public override uint GetVersion() { return Version; }

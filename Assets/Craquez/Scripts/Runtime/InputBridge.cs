@@ -16,17 +16,32 @@ namespace Craquez
     public enum TipoControle { Nenhum, PlayStation, Xbox, Nintendo, Generico }
 
     /// <summary>
-    /// Une teclado, controles (PlayStation DualShock/DualSense, Xbox, Switch Pro e controles genéricos
-    /// Bluetooth/USB reconhecidos como gamepad) e toque numa única fonte de comandos.
-    /// Funciona com o Input System novo (preferido) e com o Input Manager antigo.
-    /// Os botões de ação respeitam o layout escolhido em Configurações.
+    /// Une teclado, controles físicos (PlayStation DualShock/DualSense, Xbox, Switch Pro e Bluetooth/USB)
+    /// e toque no esquema oficial de controles estilo eFootball:
+    /// - Ataque (Com a Bola):
+    ///     * LS / WASD / Setas: Conduzir e Mirar
+    ///     * R2 / RT (Shift): Correr (Dash)
+    ///     * ✕ / A (Z / J): Passe Rasteiro (segurar = regula força/distância)
+    ///     * △ / Y (Q / U): Passe em Profundidade (L1 + △ = Profundidade por Cobertura)
+    ///     * ○ / B (E / L): Passe Alto / Cruzamento (no layout Padrão)
+    ///     * □ / X (Espaço / K): Chute (R1 + □ = Chute Colocado; L1 + □ = Cavadinha)
+    ///     * R1 / RB (F): Controle Fino / Finta
+    ///     * L1 / LB (X / LeftAlt): Modificador (Cavadinha / Lançamento em profundidade / Adiantada)
+    /// - Defesa (Sem a Bola):
+    ///     * ✕ / A (Z / J): Pressão (segurar aproxima e desarma no alcance)
+    ///     * L2 / LT ou R1 / RB (LeftCtrl / F): Cercar (Match-up)
+    ///     * □ / X (Espaço / K): Bote / Jogo de corpo
+    ///     * ○ / B (E / L): Carrinho (Sliding Tackle)
+    ///     * L1 / LB (X / LeftAlt): Trocar Cursor (Trocar Jogador)
+    ///     * △ / Y (Q / U): Saída do Goleiro (segurar)
     /// </summary>
     public static class InputBridge
     {
         // Valores escritos pelos controles de toque a cada quadro.
         public static Vector2 VirtualMove;
         public static bool VirtualSprint, VirtualShoot, VirtualFinesse, VirtualChip, VirtualLow, VirtualSkill, VirtualKnock;
-        public static bool VirtualPass, VirtualThroughBall, VirtualCross;
+        public static bool VirtualPass, VirtualThroughBall, VirtualCross, VirtualLoftedThrough;
+        public static bool VirtualMatchUp, VirtualSlide, VirtualPressure, VirtualSwitch, VirtualKeeperRush;
 
         // ------------------------------------------------------------ gamepad
 
@@ -51,7 +66,7 @@ namespace Craquez
             return GameSettings.Layout == LayoutControle.ChuteNoCirculo ? gp.buttonEast : gp.buttonWest;
         }
 
-        static ButtonControl FinesseButton(Gamepad gp)
+        static ButtonControl LoftedOrSlideButton(Gamepad gp)
         {
             return GameSettings.Layout == LayoutControle.ChuteNoCirculo ? gp.buttonWest : gp.buttonEast;
         }
@@ -89,7 +104,7 @@ namespace Craquez
             }
         }
 
-        /// <summary>Nome do botão para exibir na tela, conforme o controle conectado.</summary>
+        /// <summary>Nome do botão para exibir nos menus e na arena, conforme o controle conectado e o layout eFootball.</summary>
         public static string Glyph(string action)
         {
             var t = ControleConectado;
@@ -100,6 +115,7 @@ namespace Craquez
                     case "rasteiro":
                     case "passe":
                     case "desarme":
+                    case "pressao":
                     case "confirmar": return "OK";
                     case "voltar":
                     case "pausa": return "Voltar";
@@ -111,17 +127,23 @@ namespace Craquez
                 switch (action)
                 {
                     case "chute":
-                    case "carrinho": return circle ? "A" : "Y";
+                    case "bote": return circle ? "A" : "Y";
+                    case "cruzamento":
+                    case "passe_alto":
+                    case "carrinho":
                     case "colocado": return circle ? "Y" : "A";
+                    case "profundidade":
+                    case "lancamento":
                     case "cavadinha":
-                    case "lancamento": return "X";
+                    case "goleiro_sair": return "X";
                     case "correr": return "ZR";
                     case "rasteiro":
                     case "passe":
+                    case "pressao":
                     case "desarme":
                     case "confirmar": return "B";
-                    case "drible":
-                    case "cercar": return "R";
+                    case "drible": return "R";
+                    case "cercar": return "ZL";
                     case "arrancada":
                     case "trocar": return "L";
                     case "voltar": return "A";
@@ -134,20 +156,24 @@ namespace Craquez
             switch (action)
             {
                 case "chute":
-                case "carrinho": return ps ? (circle ? "○" : "□") : (circle ? "B" : "X");
-                case "colocado": return ps ? (circle ? "□" : "○") : (circle ? "X" : "B");
-                case "cavadinha":
-                case "lancamento": return ps ? "△" : "Y";
+                case "bote": return ps ? (circle ? "○" : "□") : (circle ? "B" : "X");
+                case "cruzamento":
+                case "passe_alto":
+                case "carrinho": return ps ? (circle ? "□" : "○") : (circle ? "X" : "B");
+                case "colocado": return ps ? ("R1+" + (circle ? "○" : "□")) : ("RB+" + (circle ? "B" : "X"));
+                case "cavadinha": return ps ? ("L1+" + (circle ? "○" : "□")) : ("LB+" + (circle ? "B" : "X"));
+                case "profundidade":
+                case "lancamento":
+                case "goleiro_sair": return ps ? "△" : "Y";
                 case "correr": return ps ? "R2" : "RT";
                 case "rasteiro":
                 case "passe":
+                case "pressao":
                 case "desarme": return ps ? "✕" : "A";
-                case "drible":
-                case "cercar": return ps ? "R1" : "RB";
+                case "drible": return ps ? "R1" : "RB";
+                case "cercar": return ps ? "L2" : "LT";
                 case "arrancada":
                 case "trocar": return ps ? "L1" : "LB";
-                case "profundidade": return ps ? "△" : "Y";
-                case "cruzamento": return ps ? "△" : "Y";
                 case "confirmar": return ps ? "✕" : "A";
                 case "voltar": return ps ? "○" : "B";
                 case "camera": return ps ? "R3" : "RS";
@@ -181,7 +207,7 @@ namespace Craquez
                     if (mag > 0.11f)
                     {
                         float t = Mathf.Clamp01((mag - 0.11f) / 0.81f);
-                        m += (s / mag) * Mathf.Pow(t, 1.12f); // zona morta radial reescalada com precisão fina no centro
+                        m += (s / mag) * Mathf.Pow(t, 1.12f);
                     }
                     m += gp.dpad.ReadValue();
                 }
@@ -213,6 +239,7 @@ namespace Craquez
             }
         }
 
+        /// <summary>Correr (Dash eFootball): R2 / RT, Shift ou botão CORRER.</summary>
         public static bool Sprint
         {
             get
@@ -221,7 +248,7 @@ namespace Craquez
 #if ENABLE_INPUT_SYSTEM
                 if (Keyboard.current != null && (Keyboard.current.leftShiftKey.isPressed || Keyboard.current.rightShiftKey.isPressed)) v = true;
                 var gp = Pad;
-                if (gp != null && (gp.rightTrigger.ReadValue() > 0.35f || gp.leftStickButton.isPressed)) v = true;
+                if (gp != null && (gp.rightTrigger.ReadValue() > 0.30f || gp.leftStickButton.isPressed)) v = true;
 #elif ENABLE_LEGACY_INPUT_MANAGER
                 if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift)) v = true;
 #endif
@@ -229,84 +256,106 @@ namespace Craquez
             }
         }
 
-        /// <summary>Chute forte (segurar para carregar a força). No modo goleiro: mergulhar.</summary>
+        /// <summary>Chute (□ / X no Padrão eFootball, ○ / B no Alternativo, Espaço ou K). Na defesa: Bote / Jogo de corpo.</summary>
         public static bool Shoot
         {
             get
             {
                 bool v = VirtualShoot;
 #if ENABLE_INPUT_SYSTEM
-                if (Keyboard.current != null && Keyboard.current.spaceKey.isPressed) v = true;
+                var kb = Keyboard.current;
+                if (kb != null && (kb.spaceKey.isPressed || kb.kKey.isPressed)) v = true;
                 var gp = Pad;
                 if (gp != null && ShootButton(gp).isPressed) v = true;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-                if (Input.GetKey(KeyCode.Space)) v = true;
+                if (Input.GetKey(KeyCode.Space) || Input.GetKey(KeyCode.K)) v = true;
                 if (Input.GetKey(GameSettings.Layout == LayoutControle.ChuteNoCirculo ? KeyCode.JoystickButton1 : KeyCode.JoystickButton2)) v = true;
 #endif
                 return v;
             }
         }
 
-        /// <summary>Chute colocado (com curva). No modo goleiro: defesa parada/encaixe.</summary>
+        /// <summary>
+        /// Passe Alto / Cruzamento na partida (○ / B no Padrão eFootball, □ / X no Alternativo, E ou L).
+        /// Na defesa: Carrinho (Sliding Tackle). Na arena de treino individual: Chute Colocado.
+        /// </summary>
         public static bool Finesse
         {
             get
             {
                 bool v = VirtualFinesse;
 #if ENABLE_INPUT_SYSTEM
-                if (Keyboard.current != null && Keyboard.current.eKey.isPressed) v = true;
+                var kb = Keyboard.current;
+                if (kb != null && (kb.eKey.isPressed || kb.lKey.isPressed)) v = true;
                 var gp = Pad;
-                if (gp != null && FinesseButton(gp).isPressed) v = true;
+                if (gp != null && LoftedOrSlideButton(gp).isPressed) v = true;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-                if (Input.GetKey(KeyCode.E)) v = true;
+                if (Input.GetKey(KeyCode.E) || Input.GetKey(KeyCode.L)) v = true;
                 if (Input.GetKey(GameSettings.Layout == LayoutControle.ChuteNoCirculo ? KeyCode.JoystickButton2 : KeyCode.JoystickButton1)) v = true;
 #endif
                 return v;
             }
         }
 
-        /// <summary>Cavadinha / Lançamento na partida. No modo goleiro: saltar (bola alta).</summary>
+        /// <summary>Passe Alto / Cruzamento na partida (○ / B no Padrão eFootball, E/L ou deslizar PASSE p/ cima no toque).</summary>
+        public static bool LoftedPass { get { return VirtualCross || Finesse; } }
+
+        /// <summary>Carrinho na defesa (○ / B no Padrão eFootball, E/L ou botão CARRINHO no toque).</summary>
+        public static bool SlideTackle { get { return VirtualSlide || Finesse; } }
+
+        /// <summary>Passe em Profundidade (△ / Y, Q / U ou botão ENFIADA). Na defesa: Saída do Goleiro (segurar).</summary>
         public static bool Chip
         {
             get
             {
                 bool v = VirtualChip;
 #if ENABLE_INPUT_SYSTEM
-                if (Keyboard.current != null && Keyboard.current.qKey.isPressed) v = true;
+                var kb = Keyboard.current;
+                if (kb != null && (kb.qKey.isPressed || kb.uKey.isPressed)) v = true;
                 if (Pad != null && Pad.buttonNorth.isPressed) v = true;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-                if (Input.GetKey(KeyCode.Q) || Input.GetKey(KeyCode.JoystickButton3)) v = true;
+                if (Input.GetKey(KeyCode.Q) || Input.GetKey(KeyCode.U) || Input.GetKey(KeyCode.JoystickButton3)) v = true;
 #endif
                 return v;
             }
         }
 
-        /// <summary>Chute rasteiro / Passe / Desarme: ✕ / A, tecla Z, ou OK do controle remoto na TV.</summary>
+        /// <summary>Passe Rasteiro (com bola) / Pressão (sem bola): ✕ / A, Z ou J, ou OK na TV.</summary>
         public static bool LowShot
         {
             get
             {
                 bool v = VirtualLow;
 #if ENABLE_INPUT_SYSTEM
-                if (Keyboard.current != null && (Keyboard.current.zKey.isPressed || (Platform.IsTv && (Keyboard.current.enterKey.isPressed || Keyboard.current.numpadEnterKey.isPressed)))) v = true;
+                var kb = Keyboard.current;
+                if (kb != null && (kb.zKey.isPressed || kb.jKey.isPressed || (Platform.IsTv && (kb.enterKey.isPressed || kb.numpadEnterKey.isPressed)))) v = true;
                 if (Pad != null && Pad.buttonSouth.isPressed) v = true;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-                if (Input.GetKey(KeyCode.Z) || Input.GetKey(KeyCode.JoystickButton0) || (Platform.IsTv && (Input.GetKey(KeyCode.Return) || Input.GetKey(KeyCode.KeypadEnter)))) v = true;
+                if (Input.GetKey(KeyCode.Z) || Input.GetKey(KeyCode.J) || Input.GetKey(KeyCode.JoystickButton0) || (Platform.IsTv && (Input.GetKey(KeyCode.Return) || Input.GetKey(KeyCode.KeypadEnter)))) v = true;
 #endif
                 return v;
             }
         }
 
-        /// <summary>Alias compatível de passe curto (usa LowShot sem conflitar com a tecla C da câmera).</summary>
+        /// <summary>Passe Rasteiro (✕ / A).</summary>
         public static bool Pass { get { return VirtualPass || LowShot; } }
 
-        /// <summary>Alias compatível de lançamento (usa Chip).</summary>
+        /// <summary>Passe em Profundidade (△ / Y).</summary>
         public static bool ThroughBall { get { return VirtualThroughBall || Chip; } }
 
-        /// <summary>Alias compatível de cruzamento.</summary>
-        public static bool Cross { get { return VirtualCross || Chip; } }
+        /// <summary>Passe em Profundidade por Cobertura (L1 + △ ou deslizar ENFIADA p/ cima).</summary>
+        public static bool LoftedThroughBall { get { return VirtualLoftedThrough || (KnockOn && ThroughBall); } }
 
-        /// <summary>Drible (com a bola) / Cercar (sem a bola): R1 / RB, tecla F.</summary>
+        /// <summary>Cruzamento / Passe Alto (○ / B).</summary>
+        public static bool Cross { get { return LoftedPass; } }
+
+        /// <summary>Pressão defensiva eFootball (segurar ✕ / A ou botão PRESSÃO aproxima e dá o bote no alcance).</summary>
+        public static bool Pressure { get { return VirtualPressure || LowShot; } }
+
+        /// <summary>Saída do Goleiro na defesa (segurar △ / Y ou deslizar p/ cima).</summary>
+        public static bool KeeperRush { get { return VirtualKeeperRush || Chip; } }
+
+        /// <summary>Controle Colocado / Finta (R1 / RB, tecla F): R1 + Chute = Chute Colocado.</summary>
         public static bool Skill
         {
             get
@@ -322,17 +371,33 @@ namespace Craquez
             }
         }
 
-        /// <summary>Arrancada (com a bola) / Trocar jogador (sem a bola): L1 / LB, tecla X.</summary>
+        /// <summary>Cercar defensivo (Match-up no eFootball): L2 / LT, R1 / RB, LeftCtrl ou deslizar PRESSÃO p/ cima.</summary>
+        public static bool MatchUp
+        {
+            get
+            {
+                bool v = VirtualMatchUp || Skill;
+#if ENABLE_INPUT_SYSTEM
+                if (Keyboard.current != null && (Keyboard.current.leftCtrlKey.isPressed || Keyboard.current.rightCtrlKey.isPressed)) v = true;
+                if (Pad != null && Pad.leftTrigger.ReadValue() > 0.30f) v = true;
+#elif ENABLE_LEGACY_INPUT_MANAGER
+                if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl)) v = true;
+#endif
+                return v;
+            }
+        }
+
+        /// <summary>Trocar Cursor / Modificador L1 (L1 / LB, tecla X ou LeftAlt): L1 + Chute = Cavadinha; L1 + △ = Profundidade Alta.</summary>
         public static bool KnockOn
         {
             get
             {
-                bool v = VirtualKnock;
+                bool v = VirtualKnock || VirtualSwitch;
 #if ENABLE_INPUT_SYSTEM
-                if (Keyboard.current != null && Keyboard.current.xKey.isPressed) v = true;
+                if (Keyboard.current != null && (Keyboard.current.xKey.isPressed || Keyboard.current.leftAltKey.isPressed)) v = true;
                 if (Pad != null && Pad.leftShoulder.isPressed) v = true;
 #elif ENABLE_LEGACY_INPUT_MANAGER
-                if (Input.GetKey(KeyCode.X) || Input.GetKey(KeyCode.JoystickButton4)) v = true;
+                if (Input.GetKey(KeyCode.X) || Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.JoystickButton4)) v = true;
 #endif
                 return v;
             }
@@ -507,7 +572,6 @@ namespace Craquez
                 for (int i = 0; i < touches.Count; i++)
                 {
                     TouchControl t = touches[i];
-                    // toque muito rápido (começa e termina no mesmo quadro) também conta por um quadro
                     if (!t.press.isPressed && !t.press.wasPressedThisFrame) continue;
                     list.Add(new PointerPoint { id = t.touchId.ReadValue(), position = t.position.ReadValue() });
                 }

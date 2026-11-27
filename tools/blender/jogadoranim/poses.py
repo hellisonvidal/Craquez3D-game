@@ -155,3 +155,46 @@ LEV_JOELHO = merge(leg('Left', 76, 88, 14, 8), leg('Right', 18, 76, 24, 6),
                    arm('Left', -58, 32, 48), arm('Right', -62, 18, 42),
                    spine(24, neck=8, head=2))
 LEV_JOELHO_H = (0.02, 0.02, -0.36)
+
+# ---- passe curto com a chapa do pé (toque técnico rápido, quadril direito aberto, sem travar a corrida)
+PC_ARMAR = merge(leg('Left', 26, 40, 12, 7), leg('Right', -16, 48, 6, 12, -28),
+                 arm('Left', -46, 28, 46), arm('Right', -62, -12, 52),
+                 spine(14, side=-5, twist=-10, neck=5, head=-4), {'Hips': [('U', -10)]})
+PC_ARMAR_H = (-0.03, 0.01, -0.06)
+
+PC_IMPACTO = merge(leg('Left', 20, 36, 10, 6), leg('Right', 34, 18, 12, 8, -32),
+                   arm('Left', -48, 18, 52), arm('Right', -58, 16, 48),
+                   spine(12, side=-6, twist=12, neck=4, head=-3), {'Hips': [('U', 8)]})
+PC_IMPACTO_H = (-0.02, 0.03, -0.05)
+
+PC_FINAL = merge(leg('Left', 16, 34, 8, 5), leg('Right', 44, 28, 8, 3, -20),
+                 arm('Left', -56, 8, 55), arm('Right', -54, 26, 54),
+                 spine(10, side=-4, twist=16, neck=4, head=-2), {'Hips': [('U', 12)]})
+PC_FINAL_H = (-0.01, 0.03, -0.05)
+
+# ---- passe longo / cruzamento (batida firme de peito/três dedos por baixo da bola com braço de equilíbrio)
+PL_ARMAR = merge(leg('Left', 34, 48, 14, 11), leg('Right', -32, 78, -22, 10, -10),
+                 arm('Left', -26, 36, 34), arm('Right', -58, -28, 48),
+                 spine(10, side=-10, twist=-18, neck=6, head=-4), {'Hips': [('F', -8), ('U', -16)]})
+PL_ARMAR_H = (-0.06, -0.02, -0.09)
+
+PL_IMPACTO = merge(leg('Left', 22, 34, 8, 9), leg('Right', 38, 14, -18, 6, -14),
+                   arm('Left', -34, 18, 44), arm('Right', -52, 24, 46),
+                   spine(6, side=-14, twist=16, neck=6, head=-2), {'Hips': [('F', -10), ('U', 14)]})
+PL_IMPACTO_H = (-0.05, 0.03, -0.06)
+
+PL_FINAL = merge(leg('Left', 14, 28, 4, 8), leg('Right', 62, 34, -8, -6, -10),
+                 arm('Left', -52, -10, 56), arm('Right', -46, 38, 58),
+                 spine(4, side=-10, twist=24, neck=5, head=0), {'Hips': [('F', -6), ('U', 20)]})
+PL_FINAL_H = (-0.04, 0.04, -0.05)
+
+# ---- domínio orientado amortecido (chapa macia trazendo a bola para o controle)
+DOM_RECEBE = merge(leg('Left', 24, 40, 12, 6), leg('Right', 36, 44, 10, 10, -24),
+                   arm('Left', -54, 22, 50), arm('Right', -58, 14, 48),
+                   spine(14, side=-4, twist=-6, neck=6, head=-6))
+DOM_RECEBE_H = (-0.02, -0.01, -0.06)
+
+DOM_AMORTECE = merge(leg('Left', 22, 38, 10, 5), leg('Right', 18, 38, 8, 7, -14),
+                     arm('Left', -60, 18, 52), arm('Right', -62, 18, 52),
+                     spine(12, side=-2, twist=0, neck=5, head=-4))
+DOM_AMORTECE_H = (-0.01, -0.02, -0.06)

@@ -142,6 +142,13 @@ namespace Craquez
 
         void OnBall(MatchSession m, float dt)
         {
+            if (time != null && time.humano)
+            {
+                m.EnsureHumanControl(this);
+                Stop();
+                Acao = "Você";
+                return;
+            }
             if (pc.Busy) return;
             float pressure = m.Pressure(this);
             if (Time.time < nextDecision && Time.time < carryUntil)

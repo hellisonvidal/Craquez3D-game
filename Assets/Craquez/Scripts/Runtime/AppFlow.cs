@@ -407,8 +407,8 @@ namespace Craquez
                 case Tela.Config:
                     items.Add(new Item
                     {
-                        section = "CONTROLES", label = "Layout do controle", tipo = Tipo.Lista,
-                        value = () => GameSettings.Layout == LayoutControle.ChuteNoCirculo ? "Chute no ○ / B" : "Chute no □ / X",
+                        section = "CONTROLES", label = "Layout (eFootball)", tipo = Tipo.Lista,
+                        value = () => GameSettings.Layout == LayoutControle.ChuteNoCirculo ? "Alternativo (Chute ○/B)" : "Padrão (Chute □/X)",
                         change = d => GameSettings.Layout = GameSettings.Layout == LayoutControle.ChuteNoCirculo ? LayoutControle.ChuteNoQuadrado : LayoutControle.ChuteNoCirculo
                     });
                     items.Add(new Item { label = "Controle conectado", tipo = Tipo.Info, value = ControllerName });
@@ -856,8 +856,8 @@ namespace Craquez
             UiKit.Text(back, "‹  VOLTAR", new GUIStyle(ui.H2) { alignment = TextAnchor.MiddleCenter }, Color.white, 0f);
             if (bi >= 0 && ui.Hit(back)) { sel = bi; Activate(items[bi]); }
 
-            string legend = "Chute " + InputBridge.Glyph("chute") + "   Colocado " + InputBridge.Glyph("colocado") + "   Cavadinha " + InputBridge.Glyph("cavadinha") +
-                            "   Rasteiro " + InputBridge.Glyph("rasteiro") + "   Drible " + InputBridge.Glyph("drible") + "   Arrancada " + InputBridge.Glyph("arrancada") +
+            string legend = "Passe " + InputBridge.Glyph("passe") + "   Profundidade " + InputBridge.Glyph("profundidade") + "   Cruzamento/Carrinho " + InputBridge.Glyph("cruzamento") +
+                            "   Chute " + InputBridge.Glyph("chute") + "   Cercar " + InputBridge.Glyph("cercar") + "   Trocar " + InputBridge.Glyph("trocar") +
                             "   Correr " + InputBridge.Glyph("correr");
             UiKit.Text(new Rect(back.xMax + 30 * S, back.y, W - back.xMax - 100 * S, back.height), legend, ui.Small, UiKit.TextDim, 0f);
         }

@@ -75,6 +75,9 @@ CLIPS = {
     'QuedaCostas':   [(0, P('BASE')), (5, P('QC_IMPACTO')), (13, P('QC_SOLO')), (24, P('QC_REPOUSO'))],
     'CaidoDor':      [(0, P('DOR_A')), (30, P('DOR_B')), (60, P('DOR_A'))],
     'Levantar':      [(0, P('Q_REPOUSO')), (10, P('LEV_APOIO')), (21, P('LEV_JOELHO')), (34, P('IDLE_A'))],
+    'PasseCurto':    [(0, P('BASE')), (4, P('PC_ARMAR')), (8, P('PC_IMPACTO')), (13, P('PC_FINAL')), (19, P('BASE'))],
+    'PasseLongo':    [(0, P('BASE')), (6, P('PL_ARMAR')), (11, P('PL_IMPACTO')), (17, P('PL_FINAL')), (24, P('BASE'))],
+    'DominioCurto':  [(0, P('BASE')), (5, P('DOM_RECEBE')), (10, P('DOM_AMORTECE')), (16, P('BASE'))],
 }
 for base in ('FintaCorpo', 'Pedalada', 'Puxada'):
     CLIPS[base + 'Esq'] = [(f, posekit.mirror(s, h)) for f, (s, h) in CLIPS[base + 'Dir']]

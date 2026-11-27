@@ -541,20 +541,42 @@ namespace Craquez
             bool l = aiControlled ? aiLow : human && InputBridge.LowShot;
             bool busy = kickPending || Time.time < lockMoveUntil;
 
-            if (matchControls && human) { c = false; l = false; } // ✕ e △ = passe / lançamento (sessão da partida)
+            // Na partida (controles eFootball): ✕ = Passe, △ = Profundidade, ○ = Cruzamento/Passe Alto (tratados pelo MatchSession);
+            // □ = Chute (R1 + □ = Chute Colocado; L1 + □ = Cavadinha).
+            if (matchControls && human)
+            {
+                f = false; c = false; l = false;
+            }
             bool allowed = canShoot == null || canShoot();
             if (!Charging && !busy && allowed)
             {
-                if (s && !prevShoot) StartCharge(TipoChute.Forte);
+                if (s && !prevShoot)
+                {
+                    TipoChute st = TipoChute.Forte;
+                    if (human)
+                    {
+                        if (InputBridge.KnockOn) st = TipoChute.Cavadinha;
+                        else if (InputBridge.Skill) st = TipoChute.Colocado;
+                    }
+                    StartCharge(st);
+                }
                 else if (f && !prevFinesse) StartCharge(TipoChute.Colocado);
                 else if (c && !prevChip) StartCharge(TipoChute.Cavadinha);
                 else if (l && !prevLow) StartCharge(TipoChute.Rasteiro);
             }
             if (Charging)
             {
-                bool held = ChargingType == TipoChute.Forte ? s :
-                            (ChargingType == TipoChute.Colocado ? f :
-                            (ChargingType == TipoChute.Cavadinha ? c : l));
+                // Permite acionar R1 (Colocado) ou L1 (Cavadinha) também durante o carregamento do chute eFootball
+                if (human && matchControls && s)
+                {
+                    if (InputBridge.KnockOn) ChargingType = TipoChute.Cavadinha;
+                    else if (InputBridge.Skill) ChargingType = TipoChute.Colocado;
+                }
+                bool held = (matchControls && human)
+                    ? s
+                    : (ChargingType == TipoChute.Forte ? s :
+                      (ChargingType == TipoChute.Colocado ? f :
+                      (ChargingType == TipoChute.Cavadinha ? c : l)));
                 Charge = Mathf.Min(1f, Charge + dt / chargeTime);
                 if (!held) ReleaseShot(mv);
             }
@@ -571,7 +593,8 @@ namespace Craquez
         void ReleaseShot(Vector2 mv)
         {
             Charging = false;
-            kickType = ChargingType;
+            // No eFootball, um toque bem rápido no botão de chute (< 16% de barra) bate rasteiro firme no canto
+            kickType = (ChargingType == TipoChute.Forte && Charge < 0.16f) ? TipoChute.Rasteiro : ChargingType;
             kickPower = Charge;
             kickAim = mv;
             kickAimWorld = aiControlled ? aiAimWorld : Vector3.zero;
@@ -593,20 +616,25 @@ namespace Craquez
             return true;
         }
 
+        bool passWhipped;
+        float passPower01 = 0.5f;
+
         /// <summary>
-        /// Passe (rasteiro) ou lançamento (alto) até um ponto do campo. error01: 0 = perfeito, 1 = muito impreciso.
-        /// O pé precisa alcançar a bola na janela de impacto, como num chute.
+        /// Passe rasteiro, passe em profundidade, lançamento ou cruzamento com curva.
+        /// Usa as animações nativas PasseCurto / PasseLongo para resposta ágil estilo eFootball.
         /// </summary>
-        public bool Pass(Vector3 target, bool lofted, float error01)
+        public bool Pass(Vector3 target, bool lofted, float error01, float power01 = 0.5f, bool whippedCross = false)
         {
             if (Busy || ball == null) return false;
             Charging = false;
             passTarget = new Vector3(target.x, 0f, target.z);
             passLofted = lofted;
+            passWhipped = whippedCross;
+            passPower01 = Mathf.Clamp01(power01);
             passError = Mathf.Clamp01(error01);
             passPending = true;
             kickType = lofted ? TipoChute.Colocado : TipoChute.Rasteiro;
-            kickPower = 0.5f;
+            kickPower = passPower01;
             kickAim = Vector2.zero;
             BeginKick();
             return true;
@@ -616,6 +644,23 @@ namespace Craquez
         {
             kickPending = true;
             kickStartedAt = Time.time;
+
+            if (passPending)
+            {
+                bool hasShort = anim != null && anim.HasState(0, Animator.StringToHash("PasseCurto"));
+                bool hasLong = anim != null && anim.HasState(0, Animator.StringToHash("PasseLongo"));
+                activeKickState = passLofted
+                    ? (hasLong ? "PasseLongo" : "ChuteColocado")
+                    : (hasShort ? "PasseCurto" : "ChuteRasteiro");
+                if (ball != null && !ball.Grounded && ball.transform.position.y > 1.35f)
+                    activeKickState = "Cabeceio";
+                if (anim != null) anim.CrossFadeInFixedTime(activeKickState, 0.05f, 0, 0f);
+
+                float passContact = passLofted ? 0.21f : 0.14f;
+                kickFallbackContactAt = Time.time + passContact;
+                lockMoveUntil = Time.time + passContact + (passLofted ? 0.20f : 0.14f);
+                return;
+            }
 
             activeKickState = kickType == TipoChute.Colocado ? "ChuteColocado" :
                               (kickType == TipoChute.Cavadinha ? "Cavadinha" :
@@ -627,22 +672,21 @@ namespace Craquez
             }
             if (anim != null) anim.CrossFadeInFixedTime(activeKickState, 0.07f, 0, 0f);
 
-            // Janela determinística sincronizada com o avanço do pé em cada clipe (speed = 1.25x no Animator)
-            float fallback = kickType == TipoChute.Colocado ? 0.36f : (kickType == TipoChute.Cavadinha ? 0.30f : 0.26f);
+            float fallback = kickType == TipoChute.Colocado ? 0.34f : (kickType == TipoChute.Cavadinha ? 0.28f : 0.24f);
             kickFallbackContactAt = Time.time + fallback;
-            lockMoveUntil = Time.time + fallback + 0.32f;
+            lockMoveUntil = Time.time + fallback + 0.28f;
         }
 
         /// <summary>
-        /// Avalia se a animação de chute entrou na janela de impacto E o pé já avançou à frente do corpo,
-        /// garantindo que o chute só saia quando o pé visualmente encosta na bola.
+        /// Avalia se a animação de chute/passe entrou na janela de impacto E o pé já avançou à frente do corpo,
+        /// garantindo que a bola só saia quando o pé visualmente encosta nela.
         /// </summary>
         void CheckKickWindowContact()
         {
             if (!kickPending) return;
 
-            float minNorm = kickType == TipoChute.Colocado ? 0.38f : 0.28f;
-            float maxNorm = minNorm + 0.22f;
+            float minNorm = passPending ? (passLofted ? 0.28f : 0.22f) : (kickType == TipoChute.Colocado ? 0.36f : 0.26f);
+            float maxNorm = minNorm + 0.28f;
             bool inImpactWindow = false;
             if (anim != null && !string.IsNullOrEmpty(activeKickState))
             {
@@ -663,13 +707,13 @@ namespace Craquez
             bool footForward = true;
             if (activeKickState != "Cabeceio" && activeKickState != "Voleio" && (rToe != null || lToe != null))
             {
-                float thr = 0.11f * Mathf.Max(0.75f, transform.lossyScale.y);
+                float thr = (passPending ? 0.06f : 0.11f) * Mathf.Max(0.75f, transform.lossyScale.y);
                 float fR = rToe != null ? Vector3.Dot(rToe.position - transform.position, transform.forward) : -1f;
                 float fL = lToe != null ? Vector3.Dot(lToe.position - transform.position, transform.forward) : -1f;
                 footForward = Mathf.Max(fR, fL) > thr;
             }
 
-            if ((inImpactWindow && footForward) || Time.time >= kickFallbackContactAt + 0.08f)
+            if ((inImpactWindow && footForward) || Time.time >= kickFallbackContactAt + (passPending ? 0.04f : 0.08f))
             {
                 DoContact();
             }
@@ -872,6 +916,9 @@ namespace Craquez
 
         // ------------------------------------------------------------ 3. Sistema Híbrido de Interação com a Bola (Condução Magnética + Toques)
 
+        float prevSprintTap = -10f;
+        bool prevSprintState;
+
         void FixedUpdate()
         {
             HasPossession = false;
@@ -885,6 +932,16 @@ namespace Craquez
             Vector3 bp = ball.Body.position;
             Vector3 controlPt = ControlPointWorld();
 
+            // Toque duplo em R2 / Sprint = Adiantada (Sharp Touch estilo eFootball)
+            bool human = InputEnabled && !aiControlled;
+            if (human && sprintHeld && !prevSprintState)
+            {
+                if (now - prevSprintTap < 0.28f && wishWorld.sqrMagnitude > 0.15f)
+                    knockQueued = true;
+                prevSprintTap = now;
+            }
+            prevSprintState = sprintHeld;
+
             Vector3 toBallFromRoot = bp - pos; toBallFromRoot.y = 0f;
             float distFromRoot = toBallFromRoot.magnitude;
 
@@ -894,166 +951,163 @@ namespace Craquez
             Vector3 bv = ball.Velocity;
             Vector3 flatBv = new Vector3(bv.x, 0f, bv.z);
             Vector3 rel = flatBv - velocity;
-            bool low = bp.y < 0.38f;
-            bool recentlyKicked = now - ball.LastKickTime < 0.35f;
+            bool trapHeight = bp.y < 1.18f;
+            bool low = bp.y < 0.44f;
+            bool recentlyKicked = now - ball.LastKickTime < 0.24f;
             bool controlled = InputEnabled || aiControlled;
 
-            // Preparando chute: mantém a bola na zona de impacto à frente do pé de apoio (inclusive quicando até meia-altura)
-            if (kickPending && bp.y < 0.85f && distFromRoot < 2.2f)
+            // Preparando chute ou passe: acomoda suavemente a bola no ponto de batida à frente do pé de apoio
+            if (kickPending && bp.y < 0.95f && distFromRoot < 2.2f)
             {
                 HasPossession = true;
-                Vector3 strikeSpot = pos + transform.forward * (0.42f * Mathf.Max(0.8f, transform.lossyScale.y)) + transform.right * 0.08f;
-                strikeSpot.y = bp.y;
-                Vector3 desired = velocity * 0.45f + (strikeSpot - bp) * 12f; desired.y = 0f;
-                Vector3 nv = Vector3.MoveTowards(flatBv, desired, 42f * Mathf.Lerp(0.75f, 1f, Grip()) * dt);
-                Compat.SetVelocity(ball.Body, new Vector3(nv.x, bv.y, nv.z));
+                float fwdDist = passPending ? 0.36f : 0.42f;
+                Vector3 strikeSpot = pos + transform.forward * (fwdDist * Mathf.Max(0.8f, transform.lossyScale.y)) + transform.right * 0.07f;
+                Vector3 desired = velocity * 0.55f + (strikeSpot - bp) * (passPending ? 15f : 12f);
+                desired.y = 0f;
+                Vector3 nv = Vector3.MoveTowards(flatBv, desired, 44f * Mathf.Lerp(0.75f, 1f, Grip()) * dt);
+                float vy = bp.y > Arena.BallRadius + 0.08f ? Mathf.Min(bv.y, -1.4f) : bv.y;
+                Compat.SetVelocity(ball.Body, new Vector3(nv.x, vy, nv.z));
                 ball.Body.angularVelocity = Vector3.Cross(Vector3.up, nv) / Arena.BallRadius;
                 return;
             }
-            if (!controlled || !low || recentlyKicked) { touchEnd = 0f; return; }
+            if (!controlled || !trapHeight || recentlyKicked) { touchEnd = 0f; return; }
 
-            // Decaimento suave após o toque no gramado
-            if (now < touchEnd && distFromRoot < 6f)
+            if (now < touchEnd && distFromRoot < 4.5f && low)
             {
                 float along = Vector3.Dot(flatBv, touchDir);
                 float roll = WeatherSystem.Instance != null ? WeatherSystem.Instance.RollingDeceleration : 1.1f;
                 float dec = Mathf.Max(0f, touchDecel - roll) * dt;
-                if (along > 0.5f) flatBv -= touchDir * Mathf.Min(dec, along - 0.5f);
-                Compat.SetVelocity(ball.Body, new Vector3(flatBv.x, bv.y, flatBv.z));
+                if (along > 0.6f)
+                {
+                    flatBv -= touchDir * Mathf.Min(dec, along - 0.6f);
+                    Compat.SetVelocity(ball.Body, new Vector3(flatBv.x, bv.y, flatBv.z));
+                }
             }
 
             float spd = velocity.magnitude;
             float grip = Grip();
-
-            // Assistência direcional pós-toque (impede perda da bola em mudanças de direção e sprint)
-            Vector3 wAssist = wishWorld;
-            if (now - lastTouchAt < 1.1f && distFromRoot < 3.0f && wAssist.sqrMagnitude > 0.03f && flatBv.sqrMagnitude > 0.25f)
-            {
-                Vector3 wdir = wAssist.normalized;
-                Vector3 fb = flatBv;
-                float bs = fb.magnitude;
-                if (Vector3.Dot(toBallFromRoot.normalized, wdir) > -0.2f)
-                {
-                    float maxTurn = 280f * Mathf.Lerp(0.65f, 1f, grip) * dt;
-                    Vector3 nd = Vector3.RotateTowards(fb / bs, wdir, maxTurn * Mathf.Deg2Rad, 0f);
-                    fb = nd * bs;
-                }
-                float maxLead = sprintHeld ? 0.85f : 0.48f; // quanto a bola pode se adiantar (antes 1,25 / 0,72 m)
-                float ahead = Vector3.Dot(toBallFromRoot, fb.normalized);
-                if (ahead > maxLead)
-                {
-                    float pspd = Mathf.Max(spd, 1f);
-                    float target = Mathf.Max(pspd * 0.85f, 0.5f);
-                    if (bs > target) fb = fb.normalized * Mathf.MoveTowards(bs, target, 15f * dt);
-                }
-                flatBv = fb;
-                Compat.SetVelocity(ball.Body, new Vector3(fb.x, bv.y, fb.z));
-                rel = flatBv - velocity;
-            }
-
-            // Verifica se a bola está no raio de domínio (< 0.65m do BallControlPoint ou no alcance frontal dos pés)
-            float reach = 0.85f + 0.05f * spd;
-            Vector3 dirTo = distFromRoot > 1e-3f ? toBallFromRoot / distFromRoot : transform.forward;
-            bool inFront = Vector3.Dot(dirTo, transform.forward) > -0.25f || distFromRoot < 0.45f;
-            bool inControlZone = distToControlPt < possessionRadius || (distFromRoot < reach && inFront);
-            bool inReach = inControlZone && rel.magnitude < 13.5f;
-
-            HasPossession = inReach || (now - lastTouchAt < 0.9f && distFromRoot < 3.2f);
-            if (!inReach) return;
-
-            // --- Condução Magnética Suave quando no raio de domínio (< 0.65m):
-            // Mantém a bola próxima ao pé (BallControlPoint) com rotação visual (spin) compatível
-            if (distToControlPt < possessionRadius && rel.magnitude < 6.5f && !knockQueued)
-            {
-                Vector3 magnetPull = toControlPt * (sprintHeld ? 9.5f : 13f) * grip;
-                Vector3 baseCarryVel = velocity + magnetPull;
-                float blendRate = (now < nextTouchAt) ? 14f : 20f;
-                flatBv = Vector3.MoveTowards(flatBv, new Vector3(baseCarryVel.x, 0f, baseCarryVel.z), blendRate * dt);
-                Compat.SetVelocity(ball.Body, new Vector3(flatBv.x, bv.y, flatBv.z));
-                if (flatBv.sqrMagnitude > 0.04f)
-                {
-                    Vector3 targetSpin = Vector3.Cross(Vector3.up, flatBv) / Arena.BallRadius;
-                    ball.Body.angularVelocity = Vector3.Lerp(ball.Body.angularVelocity, targetSpin, 12f * dt);
-                }
-            }
-
             Vector3 wish = wishWorld;
             float wm = Mathf.Clamp01(wish.magnitude);
-            Vector3 wd = wm > 0.15f ? wish / Mathf.Max(wish.magnitude, 1e-3f) : transform.forward;
-            Vector3 ballDir = flatBv.sqrMagnitude > 0.25f ? flatBv.normalized : wd;
-            bool sharpTurn = wm > 0.15f && Vector3.Dot(ballDir, wd) < 0.7f;
-            if (now < nextTouchAt && !sharpTurn) return;
-            if (sharpTurn && now - lastTouchAt < 0.12f) return;
+            Vector3 wd = wm > 0.14f ? wish / Mathf.Max(wish.magnitude, 1e-3f) : transform.forward;
 
-            // Valida proximidade real dos ossos dos pés (Foot_R / Foot_L) para disparar o toque rítmico da passada
-            Transform foot;
-            Vector3 footPos;
-            float fd = FootDistance(bp, out foot, out footPos);
-            bool footOk = fd < Arena.BallRadius + 0.24f || distToControlPt < 0.35f || now > nextTouchAt + 0.28f || foot == null;
-            if (!footOk && rel.magnitude < 6.5f) return;
+            // Verifica alcance físico do domínio (pés/peito/coxa à frente do atleta)
+            float reach = 0.88f + 0.05f * spd;
+            Vector3 dirTo = distFromRoot > 1e-3f ? toBallFromRoot / distFromRoot : transform.forward;
+            bool inFront = Vector3.Dot(dirTo, transform.forward) > -0.30f || distFromRoot < 0.50f;
+            bool inControlZone = distToControlPt < possessionRadius + 0.10f || (distFromRoot < reach && inFront);
+            bool inReach = inControlZone && rel.magnitude < 16.5f;
 
-            float jitter = Random.Range(0.94f, 1.06f);
+            HasPossession = (inReach && low) || (now - lastTouchAt < 0.85f && distFromRoot < 2.8f && low);
+            if (!inReach) return;
 
-            // 1) Bola chegando rápido: domínio amortecido para o BallControlPoint
-            if (rel.magnitude > 6.5f && now - lastTouchAt > 0.55f)
+            // 1) DOMÍNIO ORIENTADO AMORTECIDO (bola vindo rápida ou a meia-altura: amortece na direção do analógico sem elástico!)
+            bool incomingFast = rel.magnitude > 4.6f && now - lastTouchAt > 0.30f;
+            bool aerialTrap = bp.y >= 0.40f && now - lastTouchAt > 0.28f;
+            if (incomingFast || aerialTrap)
             {
-                float keep = Mathf.Lerp(0.32f, 0.48f, 1f - grip);
-                Vector3 nv = velocity + (toControlPt * 3.5f) + rel * keep;
-                nv = Vector3.ClampMagnitude(nv - velocity, 3.2f) + velocity;
-                Compat.SetVelocity(ball.Body, new Vector3(nv.x, Mathf.Min(bv.y, 0.4f), nv.z));
+                Vector3 trapLead = pos + wd * (wm > 0.15f ? (sprintHeld ? 0.58f : 0.40f) : 0.34f);
+                Vector3 toTrap = trapLead - bp; toTrap.y = 0f;
+                float carryShare = wm > 0.15f ? (sprintHeld ? 1.08f : 0.90f) : 0.25f;
+                float residual = Mathf.Lerp(0.08f, 0.22f, 1f - grip);
+                Vector3 nv = wd * (spd * carryShare) + toTrap * 4.2f + rel * residual;
+                nv = Vector3.ClampMagnitude(nv - velocity, sprintHeld ? 3.8f : 2.6f) + velocity;
+                float vy = bp.y > Arena.BallRadius + 0.06f ? Mathf.Clamp(bv.y * 0.2f - 1.6f, -3.2f, 0.15f) : Mathf.Min(bv.y, 0.15f);
+                Compat.SetVelocity(ball.Body, new Vector3(nv.x, vy, nv.z));
                 ball.Body.angularVelocity = Vector3.Cross(Vector3.up, nv) / Arena.BallRadius;
-                lastTouchAt = now; nextTouchAt = now + 0.22f; touchEnd = 0f;
+
+                if (!Busy && anim != null)
+                {
+                    if (bp.y > 0.52f) Play("Dominio", 0.06f);
+                    else if (rel.magnitude > 8.0f && spd < 3.2f) Play("DominioCurto", 0.06f, "Dominio");
+                }
+                lastTouchAt = now;
+                nextTouchAt = now + 0.18f;
+                touchEnd = 0f;
+                HasPossession = true;
                 Move("DOMÍNIO");
                 return;
             }
 
-            // 2) Parado / proteção de bola: mantém a bola ancorada magneticamente no BallControlPoint
-            if (wm < 0.15f && spd < 1.3f)
+            if (!low) return;
+
+            // 2) PROTEÇÃO DE BOLA / PARADO (analógico solto: acomoda a bola suavemente nos pés sem vibrar)
+            if (wm < 0.14f && spd < 1.15f && !knockQueued)
             {
-                Vector3 nv = (controlPt - bp) * 4.5f; nv.y = 0f;
-                nv = Vector3.ClampMagnitude(nv, 1.8f);
-                Compat.SetVelocity(ball.Body, new Vector3(nv.x, bv.y, nv.z));
-                ball.Body.angularVelocity = Vector3.Cross(Vector3.up, nv) / Arena.BallRadius;
-                nextTouchAt = now + 0.1f; touchEnd = 0f;
+                Vector3 settleTarget = pos + transform.forward * (0.35f * Mathf.Max(0.85f, transform.lossyScale.y));
+                Vector3 errPos = settleTarget - bp; errPos.y = 0f;
+                Vector3 desiredVel = Vector3.ClampMagnitude(errPos * 6.5f, 2.2f);
+                Vector3 nv = Vector3.MoveTowards(flatBv, desiredVel, 22f * grip * dt);
+                if (errPos.magnitude < 0.03f && nv.magnitude < 0.08f) nv = Vector3.zero;
+                Compat.SetVelocity(ball.Body, new Vector3(nv.x, Mathf.Min(bv.y, 0.1f), nv.z));
+                ball.Body.angularVelocity = nv.sqrMagnitude > 1e-4f ? Vector3.Cross(Vector3.up, nv) / Arena.BallRadius : Vector3.zero;
+                nextTouchAt = now + 0.08f;
+                touchEnd = 0f;
                 return;
             }
 
-            // 3) Toque de condução cadenciado rumo à projeção do BallControlPoint
-            float playerSpeed = Mathf.Max(spd * Mathf.Max(0f, Vector3.Dot(velocity.normalized, wd)),
-                                          wm * (sprintHeld ? sprintSpeed : jogSpeed) * 0.78f);
-            float interval;
+            // 3) CONDUÇÃO NATURAL SINCRONIZADA COM A PASSADA (sem puxão magnético para trás!)
+            // Alvo natural de condução à frente do atleta conforme velocidade e Dash (R2)
+            float leadDist = sprintHeld
+                ? Mathf.Lerp(0.50f, 0.82f, Mathf.Clamp01(spd / Mathf.Max(1f, sprintSpeed)))
+                : Mathf.Lerp(0.34f, 0.48f, Mathf.Clamp01(spd / Mathf.Max(1f, jogSpeed)));
+            Vector3 ballDir = flatBv.sqrMagnitude > 0.20f ? flatBv.normalized : wd;
+            bool sharpTurn = wm > 0.14f && Vector3.Dot(ballDir, wd) < 0.68f;
+            if (sharpTurn) leadDist *= 0.72f;
+
+            Vector3 idealBallPos = pos + wd * (leadDist * Mathf.Max(0.85f, transform.lossyScale.y));
+            Vector3 toIdeal = idealBallPos - bp; toIdeal.y = 0f;
+
+            // Adianta a bola com explosão (Adiantada / Sharp Touch)
             if (knockQueued)
             {
-                // Arrancada: toque longo à frente com spin de rolamento
                 knockQueued = false;
-                interval = 1.0f;
-                float extraK = Random.Range(4.2f, 5.2f) * Mathf.Lerp(1.12f, 1f, grip);
-                Vector3 vk = wd * (playerSpeed + extraK);
-                Compat.SetVelocity(ball.Body, new Vector3(vk.x, Mathf.Min(bv.y, 0.3f), vk.z));
-                ball.Body.angularVelocity = Vector3.Cross(Vector3.up, wd) * (vk.magnitude / Arena.BallRadius) * 0.75f;
-                StartTouchDecay(wd, extraK, 3.4f);
-                burstUntil = now + 1.4f;
+                float baseSpd = Mathf.Max(spd, wm * sprintSpeed * 0.82f);
+                float extraK = Random.Range(3.4f, 4.3f) * Mathf.Lerp(1.10f, 1f, grip);
+                Vector3 vk = wd * (baseSpd + extraK);
+                Compat.SetVelocity(ball.Body, new Vector3(vk.x, Mathf.Min(bv.y, 0.22f), vk.z));
+                ball.Body.angularVelocity = Vector3.Cross(Vector3.up, wd) * (vk.magnitude / Arena.BallRadius) * 0.88f;
+                burstUntil = now + 1.15f;
+                lastTouchAt = now;
+                nextTouchAt = now + 0.48f;
                 Play("Arrancada", 0.08f);
-                Move("ARRANCADA");
+                Move("ADIANTADA");
+                return;
             }
-            else
-            {
-                float touchDist;
-                // toques curtos: a bola fica perto dos pés (antes 0,55–0,95 m no sprint e 0,24–0,48 m no trote)
-                if (sprintHeld) { touchDist = Mathf.Lerp(0.35f, 0.6f, Mathf.Clamp01(spd / sprintSpeed)); interval = 0.3f; }
-                else { touchDist = Mathf.Lerp(0.14f, 0.3f, Mathf.Clamp01(spd / jogSpeed)); interval = 0.26f; }
-                if (sharpTurn) { touchDist *= 0.6f; playerSpeed *= 0.78f; }
-                touchDist *= jitter * Mathf.Lerp(1.12f, 1f, grip);
-                interval *= jitter;
 
-                float extra = Mathf.Min(3.8f * touchDist / interval, 12f);
-                Vector3 v = wd * (playerSpeed + extra);
-                Compat.SetVelocity(ball.Body, new Vector3(v.x, Mathf.Min(bv.y, 0.28f), v.z));
-                ball.Body.angularVelocity = Vector3.Cross(Vector3.up, wd) * (v.magnitude / Arena.BallRadius) * 0.8f;
-                StartTouchDecay(wd, extra, interval);
+            // Entre um toque e outro da passada, guia suavemente sem travar o rolamento natural na grama
+            if (now < nextTouchAt && !sharpTurn && toIdeal.magnitude < 0.65f)
+            {
+                Vector3 guideVel = velocity + toIdeal * (sprintHeld ? 4.8f : 6.2f);
+                guideVel.y = 0f;
+                Vector3 nv = Vector3.MoveTowards(flatBv, guideVel, (sprintHeld ? 14f : 18f) * grip * dt);
+                Compat.SetVelocity(ball.Body, new Vector3(nv.x, Mathf.Min(bv.y, 0.18f), nv.z));
+                if (nv.sqrMagnitude > 0.02f)
+                    ball.Body.angularVelocity = Vector3.Cross(Vector3.up, nv) / Arena.BallRadius;
+                return;
             }
+
+            if (sharpTurn && now - lastTouchAt < 0.09f) return;
+
+            Transform foot;
+            Vector3 footPos;
+            float fd = FootDistance(bp, out foot, out footPos);
+            bool footReady = fd < Arena.BallRadius + 0.28f || distToControlPt < 0.42f || sharpTurn || now > nextTouchAt + 0.18f || foot == null;
+            if (!footReady) return;
+
+            // Toque cadenciado da chuteira na bola: leve impulso à frente que decai naturalmente pelo atrito da grama
+            float runAlign = spd > 0.2f ? Mathf.Max(0.25f, Vector3.Dot(velocity.normalized, wd)) : 1f;
+            float carrySpeed = Mathf.Max(spd * runAlign, wm * (sprintHeld ? sprintSpeed : jogSpeed) * 0.82f);
+            float touchPush = sprintHeld ? Random.Range(1.15f, 1.55f) : Random.Range(0.65f, 0.95f);
+            if (sharpTurn) { carrySpeed *= 0.82f; touchPush = 0.75f; }
+
+            Vector3 vTouch = wd * (carrySpeed + touchPush) + toIdeal * 2.8f;
+            vTouch.y = 0f;
+            Compat.SetVelocity(ball.Body, new Vector3(vTouch.x, Mathf.Min(bv.y, 0.18f), vTouch.z));
+            ball.Body.angularVelocity = Vector3.Cross(Vector3.up, vTouch) / Arena.BallRadius;
+
+            float cadence = sprintHeld ? 0.27f : 0.23f;
             lastTouchAt = now;
-            nextTouchAt = now + interval * 0.55f;
+            nextTouchAt = now + cadence * Random.Range(0.94f, 1.06f);
         }
 
         // ------------------------------------------------------------ Cálculo Determinístico do Chute
@@ -1326,31 +1380,41 @@ namespace Craquez
             Vector3 d = passTarget - from; d.y = 0f;
             float D = Mathf.Max(0.5f, d.magnitude);
             Vector3 dir = d / D;
-            float sigma = (1.2f + passError * 9f + offFoot * 4f + velocity.magnitude * 0.12f) * accuracyScale;
+            float sigma = (0.9f + passError * 7.5f + offFoot * 3.2f + velocity.magnitude * 0.10f) * accuracyScale;
             var ws = WeatherSystem.Instance;
-            if (ws != null && ws.P != null) sigma += ws.P.wetness * 1.2f;
+            if (ws != null && ws.P != null) sigma += ws.P.wetness * 1.0f;
             dir = Quaternion.AngleAxis(Gauss() * sigma, Vector3.up) * dir;
-            float lenErr = 1f + Gauss() * (0.03f + passError * 0.09f);
+            float lenErr = 1f + Gauss() * (0.025f + passError * 0.075f);
+            float pBoost = Mathf.Lerp(0.88f, 1.24f, passPower01);
             Vector3 v;
             if (!passLofted)
             {
                 float roll = ws != null ? ws.RollingDeceleration : 1.1f;
-                // a bola chega ao companheiro a 7,5–11 m/s (antes 4,5–7,5: passe lento, fácil de cortar);
-                // um passe de 20 m sai a ~13 m/s, como no futebol profissional
-                float arrive = Mathf.Lerp(7.5f, 11f, Mathf.Clamp01(D / 40f));
-                float v0 = Mathf.Sqrt(arrive * arrive + 2f * roll * 1.7f * D) * lenErr;
-                v0 = Mathf.Clamp(v0, 8f, 28f);
-                v = dir * v0 + Vector3.up * 0.35f;
-                spin = Vector3.Cross(Vector3.up, dir) * (v0 / Arena.BallRadius) * 0.8f;
+                float arrive = Mathf.Lerp(8.2f, 12.5f, Mathf.Clamp01(D / 38f)) * pBoost;
+                float v0 = Mathf.Sqrt(arrive * arrive + 2f * roll * 1.65f * D) * lenErr;
+                v0 = Mathf.Clamp(v0, 8.5f, 30f);
+                v = dir * v0 + Vector3.up * 0.22f;
+                spin = Vector3.Cross(Vector3.up, dir) * (v0 / Arena.BallRadius) * 0.92f;
+            }
+            else if (passWhipped)
+            {
+                // Cruzamento tenso com curva (Magnus lateral + topspin mergulhando na área estilo eFootball)
+                float T = Mathf.Clamp(D / (23f * pBoost), 0.58f, 1.55f);
+                float g = -Physics.gravity.y;
+                float horiz = D / T * 1.06f * lenErr;
+                v = dir * horiz + Vector3.up * (0.5f * g * T + 0.35f);
+                float sideCurl = Mathf.Sign(from.z == 0f ? 1f : -from.z) * 26f;
+                spin = Vector3.up * sideCurl + Vector3.Cross(Vector3.up, dir) * 12f;
             }
             else
             {
-                float T = Mathf.Clamp(D / 20f, 0.7f, 2.2f);      // lançamento mais tenso (antes D/17, até 2,5 s no ar)
+                float T = Mathf.Clamp(D / (20.5f * pBoost), 0.65f, 2.05f);
                 float g = -Physics.gravity.y;
-                float horiz = D / T * 1.08f * lenErr;            // compensa o arrasto do ar
-                v = dir * horiz + Vector3.up * (0.5f * g * T + 0.2f);
-                spin = Vector3.Cross(dir, Vector3.up) * 14f;      // efeito para trás: a bola "segura" no quique
+                float horiz = D / T * 1.07f * lenErr;
+                v = dir * horiz + Vector3.up * (0.5f * g * T + 0.25f);
+                spin = Vector3.Cross(dir, Vector3.up) * 14f;
             }
+            passWhipped = false;
             return v;
         }
 

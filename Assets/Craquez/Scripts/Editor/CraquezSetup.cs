@@ -208,9 +208,11 @@ namespace Craquez.EditorTools
                 if (o is Avatar a && a.isHuman) { corpoGk = a; break; }
             if (corpoGk != null)
             {
-                var miGk = AssetImporter.GetAtPath(Root + "/Animations/Goleiro/Jogadas/GK_Parado.fbx") as ModelImporter;
-                if (miGk != null && !(miGk.avatarSetup == ModelImporterAvatarSetup.CopyFromOther && miGk.sourceAvatar == corpoGk))
+                foreach (var c in ClipesNativosGoleiro)
                 {
+                    var miGk = AssetImporter.GetAtPath(Root + "/Animations/Goleiro/Jogadas/" + c + ".fbx") as ModelImporter;
+                    if (miGk == null) { Debug.LogWarning("[Craquez 3D] Clipe nativo de goleiro ausente: " + c); continue; }
+                    if (miGk.avatarSetup == ModelImporterAvatarSetup.CopyFromOther && miGk.sourceAvatar == corpoGk) continue;
                     miGk.animationType = ModelImporterAnimationType.Human;
                     miGk.avatarSetup = ModelImporterAvatarSetup.CopyFromOther;
                     miGk.sourceAvatar = corpoGk;
@@ -219,9 +221,10 @@ namespace Craquez.EditorTools
             }
         }
 
-        /// <summary>Jogadas ofensivas do jogador geradas por tools/blender/jogadoranim/build.py.</summary>
-        static readonly string[] Jogadas = { "FintaCorpoDir", "FintaCorpoEsq", "PedaladaDir", "PedaladaEsq", "PuxadaDir", "PuxadaEsq", "Arrancada", "Freada" };
-        static readonly string[] ClipesNativosJogador = { "Parado", "FintaCorpoDir", "FintaCorpoEsq", "PedaladaDir", "PedaladaEsq", "PuxadaDir", "PuxadaEsq", "Arrancada", "Freada", "Queda", "QuedaCostas", "CaidoDor", "Levantar" };
+        /// <summary>Jogadas ofensivas, passes e domínio nativos do jogador gerados por tools/blender/jogadoranim/build.py.</summary>
+        static readonly string[] Jogadas = { "FintaCorpoDir", "FintaCorpoEsq", "PedaladaDir", "PedaladaEsq", "PuxadaDir", "PuxadaEsq", "Arrancada", "Freada", "PasseCurto", "PasseLongo", "DominioCurto" };
+        static readonly string[] ClipesNativosJogador = { "Parado", "FintaCorpoDir", "FintaCorpoEsq", "PedaladaDir", "PedaladaEsq", "PuxadaDir", "PuxadaEsq", "Arrancada", "Freada", "Queda", "QuedaCostas", "CaidoDor", "Levantar", "PasseCurto", "PasseLongo", "DominioCurto" };
+        static readonly string[] ClipesNativosGoleiro = { "GK_Parado", "GK_Pronto", "GK_DeslocarDir", "GK_DeslocarEsq", "GK_Andar", "GK_Correr", "GK_Recuar", "GK_Mergulho", "GK_Caido", "GK_Levantar", "GK_Salto", "GK_Soco", "GK_Defesa", "GK_Carrinho", "GK_Lancar", "GK_Chutao" };
 
         static void ReimportAll()
         {
@@ -760,14 +763,15 @@ namespace Craquez.EditorTools
             ac.parameters = pars;
             var sm = ac.layers[0].stateMachine;
 
-            // animações próprias do goleiro (locomoção 2D: lateral + avanço/recuo, com pés firmes no parado)
-            var idle = Clip("Goleiro/Jogadas", "GK_Parado") ?? Clip("Goleiro", "GK_Pronto");
-            var left = Clip("Goleiro", "GK_DeslocarEsq");
-            var right = Clip("Goleiro", "GK_DeslocarDir");
-            var walkFwd = Clip("Goleiro", "GK_Andar");
-            var runFwd = Clip("Goleiro", "GK_Correr");
-            var walkBack = Clip("Goleiro", "GK_Recuar");
-            float sl = NativeSpeed(left, 1.85f), sr = NativeSpeed(right, 1.85f);
+            // animações nativas do goleiro (Goleiro/Jogadas sobre o próprio Goleiro.fbx: 1:1 sem torção de pés ou braços)
+            AnimationClip GkClip(string n) => Clip("Goleiro/Jogadas", n) ?? Clip("Goleiro", n);
+            var idle = GkClip("GK_Parado") ?? GkClip("GK_Pronto");
+            var left = GkClip("GK_DeslocarEsq");
+            var right = GkClip("GK_DeslocarDir");
+            var walkFwd = GkClip("GK_Andar");
+            var runFwd = GkClip("GK_Correr");
+            var walkBack = GkClip("GK_Recuar");
+            float sl = NativeSpeed(left, 2.2f), sr = NativeSpeed(right, 2.2f);
 
             BlendTree bt;
             var loco = ac.CreateBlendTreeInController("Locomocao", out bt, 0);
@@ -784,15 +788,15 @@ namespace Craquez.EditorTools
             var gkCh = bt.children;
             if (gkCh.Length >= 3)
             {
-                gkCh[1].timeScale = 1.25f;
-                gkCh[2].timeScale = 1.25f;
+                gkCh[1].timeScale = 1.2f;
+                gkCh[2].timeScale = 1.2f;
             }
             bt.children = gkCh;
             sm.defaultState = loco;
 
             // mergulho: a animação base vai para a DIREITA do goleiro; o parâmetro Mirror leva para a esquerda
             var dive = sm.AddState("GK_Mergulho");
-            dive.motion = Clip("Goleiro", "GK_Mergulho");
+            dive.motion = GkClip("GK_Mergulho");
             dive.speed = 1f;
             dive.speedParameterActive = true;
             dive.speedParameter = "DiveSpeed";
@@ -800,31 +804,31 @@ namespace Craquez.EditorTools
             dive.mirrorParameter = "Mirror";
 
             var jump = sm.AddState("GK_Salto");
-            jump.motion = Clip("Goleiro", "GK_Salto");
+            jump.motion = GkClip("GK_Salto");
             jump.speed = 1.1f;
             jump.mirrorParameterActive = true;
             jump.mirrorParameter = "Mirror";
 
             var block = sm.AddState("GK_Defesa");
-            block.motion = Clip("Goleiro", "GK_Defesa");
+            block.motion = GkClip("GK_Defesa");
             block.speed = 1.2f;
 
             var fallen = sm.AddState("GK_Caido");
-            fallen.motion = Clip("Goleiro", "GK_Caido");
+            fallen.motion = GkClip("GK_Caido");
             fallen.mirrorParameterActive = true;
             fallen.mirrorParameter = "Mirror";
             var getUp = sm.AddState("GK_Levantar");
-            getUp.motion = Clip("Goleiro", "GK_Levantar");
+            getUp.motion = GkClip("GK_Levantar");
             getUp.speed = 1.2f;
             getUp.mirrorParameterActive = true;
             getUp.mirrorParameter = "Mirror";
 
             var throwBall = sm.AddState("GK_Lancar");
-            throwBall.motion = Clip("Goleiro", "GK_Lancar");
+            throwBall.motion = GkClip("GK_Lancar");
             throwBall.speed = 1.15f;
 
             var puntBall = sm.AddState("GK_Chutao");
-            puntBall.motion = Clip("Goleiro", "GK_Chutao");
+            puntBall.motion = GkClip("GK_Chutao");
             puntBall.speed = 1.1f;
 
             var directWall = sm.AddState("GK_Orientar");
@@ -837,16 +841,16 @@ namespace Craquez.EditorTools
             missReact.motion = Clip("Goleiro", "GK_Frustracao");
 
             var slideSave = sm.AddState("GK_Carrinho");
-            slideSave.motion = Clip("Goleiro", "GK_Carrinho");
-            slideSave.speed = 1.2f;
+            slideSave.motion = GkClip("GK_Carrinho");
+            slideSave.speed = 1.15f;
             slideSave.mirrorParameterActive = true;
             slideSave.mirrorParameter = "Mirror";
 
             var waitIdle = sm.AddState("GK_Espera");
-            waitIdle.motion = Clip("Goleiro/Jogadas", "GK_Parado") ?? Clip("Goleiro", "GK_Espera");
+            waitIdle.motion = GkClip("GK_Parado") ?? Clip("Goleiro", "GK_Espera");
 
             var punchJump = sm.AddState("GK_Soco");
-            punchJump.motion = Clip("Goleiro", "GK_Soco");
+            punchJump.motion = GkClip("GK_Soco");
             punchJump.speed = 1.15f;
 
             var t = getUp.AddTransition(loco); t.hasExitTime = true; t.exitTime = 0.92f; t.duration = 0.2f;
@@ -1322,7 +1326,7 @@ namespace Craquez.EditorTools
     [InitializeOnLoad]
     static class CraquezAutoSetup
     {
-        const int SetupSchema = 3;
+        const int SetupSchema = 4;
 
         static string Key() { return "craquez.setup.stamp." + Application.dataPath.GetHashCode(); }
         static string Stamp() { return CraquezSetup.ReadVersion() + "#" + SetupSchema; }
